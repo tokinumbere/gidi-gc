@@ -1,0 +1,2108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gidi GC Attendance Tracking</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:14px}
+.app{max-width:900px;margin:0 auto;padding:1.5rem 1rem}
+h1{font-size:20px;font-weight:500;color:#1a1a1a}
+.subtitle{font-size:13px;color:#888;margin-top:3px}
+.top-bar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:10px}
+.top-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{background:#fff;border:0.5px solid #ccc;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;color:#1a1a1a;display:inline-flex;align-items:center;gap:6px;transition:background .15s;font-family:inherit}
+.btn:hover{background:#f0efe8}
+.btn-primary{background:#e6f1fb;color:#0c447c;border-color:#b5d4f4}
+.btn-success{background:#e1f5ee;color:#085041;border-color:#5dcaa5}
+.btn-warn{background:#faeeda;color:#633806;border-color:#ef9f27}
+.btn-danger{background:#fcebeb;color:#791f1f;border-color:#f09595}
+.btn-purple{background:#eeedfe;color:#3c3489;border-color:#afa9ec}
+.btn-sm{padding:5px 10px;font-size:12px}
+.notice{background:#e6f1fb;color:#0c447c;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
+.recalc-banner{background:#faeeda;color:#633806;border:0.5px solid #ef9f27;border-radius:8px;padding:12px 16px;margin-bottom:1rem;display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.recalc-banner.show{display:flex}
+.tabs{display:flex;gap:4px;border-bottom:1px solid #e0e0d8;margin-bottom:1.5rem;flex-wrap:wrap;background:#fff;border-radius:10px 10px 0 0;padding:6px 6px 0}
+.tab{padding:8px 14px;font-size:13px;cursor:pointer;border:none;background:none;color:#888;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;white-space:nowrap;font-family:inherit;border-radius:6px 6px 0 0}
+.tab:hover{color:#1a1a1a;background:#f5f5f3}
+.tab.active{color:#1a1a1a;border-bottom-color:#1a1a1a;font-weight:500;background:#fff}
+.panel{display:none}.panel.active{display:block}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:1.5rem}
+.metric{background:#fff;border:0.5px solid #e0e0d8;border-radius:8px;padding:12px 14px}
+.metric-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.metric-val{font-size:20px;font-weight:500;color:#1a1a1a}
+.metric-sub{font-size:11px;color:#888;margin-top:2px}
+.sec-title{font-size:11px;font-weight:500;color:#888;margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em}
+.chart-wrap{position:relative;width:100%;margin-bottom:1.5rem;background:#fff;border-radius:10px;border:0.5px solid #e0e0d8;padding:1rem}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem;align-items:center}
+select,input[type=text],input[type=date],input[type=number]{padding:6px 10px;font-size:13px;border:0.5px solid #ccc;border-radius:8px;background:#fff;color:#1a1a1a;font-family:inherit}
+select:focus,input:focus{outline:2px solid #b5d4f4;outline-offset:1px}
+.table-wrap{overflow-x:auto;margin-bottom:1.5rem;background:#fff;border-radius:10px;border:0.5px solid #e0e0d8}
+table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+th{text-align:left;padding:10px 12px;font-size:11px;font-weight:500;color:#888;border-bottom:0.5px solid #e0e0d8;text-transform:uppercase;letter-spacing:.04em;background:#fafaf8}
+td{padding:9px 12px;border-bottom:0.5px solid #e0e0d8;color:#1a1a1a;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafaf8}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.b-core{background:#e1f5ee;color:#085041}.b-freq{background:#e6f1fb;color:#0c447c}
+.b-rare{background:#faeeda;color:#633806}.b-unres{background:#fcebeb;color:#791f1f}
+.b-guest{background:#f1efe8;color:#444441}.b-member{background:#eeedfe;color:#3c3489}
+.b-attendee{background:#e1f5ee;color:#085041}.b-non{background:#fcebeb;color:#791f1f}
+.r-travel{background:#e6f1fb;color:#0c447c}.r-sick{background:#fcebeb;color:#791f1f}
+.r-exam{background:#faeeda;color:#633806}.r-work{background:#eeedfe;color:#3c3489}
+.r-other{background:#f1efe8;color:#444441}
+.dot-wrap{display:flex;gap:3px;flex-wrap:nowrap}
+.dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;cursor:help}
+.dot-y{background:#1D9E75}.dot-n{background:#E24B4A}.dot-u{background:#d0cfc7}
+.pct-bar{width:100%;height:5px;background:#e0e0d8;border-radius:3px;overflow:hidden;margin-top:3px}
+.pct-fill{height:100%;border-radius:3px}.pct-red{background:#E24B4A}
+.abs-high{color:#a32d2d;font-weight:500}.abs-med{color:#ba7517;font-weight:500}.abs-low{color:#3b6d11;font-weight:500}
+.thresh-box{background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:16px;margin-bottom:1.2rem}
+.thresh-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.thresh-row:last-child{margin-bottom:0}
+.thresh-label{font-size:13px;color:#1a1a1a;width:110px;flex-shrink:0}
+.thresh-sub{font-size:12px;color:#888;flex:1}
+.member-row{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:0.5px solid #e0e0d8}
+.member-row:last-child{border-bottom:none}
+.toggle-btn{padding:4px 10px;font-size:12px;border-radius:8px;border:0.5px solid #ccc;cursor:pointer;background:transparent;color:#888;transition:all .12s;font-family:inherit}
+.toggle-btn.present{background:#e1f5ee;color:#085041;border-color:#5dcaa5}
+.toggle-btn.absent{background:#fcebeb;color:#791f1f;border-color:#f09595}
+.reason-sel{font-size:12px;padding:3px 7px;border-radius:8px;border:0.5px solid #ccc;background:#fff;color:#888;display:none;font-family:inherit}
+.reason-sel.show{display:block}
+.profile-card{background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:1.25rem;margin-bottom:1rem}
+.avatar{width:40px;height:40px;border-radius:50%;background:#e6f1fb;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;color:#0c447c;flex-shrink:0}
+.session-chip{display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;margin:2px}
+.chip-present{background:#e1f5ee;color:#085041}.chip-absent{background:#fcebeb;color:#791f1f}
+.search-rel{position:relative}
+.search-rel input{padding-left:28px}
+.si{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;color:#888}
+.change-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid #e0e0d8;gap:8px}
+.change-row:last-child{border-bottom:none}
+.arrow{font-size:13px;color:#888;margin:0 4px}
+.record-wrap{background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden}
+.abs-card{display:flex;align-items:center;gap:12px;padding:12px;border:0.5px solid #e0e0d8;border-radius:8px;margin-bottom:8px;background:#fff}
+.save-toast{position:fixed;bottom:24px;right:24px;background:#1a1a1a;color:#fff;border-radius:8px;padding:10px 16px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999}
+.save-toast.show{opacity:1}
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:1000;overflow-y:auto}
+.modal-box{background:#fff;max-width:740px;margin:2rem auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.15)}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e0e0d8;background:#fafaf8}
+.member-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:2000;overflow-y:auto}
+.member-modal.open{display:flex;align-items:flex-start;justify-content:center;padding:2rem 1rem}
+.member-modal-box{background:#fff;width:100%;max-width:480px;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.18);overflow:hidden}
+.member-modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e0e0d8;background:#fafaf8}
+.form-row{margin-bottom:14px}
+.form-label{display:block;font-size:12px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+.form-input{width:100%;padding:8px 10px;font-size:13px;border:0.5px solid #ccc;border-radius:8px;background:#fff;color:#1a1a1a;font-family:inherit}
+.form-input:focus{outline:2px solid #b5d4f4;outline-offset:1px}
+.form-section{font-size:11px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.04em;margin:18px 0 10px;padding-bottom:6px;border-bottom:0.5px solid #e0e0d8}
+.delete-confirm{background:#fcebeb;color:#791f1f;border:0.5px solid #f09595;border-radius:8px;padding:10px 14px;font-size:13px;margin-top:12px;display:none}
+.delete-confirm.show{display:block}
+.bday-soon{background:#faeeda;color:#633806;border-radius:20px;padding:2px 8px;font-size:11px;font-weight:500;display:inline-block}
+.bday-today{background:#e1f5ee;color:#085041;border-radius:20px;padding:2px 8px;font-size:11px;font-weight:500;display:inline-block}
+@media(max-width:640px){
+  /* ── Layout ── */
+  .app{padding:0.75rem 0.75rem 5rem}
+  h1{font-size:17px}
+  .subtitle{font-size:12px}
+
+  /* ── Top bar: stack title above buttons ── */
+  .top-bar{flex-direction:column;gap:10px;margin-bottom:0.75rem}
+  .top-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;width:100%}
+  .top-actions .btn{justify-content:center;padding:9px 8px;font-size:12px;border-radius:10px}
+
+  /* ── Tabs: horizontal scroll, no wrapping ── */
+  .tabs{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;border-radius:10px 10px 0 0;padding:5px 5px 0;gap:2px;margin-bottom:1rem}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{padding:9px 12px;font-size:12px;white-space:nowrap;flex-shrink:0}
+
+  /* ── Metrics: 2-column grid ── */
+  .metrics{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem}
+  .metric{padding:10px 12px}
+  .metric-val{font-size:18px}
+  .metric-label{font-size:10px}
+
+  /* ── Charts ── */
+  .chart-wrap{padding:0.75rem;margin-bottom:1rem}
+
+  /* ── Tables: hide less important cols, bigger tap targets ── */
+  th,td{padding:10px 8px;font-size:12px}
+  td{min-height:44px}
+  /* Hide "Record" dot column on mobile members table */
+  .members-dots-col{display:none}
+
+  /* ── Filters: scrollable row ── */
+  .filters{flex-wrap:nowrap;overflow-x:auto;gap:6px;padding-bottom:2px;scrollbar-width:none}
+  .filters::-webkit-scrollbar{display:none}
+  select,input[type=text],input[type=date],input[type=number]{font-size:14px;padding:8px 10px;min-height:40px}
+
+  /* ── Search full width ── */
+  .search-rel{flex:1;min-width:0}
+  .search-rel input{width:100%}
+
+  /* ── Member rows in record tab: stack ── */
+  .member-row{flex-direction:column;align-items:flex-start;gap:8px;padding:12px 14px}
+  .member-row>div:last-child{width:100%;justify-content:flex-end;display:flex;flex-wrap:wrap;gap:6px}
+  .toggle-btn{padding:8px 16px;font-size:13px;flex:1;text-align:center;min-height:40px}
+  .reason-sel{font-size:13px;padding:7px 10px;min-height:40px;flex:1}
+
+  /* ── Absence cards ── */
+  .abs-card{padding:10px}
+
+  /* ── Modals: full screen on mobile ── */
+  .member-modal.open{padding:0;align-items:flex-end}
+  .member-modal-box{border-radius:16px 16px 0 0;max-width:100%;max-height:92vh;overflow-y:auto}
+  .modal-overlay{padding:0}
+  .modal-box{margin:0;border-radius:16px 16px 0 0;max-height:95vh;overflow-y:auto;position:fixed;bottom:0;left:0;right:0}
+  .modal-header{padding:12px 16px;position:sticky;top:0;z-index:1;background:#fafaf8}
+  #summaryContent{padding:14px!important}
+
+  /* ── Form inputs: larger on mobile ── */
+  .form-input{font-size:15px;padding:10px 12px;min-height:44px}
+
+  /* ── Threshold rows ── */
+  .thresh-row{flex-wrap:nowrap;gap:8px}
+  .thresh-label{width:90px;font-size:12px}
+  .thresh-sub{display:none}
+
+  /* ── Profile card ── */
+  .profile-card{padding:1rem}
+  .session-chip{font-size:10px;padding:3px 6px}
+
+  /* ── Toast: full width bottom ── */
+  .save-toast{left:12px;right:12px;bottom:16px;text-align:center}
+
+  /* ── Last 3 sessions: stack vertically ── */
+  #ov-last3 .sessions-grid{grid-template-columns:1fr!important}
+
+  /* ── Overview two-chart grid: stack ── */
+  .ov-chart-grid{grid-template-columns:1fr!important}
+}
+.mob-nav{display:none}
+@media(max-width:640px){
+  .mob-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e0e0d8;z-index:500;padding:4px 0 env(safe-area-inset-bottom,0px)}
+  .mob-nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:7px 2px 5px;font-size:9px;font-weight:500;color:#888;border:none;background:none;cursor:pointer;font-family:inherit;gap:3px;-webkit-tap-highlight-color:transparent}
+  .mob-nav-btn.active{color:#1a1a1a}
+  .mob-nav-btn.active .mob-nav-icon{background:#f5f5f3;border-radius:8px}
+  .mob-nav-icon{font-size:17px;line-height:1;padding:3px 10px;border-radius:8px;transition:background .12s}
+  .tabs{display:none!important}
+  .app{padding-bottom:74px}
+}
+@media print{
+  /* Hide everything except the summary modal content */
+  body>*{display:none!important}
+  .modal-overlay{display:block!important;position:static!important;background:none!important;overflow:visible!important}
+  .modal-box{box-shadow:none!important;border-radius:0!important;max-width:100%!important;margin:0!important}
+  .modal-header{display:none!important}
+  #summaryContent{max-height:none!important;overflow:visible!important;padding:0!important}
+  /* Mobile/phone page size */
+  @page{size:400px auto;margin:10mm 6mm}
+  body{background:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  /* Card styling for print */
+  #summaryContent>div{
+    background:#fff!important;
+    border:1px solid #e0e0d8!important;
+    border-radius:10px!important;
+    padding:14px!important;
+    margin-bottom:12px!important;
+    page-break-inside:avoid!important;
+  }
+  /* Prevent table rows from splitting */
+  tr{page-break-inside:avoid}
+  /* Shrink tables for narrow width */
+  table{font-size:12px!important}
+  th,td{padding:6px 8px!important}
+  /* Larger section headings */
+  [style*="text-transform:uppercase"]{font-size:10px!important}
+  /* Keep colours */
+  span[style*="background"]{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  /* Title block */
+  #summaryContent>div:first-child{border:none!important;background:linear-gradient(135deg,#1a1a1a,#2d2d2d)!important;color:#fff!important;text-align:center!important;border-radius:12px!important}
+}
+</style>
+</head>
+<body>
+<div class="save-toast" id="saveToast"></div>
+
+<div class="app">
+<div class="top-bar">
+  <div>
+    <h1>Gidi GC Attendance Tracking</h1>
+    <div class="subtitle">Wednesday sessions · Apr – Nov 2026</div>
+  </div>
+  <div class="top-actions">
+    <button class="btn btn-purple" onclick="switchTab('birthdays',document.querySelector('[data-id=birthdays]'))">&#127874; Birthdays</button>
+    <button class="btn btn-success" onclick="openSummary()">&#9113; Print / Share</button>
+    <button class="btn btn-warn" onclick="switchTab('recalc',document.querySelector('[data-id=recalc]'))">&#10227; Recalculate</button>
+    <button class="btn btn-primary" onclick="recalcAll()">&#8635; Refresh</button>
+  </div>
+</div>
+
+<div class="notice" id="mainNotice">Loading saved data...</div>
+<div class="recalc-banner" id="recalcBanner">
+  <span id="bannerMsg"></span>
+  <button class="btn btn-warn btn-sm" onclick="applyRecalc()">Apply status changes</button>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-id="overview" onclick="switchTab('overview',this)">Overview</button>
+  <button class="tab" data-id="members" onclick="switchTab('members',this)">Core &amp; Regulars</button>
+  <button class="tab" data-id="guests" onclick="switchTab('guests',this)">Guests</button>
+  <button class="tab" data-id="record" onclick="switchTab('record',this)">Record attendance</button>
+  <button class="tab" data-id="absenteeism" onclick="switchTab('absenteeism',this)">Absenteeism</button>
+  <button class="tab" data-id="trends" onclick="switchTab('trends',this)">Absence trends</button>
+  <button class="tab" data-id="birthdays" onclick="switchTab('birthdays',this)">Birthdays</button>
+  <button class="tab" data-id="recalc" onclick="switchTab('recalc',this)">Recalculate</button>
+</div>
+
+<!-- OVERVIEW -->
+<div id="tab-overview" class="panel active">
+  <div class="metrics" id="ov-metrics"></div>
+  <div id="ov-last3" style="margin-bottom:1.5rem"></div>
+  <div class="chart-wrap" style="height:195px">
+    <p class="sec-title">Attendance per session</p>
+    <canvas id="sessChart" role="img" aria-label="Bar chart of total attendance per recorded session" style="max-height:140px">Session totals</canvas>
+  </div>
+  <div class="ov-chart-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1.5rem">
+    <div class="chart-wrap" style="height:230px">
+      <p class="sec-title">GC status distribution</p>
+      <canvas id="gcChart" role="img" aria-label="Doughnut chart of GC status distribution" style="max-height:175px">GC status</canvas>
+    </div>
+    <div class="chart-wrap" style="height:230px">
+      <p class="sec-title">Gender split per session</p>
+      <canvas id="genChart" role="img" aria-label="Stacked bar chart of gender per session" style="max-height:175px">Gender split</canvas>
+    </div>
+  </div>
+  <div class="chart-wrap" id="ov-bday-wrap">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <p class="sec-title" style="margin-bottom:0">Upcoming birthdays</p>
+      <button class="btn btn-sm btn-purple" onclick="switchTab('birthdays',document.querySelector('[data-id=birthdays]'))">Manage birthdays</button>
+    </div>
+    <div id="ov-bday-list"></div>
+  </div>
+  <div class="chart-wrap" id="ov-absent-wrap">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div>
+        <p class="sec-title" style="margin-bottom:2px">Missed last session</p>
+        <div id="ov-absent-label" style="font-size:12px;color:#888"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="absentFilterGC" onchange="renderOverviewAbsent()" style="font-size:12px;padding:4px 8px">
+          <option value="">All GC statuses</option>
+          <option>Core</option><option>Frequent</option><option>Rare</option><option>Unresponsive</option><option>Guest</option>
+        </select>
+        <button class="btn btn-sm btn-primary" onclick="copyAbsentNames()">&#10064; Copy names</button>
+      </div>
+    </div>
+    <div id="ov-absent-list"></div>
+  </div>
+</div>
+
+<!-- MEMBERS -->
+<div id="tab-members" class="panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
+    <div class="filters" style="margin-bottom:0;flex:1">
+      <div class="search-rel"><span class="si">&#9906;</span><input type="text" id="mSearch" placeholder="Search name..." oninput="renderMembers()" style="width:150px"></div>
+      <select id="fGC" onchange="renderMembers()"><option value="">All GC</option><option>Core</option><option>Frequent</option><option>Rare</option><option>Unresponsive</option></select>
+      <select id="fCity" onchange="renderMembers()"><option value="">All church</option><option>Member</option><option>Attendee</option><option>Non-Attendee</option></select>
+      <select id="fGen" onchange="renderMembers()"><option value="">All genders</option><option>Male</option><option>Female</option></select>
+      <select id="fChanged" onchange="renderMembers()"><option value="">All statuses</option><option value="changed">Status changed</option></select>
+    </div>
+    <button class="btn btn-success" onclick="openMemberModal(null)">+ Add member</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <colgroup><col style="width:135px"><col style="width:78px"><col style="width:95px"><col style="width:75px"><col style="width:52px"><col style="width:45px"><col style="width:95px"><col style="width:36px"></colgroup>
+      <thead><tr><th>Name</th><th>Church</th><th>GC status</th><th>First visit</th><th>Sessions</th><th>Rate</th><th class="members-dots-col">Record</th><th class="members-dots-col"></th></tr></thead>
+      <tbody id="mBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- GUESTS -->
+<div id="tab-guests" class="panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
+    <div>
+      <p class="sec-title" style="margin-bottom:2px">Guest log</p>
+      <div style="font-size:12px;color:#888">One-off visitors. Add guests via "Add member" and set GC status to Guest.</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="search-rel"><span class="si">&#9906;</span><input type="text" id="gSearch" placeholder="Search..." oninput="renderGuests()" style="width:130px"></div>
+      <button class="btn btn-success btn-sm" onclick="openMemberModal(null,'Guest')">+ Add guest</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <colgroup><col style="width:155px"><col style="width:85px"><col style="width:65px"><col style="width:100px"><col style="width:55px"><col style="width:36px"></colgroup>
+      <thead><tr><th>Name</th><th>Church status</th><th>Gender</th><th>First visit</th><th>Sessions</th><th></th></tr></thead>
+      <tbody id="gBody"></tbody>
+    </table>
+  </div>
+  <div class="metrics" id="guest-metrics"></div>
+</div>
+
+<!-- RECORD ATTENDANCE -->
+<div id="tab-record" class="panel">
+  <div id="sessionListArea" style="margin-bottom:1.5rem"></div>
+  <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:1rem;margin-bottom:1rem">
+    <p class="sec-title" style="margin-bottom:10px">Open or create a session</p>
+    <div class="filters" style="margin-bottom:0">
+      <label style="font-size:13px;color:#888">Date (Wednesdays only):</label>
+      <input type="date" id="sessionDate" onchange="validateWednesday(this)">
+      <button class="btn btn-success" onclick="loadRecordSession()">Load / create session</button>
+      <button class="btn btn-primary" onclick="openImportModal()">&#8659; Import from Sheets</button>
+      <span id="dayWarning" style="font-size:12px;color:#a32d2d;display:none">⚠ Wednesdays only</span>
+    </div>
+  </div>
+  <div id="recordArea"></div>
+</div>
+
+<!-- ABSENTEEISM -->
+<div id="tab-absenteeism" class="panel">
+  <div class="metrics" id="abs-metrics"></div>
+  <div class="filters" style="margin-top:1rem">
+    <select id="absSortBy" onchange="renderAbsenteeism()"><option value="absRate">Sort by absence rate</option><option value="streak">Sort by consecutive absences</option><option value="name">Sort by name</option></select>
+    <select id="absFilter" onchange="renderAbsenteeism()"><option value="">All members</option><option value="Core">Core only</option><option value="high">High absentees (&gt;50%)</option><option value="never">Never attended</option></select>
+  </div>
+  <div class="chart-wrap" style="height:185px">
+    <p class="sec-title">Avg absence rate by GC status</p>
+    <canvas id="absGCChart" role="img" aria-label="Bar chart of average absence rate by GC status" style="max-height:140px">Absence by GC</canvas>
+  </div>
+  <div class="chart-wrap" style="height:175px">
+    <p class="sec-title">Top absence reasons</p>
+    <canvas id="reasonChart" role="img" aria-label="Bar chart of total absence reasons" style="max-height:130px">Absence reasons</canvas>
+  </div>
+  <p class="sec-title">Individual absenteeism</p>
+  <div id="absList"></div>
+</div>
+
+<!-- TRENDS -->
+<div id="tab-trends" class="panel">
+  <div class="filters">
+    <label style="font-size:13px;color:#888">Member:</label>
+    <select id="trendMember" onchange="renderTrend()"><option value="">Select member...</option></select>
+  </div>
+  <div id="trendArea" style="margin-top:1rem"></div>
+</div>
+
+<!-- BIRTHDAYS -->
+<div id="tab-birthdays" class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:1rem">
+    <div style="font-size:13px;color:#888">Enter birthdays as DD/MM. Reminders appear automatically when a birthday is within 7 days.</div>
+    <button class="btn btn-danger btn-sm" onclick="clearAllBirthdays()">Clear all birthdays</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <colgroup><col style="width:160px"><col style="width:90px"><col style="width:80px"><col style="width:130px"><col style="width:130px"></colgroup>
+      <thead><tr><th>Name</th><th>GC status</th><th>Gender</th><th>Birthday (DD/MM)</th><th>Next birthday</th></tr></thead>
+      <tbody id="bdayBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- RECALCULATE -->
+<div id="tab-recalc" class="panel">
+  <div class="thresh-box">
+    <p class="sec-title" style="margin-bottom:12px">Attendance rate thresholds</p>
+    <div class="thresh-row">
+      <span class="badge b-core thresh-label">Core</span>
+      <span class="thresh-sub">75% &ndash; 100% attendance</span>
+      <span style="font-size:13px;font-weight:500;color:#1a1a1a">&ge; <input type="number" id="th-core" value="75" min="1" max="100" style="width:52px;padding:4px 6px;font-size:13px"> %</span>
+    </div>
+    <div class="thresh-row">
+      <span class="badge b-freq thresh-label">Frequent</span>
+      <span class="thresh-sub">50% &ndash; 74% attendance</span>
+      <span style="font-size:13px;font-weight:500;color:#1a1a1a">&ge; <input type="number" id="th-freq" value="50" min="1" max="100" style="width:52px;padding:4px 6px;font-size:13px"> %</span>
+    </div>
+    <div class="thresh-row">
+      <span class="badge b-rare thresh-label">Rare</span>
+      <span class="thresh-sub">30% &ndash; 49% attendance</span>
+      <span style="font-size:13px;font-weight:500;color:#1a1a1a">&ge; <input type="number" id="th-rare" value="30" min="1" max="100" style="width:52px;padding:4px 6px;font-size:13px"> %</span>
+    </div>
+    <div class="thresh-row">
+      <span class="badge b-unres thresh-label">Unresponsive</span>
+      <span class="thresh-sub">Below 30% attendance</span>
+      <span style="font-size:13px;color:#888">Below Rare threshold</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:1.5rem">
+    <button class="btn btn-warn" onclick="previewRecalc()">Preview status changes</button>
+    <button class="btn btn-success" id="applyBtn" onclick="applyRecalc()" style="display:none">Apply changes</button>
+  </div>
+  <div id="recalcPreview"></div>
+  <div class="chart-wrap" style="height:0;padding:0;border:none" id="recalcChartWrap">
+    <canvas id="recalcChart" role="img" aria-label="Horizontal bar chart of member attendance rates">Member rates</canvas>
+  </div>
+</div>
+
+<!-- PRINT / SUMMARY MODAL -->
+<div class="modal-overlay" id="summaryModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div style="font-size:15px;font-weight:500">Summary sheet</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-success btn-sm" onclick="window.print()">Print / Save PDF</button>
+        <button class="btn btn-purple btn-sm" onclick="openWebSummary()">&#127760; Open as web page</button>
+        <button class="btn btn-primary btn-sm" onclick="copySummaryText()">Copy as text</button>
+        <button class="btn btn-sm" onclick="closeSummary()">Close</button>
+      </div>
+    </div>
+    <div id="summaryContent" style="padding:24px 28px;font-size:13px;line-height:1.7;max-height:80vh;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- ADD / EDIT MEMBER MODAL -->
+<div class="member-modal" id="memberModal" onclick="handleModalBgClick(event)">
+  <div class="member-modal-box">
+    <div class="member-modal-header">
+      <div style="font-size:15px;font-weight:500" id="memberModalTitle">Add member</div>
+      <button class="btn btn-sm" onclick="closeMemberModal()">Close</button>
+    </div>
+    <div style="padding:20px 20px 24px">
+      <div class="form-section">Personal details</div>
+      <div class="form-row">
+        <label class="form-label">Full name *</label>
+        <input class="form-input" id="mf-name" type="text" placeholder="e.g. Toki Numbere">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row">
+          <label class="form-label">Gender *</label>
+          <select class="form-input" id="mf-gender">
+            <option value="">Select...</option>
+            <option>Male</option><option>Female</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Birthday (DD/MM)</label>
+          <input class="form-input" id="mf-bday" type="text" placeholder="e.g. 14/03" maxlength="5">
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Phone number</label>
+        <input class="form-input" id="mf-phone" type="text" placeholder="e.g. 08012345678">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Email address</label>
+        <input class="form-input" id="mf-email" type="text" placeholder="e.g. name@email.com">
+      </div>
+
+      <div class="form-section">Church status</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row">
+          <label class="form-label">City Church status *</label>
+          <select class="form-input" id="mf-city">
+            <option value="">Select...</option>
+            <option>Member</option><option>Attendee</option><option>Non-Attendee</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">GC Attendee status *</label>
+          <select class="form-input" id="mf-gc">
+            <option value="">Select...</option>
+            <option>Core</option><option>Frequent</option><option>Rare</option><option>Unresponsive</option><option>Guest</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">First date attended <span style="font-weight:400;text-transform:none;letter-spacing:0">(Wednesdays only)</span></label>
+        <select class="form-input" id="mf-firstsession">
+          <option value="">Not set</option>
+        </select>
+        <div style="font-size:11px;color:#888;margin-top:4px">Sets the start date for absenteeism calculation. Only recorded sessions shown.</div>
+      </div>
+
+      <div id="mf-error" style="display:none;background:#fcebeb;color:#791f1f;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px"></div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-danger btn-sm" id="mf-delete-btn" onclick="showDeleteConfirm()" style="display:none">Delete member</button>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <button class="btn btn-sm" onclick="closeMemberModal()">Cancel</button>
+          <button class="btn btn-success" onclick="saveMember()">Save member</button>
+        </div>
+      </div>
+      <div class="delete-confirm" id="mf-delete-confirm">
+        <div style="margin-bottom:10px;font-weight:500">Are you sure? This will permanently remove the member and all their attendance data.</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-danger btn-sm" onclick="confirmDeleteMember()">Yes, delete</button>
+          <button class="btn btn-sm" onclick="hideDeleteConfirm()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- IMPORT ATTENDANCE MODAL -->
+<div class="member-modal" id="importModal" onclick="handleImportBgClick(event)">
+  <div class="member-modal-box" style="max-width:580px">
+    <div class="member-modal-header">
+      <div style="font-size:15px;font-weight:500">Import attendance from Google Sheets</div>
+      <button class="btn btn-sm" onclick="closeImportModal()">Close</button>
+    </div>
+    <div style="padding:20px">
+
+      <!-- Mode selector -->
+      <div style="background:#f5f5f3;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:#1a1a1a;line-height:1.6">
+        <strong>Format:</strong> Your sheet has a <strong>Name column</strong> and a <strong>Tick/mark column</strong>. Select both below. Rows with a tick (✓, TRUE, Y, 1, yes, x) are marked <span style="color:#085041;font-weight:500">present</span> — all others absent.
+        <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="form-row" style="margin-bottom:0">
+            <label class="form-label">Name column letter</label>
+            <input class="form-input" id="imp-col-name" type="text" value="A" maxlength="3" style="width:70px;text-transform:uppercase" placeholder="A">
+          </div>
+          <div class="form-row" style="margin-bottom:0">
+            <label class="form-label">Tick column letter</label>
+            <input class="form-input" id="imp-col-tick" type="text" value="B" maxlength="3" style="width:70px;text-transform:uppercase" placeholder="B">
+          </div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:#888">Header rows are automatically skipped.</div>
+      </div>
+
+      <!-- Tabs inside modal -->
+      <div style="display:flex;gap:0;border:0.5px solid #e0e0d8;border-radius:8px;overflow:hidden;margin-bottom:18px">
+        <button id="imp-tab-paste" onclick="switchImportTab('paste')" style="flex:1;padding:8px;font-size:13px;border:none;cursor:pointer;background:#e1f5ee;color:#085041;font-weight:500;font-family:inherit">📋 Paste from sheet</button>
+        <button id="imp-tab-api" onclick="switchImportTab('api')" style="flex:1;padding:8px;font-size:13px;border:none;cursor:pointer;background:#fafaf8;color:#888;font-family:inherit;border-left:0.5px solid #e0e0d8">🔗 Google Sheets API</button>
+      </div>
+
+      <!-- PASTE TAB -->
+      <div id="imp-panel-paste">
+        <div style="font-size:13px;color:#888;margin-bottom:12px">Select all rows in your Google Sheet (including the name and tick columns) and paste below. Ctrl+A → Ctrl+C in the sheet, then paste here.</div>
+        <div class="form-row">
+          <label class="form-label">Session date *</label>
+          <input class="form-input" id="imp-paste-date" type="date" onchange="validateImportWed(this)">
+          <div id="imp-paste-date-warn" style="font-size:11px;color:#a32d2d;margin-top:3px;display:none">⚠ Sessions are held on Wednesdays</div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Paste sheet data here</label>
+          <textarea id="imp-paste-names" rows="8" placeholder="Paste your spreadsheet rows here (copied directly from Google Sheets)&#10;&#10;e.g.&#10;Toki Numbere	✓&#10;Nnenna Idoko	TRUE&#10;David Idoko	&#10;Demex Achinga	✓" style="width:100%;padding:8px 10px;font-size:13px;border:0.5px solid #ccc;border-radius:8px;font-family:inherit;resize:vertical;line-height:1.6"></textarea>
+        </div>
+        <div id="imp-paste-preview" style="margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-sm" onclick="previewPasteImport()">Preview matches</button>
+          <button class="btn btn-success" id="imp-paste-apply" onclick="applyPasteImport()" style="display:none">Apply &amp; save session</button>
+        </div>
+      </div>
+
+      <!-- API TAB -->
+      <div id="imp-panel-api" style="display:none">
+        <div style="background:#faeeda;color:#633806;border-radius:8px;padding:10px 13px;font-size:12px;margin-bottom:14px;line-height:1.6">
+          <strong>One-time setup:</strong> Go to <a href="https://console.cloud.google.com/" target="_blank" style="color:#633806">console.cloud.google.com</a>, create a project, enable the <em>Google Sheets API</em>, create an <em>API Key</em> (restrict to Sheets API), and paste it below. Your sheet must be set to <em>"Anyone with the link can view"</em>.
+        </div>
+        <div class="form-row">
+          <label class="form-label">Google Sheets API key</label>
+          <input class="form-input" id="imp-api-key" type="text" placeholder="AIzaSy..." oninput="saveApiKey()">
+          <div style="font-size:11px;color:#888;margin-top:3px">Saved locally in your browser — never sent anywhere except Google.</div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Google Sheet URL or ID</label>
+          <input class="form-input" id="imp-sheet-url" type="text" placeholder="https://docs.google.com/spreadsheets/d/...">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Sheet tab name</label>
+          <input class="form-input" id="imp-sheet-tab" type="text" placeholder="Sheet1" value="Sheet1">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Session date *</label>
+          <input class="form-input" id="imp-api-date" type="date" onchange="validateImportWed(this)">
+          <div id="imp-api-date-warn" style="font-size:11px;color:#a32d2d;margin-top:3px;display:none">⚠ Sessions are held on Wednesdays</div>
+        </div>
+        <div id="imp-api-preview" style="margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-primary btn-sm" id="imp-api-fetch-btn" onclick="fetchFromSheetAPI()">Fetch from sheet</button>
+          <button class="btn btn-success" id="imp-api-apply" onclick="applyAPIImport()" style="display:none">Apply &amp; save session</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- MOBILE BOTTOM NAV -->
+<nav class="mob-nav" id="mobNav">
+  <button class="mob-nav-btn active" data-tab="overview" onclick="switchTab('overview',document.querySelector('[data-id=overview]'));setMobNav(this)">
+    <span class="mob-nav-icon">&#128200;</span>Overview
+  </button>
+  <button class="mob-nav-btn" data-tab="members" onclick="switchTab('members',document.querySelector('[data-id=members]'));setMobNav(this)">
+    <span class="mob-nav-icon">&#128101;</span>Members
+  </button>
+  <button class="mob-nav-btn" data-tab="record" onclick="switchTab('record',document.querySelector('[data-id=record]'));setMobNav(this)">
+    <span class="mob-nav-icon">&#9998;</span>Record
+  </button>
+  <button class="mob-nav-btn" data-tab="absenteeism" onclick="switchTab('absenteeism',document.querySelector('[data-id=absenteeism]'));setMobNav(this)">
+    <span class="mob-nav-icon">&#9888;</span>Absent
+  </button>
+  <button class="mob-nav-btn" data-tab="more" onclick="toggleMobMore()">
+    <span class="mob-nav-icon">&#8943;</span>More
+  </button>
+</nav>
+
+<!-- MOBILE MORE MENU -->
+<div id="mobMore" style="display:none;position:fixed;bottom:62px;left:0;right:0;background:#fff;border-top:1px solid #e0e0d8;z-index:499;padding:8px 12px;box-shadow:0 -4px 16px rgba(0,0,0,0.08)">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <button class="btn" onclick="switchTab('trends',document.querySelector('[data-id=trends]'));closeMobMore()" style="justify-content:center;padding:10px">&#128200; Trends</button>
+    <button class="btn" onclick="switchTab('guests',document.querySelector('[data-id=guests]'));closeMobMore()" style="justify-content:center;padding:10px">&#128100; Guests</button>
+    <button class="btn" onclick="switchTab('birthdays',document.querySelector('[data-id=birthdays]'));closeMobMore()" style="justify-content:center;padding:10px">&#127874; Birthdays</button>
+    <button class="btn" onclick="switchTab('recalc',document.querySelector('[data-id=recalc]'));closeMobMore()" style="justify-content:center;padding:10px">&#10227; Recalculate</button>
+    <button class="btn btn-success" onclick="openSummary();closeMobMore()" style="justify-content:center;padding:10px">&#9113; Print</button>
+    <button class="btn btn-purple" onclick="openWebSummary();closeMobMore()" style="justify-content:center;padding:10px">&#127760; Web</button>
+  </div>
+</div>
+
+<script>
+const SESSIONS_DEF=[
+  {date:'8 Apr 2026',key:'2026-04-08'},{date:'15 Apr 2026',key:'2026-04-15'},
+  {date:'22 Apr 2026',key:'2026-04-22'},{date:'29 Apr 2026',key:'2026-04-29'},
+  {date:'6 May 2026',key:'2026-05-06'},{date:'13 May 2026',key:'2026-05-13'},
+  {date:'20 May 2026',key:'2026-05-20'},{date:'27 May 2026',key:'2026-05-27'},
+  {date:'3 Jun 2026',key:'2026-06-03'},{date:'10 Jun 2026',key:'2026-06-10'},
+  {date:'17 Jun 2026',key:'2026-06-17'},
+  {date:'9 Sep 2026',key:'2026-09-09'},{date:'16 Sep 2026',key:'2026-09-16'},
+  {date:'23 Sep 2026',key:'2026-09-23'},{date:'30 Sep 2026',key:'2026-09-30'},
+  {date:'7 Oct 2026',key:'2026-10-07'},{date:'14 Oct 2026',key:'2026-10-14'},
+  {date:'28 Oct 2026',key:'2026-10-28'},{date:'4 Nov 2026',key:'2026-11-04'},
+  {date:'11 Nov 2026',key:'2026-11-11'},{date:'18 Nov 2026',key:'2026-11-18'}
+];
+const REASONS=['Travel','Sick','Exam','Work','Other'];
+const REASON_COLORS={Travel:'#378ADD',Sick:'#E24B4A',Exam:'#EF9F27',Work:'#7F77DD',Other:'#888780'};
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const LS_KEY='att_dash_2026_v1';
+
+const MEMBERS_SEED=[
+  {n:'Anita Obidiegwu',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Chinedu Awa',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Chinedu Obidiegwu',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Male'},
+  {n:'Ifeoma Igbokidi',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Ksusha Anom',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Mary Captain',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Nelson Allison',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Male'},
+  {n:'Wunmi Durosinmi-Etti',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Damilola Macaulay',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Daniel Asuquo',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
+  {n:'David Idoko',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
+  {n:'Demex Achinga',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
+  {n:'Nengi Goodman',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Nnenna Idoko',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Omodara Olanrewaju',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Precious Erhabor',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Samuel Sagbele',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
+  {n:'Temitope Erhabor',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
+  {n:'Terdoo Anom',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
+  {n:'Terver Akindigh',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
+  {n:'Toki Numbere',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
+  {n:'Tomisin Numbere',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
+  {n:'Akpor Hari Agboro',city:'Attendee',gc:'Frequent',gcOrig:'Frequent',g:'Male'},
+  {n:'Amanda Zara Nwankwo',city:'Attendee',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
+  {n:'Niyi Joseph',city:'Attendee',gc:'Frequent',gcOrig:'Frequent',g:'Male'},
+  {n:'Vanessa Ebitu',city:'Attendee',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
+  {n:'Asta Akindigh',city:'Member',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
+  {n:'Christiana Omelazu',city:'Member',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
+  {n:'Evi Idoghor',city:'Member',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
+  {n:'Udoo Achinga',city:'Member',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
+  {n:'Blessed Mademeidon',city:'Attendee',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
+  {n:'Chinyere Izu-Ohajinwa',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
+  {n:'Confidence Blankson',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
+  {n:'Esther Ende',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
+  {n:'Georgina Gabriel',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
+  {n:'Happiness Asuquo',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
+  {n:'Izu Ohajinwa',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Male'},
+  {n:'Ololade Soyebi',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
+  {n:'Gloria Garba',city:'Member',gc:'Rare',gcOrig:'Rare',g:'Female'},
+  {n:'Ifeoluwa Williams',city:'Member',gc:'Rare',gcOrig:'Rare',g:'Female'},
+  {n:'Labake Laniyan',city:'Member',gc:'Rare',gcOrig:'Rare',g:'Female'},
+  {n:'Laolu Macaulay',city:'Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Male'},
+  {n:'Emmanuel Williams',city:'Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Male'},
+  {n:'Fisayo A.',city:'Non-Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Female'},
+  {n:'Millicent Rogers',city:'Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Female'},
+  {n:'Emmanuel Adeyemo',city:'Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Female'},
+  {n:'Elizabeth Adeyemo',city:'Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Female'},
+  {n:'Owoade Yussuff',city:'Member',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Female'},
+  {n:'Phoebe Mademeidon',city:'Member',gc:'Guest',gcOrig:'Guest',g:'Female'},
+  {n:'Shammah Obereika',city:'Member',gc:'Guest',gcOrig:'Guest',g:'Male'},
+  {n:'Ebube Agu',city:'Member',gc:'Guest',gcOrig:'Guest',g:'Male'},
+  {n:'Ibukun Agu',city:'Member',gc:'Guest',gcOrig:'Guest',g:'Female'},
+  {n:'Nnoma Awa',city:'Non-Attendee',gc:'Guest',gcOrig:'Guest',g:'Female'},
+  {n:'Olaitan Akintunde',city:'Member',gc:'Guest',gcOrig:'Guest',g:'Male'}
+];
+
+const SEED_ATT={
+  '2026-04-08':{present:['Chinedu Awa','Nelson Allison','Wunmi Durosinmi-Etti','David Idoko','Demex Achinga','Nengi Goodman','Nnenna Idoko','Omodara Olanrewaju','Samuel Sagbele','Terdoo Anom','Terver Akindigh','Toki Numbere','Tomisin Numbere','Niyi Joseph','Asta Akindigh','Christiana Omelazu','Evi Idoghor','Blessed Mademeidon','Chinyere Izu-Ohajinwa','Confidence Blankson','Esther Ende','Happiness Asuquo','Izu Ohajinwa','Ifeoluwa Williams','Owoade Yussuff','Phoebe Mademeidon','Ebube Agu','Ibukun Agu']},
+  '2026-04-15':{present:['Chinedu Awa','Nelson Allison','Wunmi Durosinmi-Etti','David Idoko','Demex Achinga','Nengi Goodman','Nnenna Idoko','Omodara Olanrewaju','Precious Erhabor','Temitope Erhabor','Terdoo Anom','Toki Numbere','Tomisin Numbere','Akpor Hari Agboro','Niyi Joseph','Asta Akindigh','Christiana Omelazu','Evi Idoghor','Udoo Achinga','Esther Ende','Gloria Garba','Emmanuel Williams','Fisayo A.','Millicent Rogers']},
+  '2026-04-22':{present:['Chinedu Awa','Mary Captain','Nelson Allison','Wunmi Durosinmi-Etti','Damilola Macaulay','David Idoko','Nengi Goodman','Nnenna Idoko','Omodara Olanrewaju','Temitope Erhabor','Terver Akindigh','Toki Numbere','Tomisin Numbere','Niyi Joseph','Vanessa Ebitu','Asta Akindigh','Christiana Omelazu','Evi Idoghor','Blessed Mademeidon','Chinyere Izu-Ohajinwa','Confidence Blankson','Ololade Soyebi','Gloria Garba','Millicent Rogers','Phoebe Mademeidon','Shammah Obereika','Nnoma Awa','Olaitan Akintunde']},
+  '2026-04-29':{present:['Ifeoma Igbokidi','Mary Captain','Daniel Asuquo','David Idoko','Demex Achinga','Nengi Goodman','Nnenna Idoko','Precious Erhabor','Temitope Erhabor','Terver Akindigh','Toki Numbere','Tomisin Numbere','Niyi Joseph','Asta Akindigh','Christiana Omelazu','Evi Idoghor','Esther Ende','Happiness Asuquo','Ololade Soyebi','Labake Laniyan','Nnoma Awa']}
+};
+
+let MEMBERS=MEMBERS_SEED.map(m=>({...m}));
+let attendance={};
+let absenceReasons={};
+let birthdays={};
+let firstSession={};  // name -> session key of first attendance
+let pendingChanges=[];
+let charts={};
+
+// ── PERSISTENCE ───────────────────────────────────────────────────────────────
+function saveAll(){
+  try{
+    localStorage.setItem(LS_KEY,JSON.stringify({
+      members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,phone:m.phone||'',email:m.email||''})),
+      attendance,absenceReasons,birthdays,firstSession,
+      savedAt:new Date().toISOString()
+    }));
+    showToast('Saved');
+  }catch(e){showToast('Save failed (storage full?)');}
+}
+function loadSaved(){
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(!raw)return false;
+    const d=JSON.parse(raw);
+    if(d.members)d.members.forEach(s=>{const m=MEMBERS.find(x=>x.n===s.n);if(m){m.gc=s.gc;m.gcOrig=s.gcOrig;if(s.phone!==undefined)m.phone=s.phone;if(s.email!==undefined)m.email=s.email;}});
+    if(d.attendance)Object.assign(attendance,d.attendance);
+    if(d.absenceReasons)Object.assign(absenceReasons,d.absenceReasons);
+    if(d.birthdays)Object.assign(birthdays,d.birthdays);
+    if(d.firstSession)Object.assign(firstSession,d.firstSession);
+    return true;
+  }catch(e){return false;}
+}
+function showToast(msg,dur=2000){
+  const t=document.getElementById('saveToast');
+  t.textContent=msg;t.className='save-toast show';
+  clearTimeout(t._t);t._t=setTimeout(()=>t.className='save-toast',dur);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+function initSeedData(){
+  Object.keys(SEED_ATT).forEach(sk=>{
+    if(!attendance[sk]){
+      attendance[sk]={};
+      MEMBERS.forEach(m=>{attendance[sk][m.n]=SEED_ATT[sk].present.includes(m.n)?'present':'absent';});
+    }
+  });
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function getRecordedSessions(){return SESSIONS_DEF.filter(s=>attendance[s.key]);}
+function getActiveSessions(name){
+  // Only count sessions from the member's first session onward
+  const recs=getRecordedSessions();
+  const fs=firstSession[name];
+  if(!fs) return recs; // no first-session set → use all
+  const fsIdx=recs.findIndex(s=>s.key===fs);
+  return fsIdx>=0?recs.slice(fsIdx):recs;
+}
+function calcMember(name){
+  const recs=getActiveSessions(name);
+  let present=0,possible=recs.length;
+  let reasons={Travel:0,Sick:0,Exam:0,Work:0,Other:0};let history=[];
+  recs.forEach(s=>{const st=attendance[s.key]?attendance[s.key][name]:undefined;const isP=st==='present';if(isP)present++;const r=absenceReasons[s.key]?absenceReasons[s.key][name]:null;if(!isP&&r)reasons[r]=(reasons[r]||0)+1;history.push({date:s.date,key:s.key,present:isP,reason:r,isFirst:s.key===firstSession[name]});});
+  const rate=possible?Math.round((present/possible)*100):0;
+  let curStreak=0;for(let i=history.length-1;i>=0;i--){if(!history[i].present)curStreak++;else break;}
+  return{present,possible,rate,absRate:100-rate,curStreak,reasons,history,firstSessionKey:firstSession[name]||null};
+}
+function rateToStatus(r,c,f,ra){return r>=c?'Core':r>=f?'Frequent':r>=ra?'Rare':'Unresponsive';}
+function gcBadge(gc,changed){const cls={Core:'b-core',Frequent:'b-freq',Rare:'b-rare',Unresponsive:'b-unres',Guest:'b-guest'}[gc]||'b-guest';return`<span class="badge ${cls}">${gc}${changed?' \u2746':''}</span>`;}
+function cityBadge(c){const cls={Member:'b-member',Attendee:'b-attendee','Non-Attendee':'b-non'}[c]||'b-guest';return`<span class="badge ${cls}">${c||'\u2014'}</span>`;}
+function reasonBadge(r){if(!r)return'';const cls={Travel:'r-travel',Sick:'r-sick',Exam:'r-exam',Work:'r-work',Other:'r-other'}[r]||'r-other';return`<span class="badge ${cls}">${r}</span>`;}
+function ini(n){return n.trim().split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();}
+function firstName(n){return n.trim().split(' ')[0].toLowerCase();}
+function byFirstName(a,b){
+  const aGuest=a.gc==='Guest'?1:0,bGuest=b.gc==='Guest'?1:0;
+  if(aGuest!==bGuest)return aGuest-bGuest; // guests always last
+  return firstName(a.n).localeCompare(firstName(b.n))||a.n.localeCompare(b.n);
+}
+// Keep bySurname as alias so existing calls don't break
+const bySurname=byFirstName;
+function dc(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+
+// ── BIRTHDAY HELPERS ──────────────────────────────────────────────────────────
+function parseBday(str){if(!str)return null;const p=str.split('/');if(p.length<2)return null;const d=parseInt(p[0]),mo=parseInt(p[1])-1;if(isNaN(d)||isNaN(mo)||mo<0||mo>11)return null;return{d,mo};}
+function daysUntil(str){
+  const b=parseBday(str);if(!b)return null;
+  const now=new Date();const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  let next=new Date(now.getFullYear(),b.mo,b.d);
+  if(next<today)next=new Date(now.getFullYear()+1,b.mo,b.d);
+  return Math.round((next-today)/(864e5));
+}
+function bdayLabel(str){
+  const b=parseBday(str);if(!b)return'\u2014';
+  const d=daysUntil(str);
+  if(d===0)return'<span class="bday-today">Today!</span>';
+  if(d<=7)return`<span class="bday-soon">In ${d} day${d===1?'':'s'}</span>`;
+  return`${MONTHS[b.mo]} ${b.d} (${d}d)`;
+}
+
+function renderBirthdays(){
+  document.getElementById('bdayBody').innerHTML=[...MEMBERS].sort(bySurname).map((m,i)=>{
+    const bval=birthdays[m.n]||'';
+    return`<tr>
+      <td style="font-weight:500;font-size:12px">${m.n}</td>
+      <td>${gcBadge(m.gc)}</td>
+      <td style="font-size:12px;color:#888">${m.g}</td>
+      <td><input type="text" id="bdinp-${i}" value="${bval}" placeholder="DD/MM" maxlength="5" style="width:85px;font-size:12px;padding:4px 7px" onchange="setBirthday('${m.n}',this.value,${i})" oninput="updateBdayCell(${i},this.value)"></td>
+      <td id="bdnext-${i}" style="font-size:12px">${bval?bdayLabel(bval):'&mdash;'}</td>
+    </tr>`;
+  }).join('');
+}
+function updateBdayCell(i,val){document.getElementById('bdnext-'+i).innerHTML=val&&parseBday(val)?bdayLabel(val):'&mdash;';}
+function setBirthday(name,val,idx){
+  val=val.trim();
+  if(val&&parseBday(val))birthdays[name]=val;else{delete birthdays[name];if(idx!==undefined)document.getElementById('bdnext-'+idx).innerHTML='&mdash;';}
+  renderOverviewBirthdays();saveAll();
+}
+function clearAllBirthdays(){if(!confirm('Clear all birthday data?'))return;birthdays={};renderBirthdays();renderOverviewBirthdays();saveAll();}
+
+// ── OVERVIEW ──────────────────────────────────────────────────────────────────
+function renderOverview(){
+  const recs=getRecordedSessions();
+  if(!recs.length){document.getElementById('ov-metrics').innerHTML='<p style="color:#888;font-size:13px">No sessions recorded yet.</p>';return;}
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const tots=recs.map(s=>{let total=0,female=0,male=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present'){total++;if(m.g==='Female')female++;else male++;}});return{date:s.date.replace(' 2026',''),total,female,male};});
+  const avg=Math.round(tots.reduce((a,b)=>a+b.total,0)/tots.length);
+  const peak=Math.max(...tots.map(t=>t.total));
+  const avgRate=Math.round(nonGuests.map(m=>calcMember(m.n).rate).reduce((a,b)=>a+b,0)/nonGuests.length);
+  const attendeesToDate=MEMBERS.length;
+  const nonGuestCount=nonGuests.length;
+  document.getElementById('ov-metrics').innerHTML=`
+    <div class="metric"><div class="metric-label">Attendees to date</div><div class="metric-val">${attendeesToDate}</div><div class="metric-sub">all records</div></div>
+    <div class="metric"><div class="metric-label">Members &amp; attendees</div><div class="metric-val">${nonGuestCount}</div><div class="metric-sub">excl. guests</div></div>
+    <div class="metric"><div class="metric-label">Recorded</div><div class="metric-val">${recs.length}</div><div class="metric-sub">of ${SESSIONS_DEF.length} planned</div></div>
+    <div class="metric"><div class="metric-label">Avg attendance</div><div class="metric-val">${avg}</div><div class="metric-sub">excl. guests</div></div>
+    <div class="metric"><div class="metric-label">Peak</div><div class="metric-val">${peak}</div><div class="metric-sub">excl. guests</div></div>
+    <div class="metric"><div class="metric-label">Avg rate</div><div class="metric-val">${avgRate}%</div><div class="metric-sub">excl. guests</div></div>
+  `;
+  dc('sessChart');dc('gcChart');dc('genChart');
+  const lbl=tots.map(t=>t.date);
+  charts['sessChart']=new Chart(document.getElementById('sessChart'),{type:'bar',data:{labels:lbl,datasets:[{label:'Total (excl. guests)',data:tots.map(t=>t.total),backgroundColor:'#1D9E75',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:45,autoSkip:false}},y:{beginAtZero:true}}}});
+  const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};MEMBERS.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
+  charts['gcChart']=new Chart(document.getElementById('gcChart'),{type:'doughnut',data:{labels:Object.keys(gcC),datasets:[{data:Object.values(gcC),backgroundColor:['#1D9E75','#378ADD','#EF9F27','#E24B4A','#888780'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12,padding:8}}}}});
+  charts['genChart']=new Chart(document.getElementById('genChart'),{type:'bar',data:{labels:lbl,datasets:[{label:'Female',data:tots.map(t=>t.female),backgroundColor:'#D4537E',borderRadius:2,stack:'s'},{label:'Male',data:tots.map(t=>t.male),backgroundColor:'#378ADD',borderRadius:2,stack:'s'}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true,ticks:{font:{size:10},maxRotation:45,autoSkip:false}},y:{stacked:true,beginAtZero:true}},plugins:{legend:{labels:{font:{size:11},boxWidth:10}}}}});
+  renderOverviewBirthdays();
+  renderOverviewAbsent();
+  renderLast3Sessions();
+}
+
+function renderLast3Sessions(){
+  // Use only sessions that have been explicitly recorded (have attendance data)
+  const recs=getRecordedSessions();
+  const el=document.getElementById('ov-last3');
+  if(!recs.length){el.innerHTML='';return;}
+
+  const last3=recs.slice(-3).reverse(); // most recent recorded session first
+
+  el.innerHTML=`
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:1rem">
+      <p class="sec-title" style="margin-bottom:12px">Last ${last3.length} session${last3.length===1?'':'s'} (recorded, excl. guests)</p>
+      <div class="sessions-grid" style="display:grid;grid-template-columns:repeat(${last3.length},1fr);gap:10px">
+        ${last3.map((s,i)=>{
+          let present=0,absent=0;
+          // Only count non-guest members whose first session is on or before this session
+          MEMBERS.filter(m=>m.gc!=='Guest').forEach(m=>{
+            if(firstSession[m.n]&&firstSession[m.n]>s.key)return;
+            const st=attendance[s.key]?attendance[s.key][m.n]:'absent';
+            if(st==='present')present++;else absent++;
+          });
+          const counted=present+absent;
+          const pct=counted?Math.round((present/counted)*100):0;
+          const isLatest=i===0;
+          return`<div style="border:0.5px solid ${isLatest?'#5dcaa5':'#e0e0d8'};border-radius:8px;padding:12px;background:${isLatest?'#f2fbf7':'#fafaf8'};position:relative">
+            ${isLatest?'<span style="position:absolute;top:8px;right:8px;font-size:10px;background:#e1f5ee;color:#085041;border-radius:20px;padding:1px 7px;font-weight:500">Latest</span>':''}
+            <div style="font-size:12px;font-weight:500;color:#888;margin-bottom:10px;padding-right:${isLatest?'52px':'0'}">${s.date}</div>
+            <div style="display:flex;align-items:flex-end;gap:6px;margin-bottom:8px">
+              <div style="font-size:28px;font-weight:500;color:#1a1a1a;line-height:1">${present}</div>
+              <div style="font-size:12px;color:#888;margin-bottom:3px">/ ${counted} present</div>
+            </div>
+            <div style="width:100%;height:6px;background:#e0e0d8;border-radius:3px;overflow:hidden;margin-bottom:8px">
+              <div style="height:100%;width:${pct}%;background:#1D9E75;border-radius:3px;transition:width .4s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12px">
+              <span style="color:#a32d2d;font-weight:500">${absent} absent</span>
+              <span style="color:#888">${pct}%</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderOverviewBirthdays(){
+  const wrap=document.getElementById('ov-bday-wrap');
+  const list=document.getElementById('ov-bday-list');
+  const upcoming=MEMBERS.map(m=>({m,days:daysUntil(birthdays[m.n]),bday:parseBday(birthdays[m.n])}))
+    .filter(x=>x.days!==null&&x.days<=30)
+    .sort((a,b)=>a.days-b.days);
+  if(!upcoming.length){
+    list.innerHTML='<div style="font-size:13px;color:#888;padding:8px 0">No birthdays in the next 30 days. <span style="color:#3c3489;cursor:pointer;text-decoration:underline" onclick="switchTab(\'birthdays\',document.querySelector(\'[data-id=birthdays]\'))">Add birthdays</span> to see reminders here.</div>';
+    wrap.style.display='';
+    return;
+  }
+  wrap.style.display='';
+  list.innerHTML=upcoming.map(({m,days,bday})=>{
+    const isToday=days===0;
+    const isSoon=days<=7;
+    const dateStr=`${MONTHS[bday.mo]} ${bday.d}`;
+    const dayStr=isToday?'<span class="bday-today">&#127874; Today!</span>':isSoon?`<span class="bday-soon">In ${days} day${days===1?'':'s'}</span>`:`<span style="font-size:12px;color:#888">${dateStr} &middot; ${days}d</span>`;
+    const rowBg=isToday?'background:#f0fdf7;border-left:3px solid #1D9E75;':isSoon?'background:#fefdf5;border-left:3px solid #EF9F27;':'border-left:3px solid transparent;';
+    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:0.5px solid #e0e0d8;${rowBg}">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:32px;height:32px;border-radius:50%;background:#eeedfe;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#3c3489;flex-shrink:0">${ini(m.n)}</div>
+        <div>
+          <div style="font-size:13px;font-weight:500;color:#1a1a1a">${m.n}</div>
+          <div style="font-size:11px;color:#888;margin-top:1px">${gcBadge(m.gc)} &middot; ${m.g}</div>
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">${dayStr}<div style="font-size:11px;color:#aaa;margin-top:2px">${dateStr}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderOverviewAbsent(){
+  const recs=getRecordedSessions();
+  const list=document.getElementById('ov-absent-list');
+  const label=document.getElementById('ov-absent-label');
+  if(!recs.length){
+    label.textContent='No sessions recorded yet.';
+    list.innerHTML='';
+    return;
+  }
+  const lastSess=recs[recs.length-1];
+  const filterGC=document.getElementById('absentFilterGC')?document.getElementById('absentFilterGC').value:'';
+  label.textContent=`Session: ${lastSess.date}`;
+
+  // Build absent list: only non-guest members whose first session is on or before last session
+  const absentees=MEMBERS.filter(m=>{
+    if(m.gc==='Guest')return false;
+    if(filterGC&&m.gc!==filterGC)return false;
+    // exclude if their first session hasn't happened yet (first session is after last recorded)
+    if(firstSession[m.n]&&firstSession[m.n]>lastSess.key)return false;
+    const st=attendance[lastSess.key]?attendance[lastSess.key][m.n]:'absent';
+    return st!=='present';
+  }).map(m=>{
+    // count consecutive misses from the end of their active sessions
+    const active=getActiveSessions(m.n);
+    let streak=0;
+    for(let i=active.length-1;i>=0;i--){
+      const st=attendance[active[i].key]?attendance[active[i].key][m.n]:'absent';
+      if(st!=='present')streak++;else break;
+    }
+    return{...m,streak};
+  }).sort((a,b)=>b.streak-a.streak||bySurname(a,b));
+
+  if(!absentees.length){
+    list.innerHTML='<div style="font-size:13px;color:#3b6d11;padding:10px 0">Everyone attended the last session!</div>';
+    return;
+  }
+
+  const followUpCount=absentees.filter(m=>m.streak>=2).length;
+  const followUpBanner=followUpCount?`<div style="background:#faeeda;color:#633806;border-radius:8px;padding:9px 13px;margin-bottom:10px;font-size:13px;display:flex;align-items:center;gap:8px"><span style="font-size:16px">⚠</span><span><strong>${followUpCount} member${followUpCount===1?'':'s'} need${followUpCount===1?'s':''} follow-up</strong> — missed 2 or more sessions in a row</span></div>`:'';
+
+  list.innerHTML=followUpBanner+absentees.map(m=>{
+    const needsFollowup=m.streak>=2;
+    const streakColor=m.streak>=4?'#a32d2d':m.streak>=2?'#ba7517':'#888';
+    const streakBg=m.streak>=4?'#fcebeb':m.streak>=2?'#faeeda':'#f5f5f3';
+    const flag=needsFollowup?`<span style="font-size:10px;font-weight:500;background:#fcebeb;color:#791f1f;border-radius:4px;padding:1px 6px;margin-left:6px">Follow up</span>`:'';
+    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:0.5px solid #e0e0d8;gap:8px;background:${needsFollowup?'#fffbf5':''}">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0">
+        <div style="width:30px;height:30px;border-radius:50%;background:${needsFollowup?'#faeeda':'#f5f5f3'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:${needsFollowup?'#633806':'#888'};flex-shrink:0">${ini(m.n)}</div>
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:500;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center">${m.n}${flag}</div>
+          <div style="font-size:11px;color:#888;margin-top:1px">${gcBadge(m.gc)} &middot; ${m.g}</div>
+        </div>
+      </div>
+      <div style="flex-shrink:0;text-align:right">
+        <span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500;background:${streakBg};color:${streakColor};white-space:nowrap">${m.streak} missed${m.streak===1?' session':' in a row'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function copyAbsentNames(){
+  const recs=getRecordedSessions();
+  if(!recs.length){showToast('No sessions recorded yet');return;}
+  const lastSess=recs[recs.length-1];
+  const filterGC=document.getElementById('absentFilterGC')?document.getElementById('absentFilterGC').value:'';
+  const names=MEMBERS.filter(m=>{
+    if(m.gc==='Guest')return false;
+    if(filterGC&&m.gc!==filterGC)return false;
+    if(firstSession[m.n]&&firstSession[m.n]>lastSess.key)return false;
+    const st=attendance[lastSess.key]?attendance[lastSess.key][m.n]:'absent';
+    return st!=='present';
+  }).map(m=>m.n).sort((a,b)=>firstName(a).localeCompare(firstName(b))||a.localeCompare(b));
+  if(!names.length){showToast('No absentees to copy');return;}
+  navigator.clipboard.writeText(names.join('\n'))
+    .then(()=>showToast(`Copied ${names.length} name${names.length===1?'':'s'}`))
+    .catch(()=>showToast('Copy failed — try again'));
+}
+
+// ── GUESTS ────────────────────────────────────────────────────────────────────
+function renderGuests(){
+  const search=(document.getElementById('gSearch').value||'').toLowerCase();
+  const guests=MEMBERS.filter(m=>m.gc==='Guest'&&(!search||m.n.toLowerCase().includes(search))).sort(bySurname);
+  const recs=getRecordedSessions();
+  const body=document.getElementById('gBody');
+  body.innerHTML=guests.map(m=>{
+    const c=calcMember(m.n);
+    const fsKey=firstSession[m.n];
+    const fsDate=fsKey?recs.find(s=>s.key===fsKey)?.date.replace(' 2026',''):'';
+    const nameEsc=m.n.replace(/'/g,"\\'");
+    const dots=recs.map(s=>{
+      const st=attendance[s.key]?attendance[s.key][m.n]:'unknown';
+      return`<div class="dot ${st==='present'?'dot-y':'dot-n'}" title="${s.date.replace(' 2026','')}"></div>`;
+    }).join('');
+    return`<tr>
+      <td style="font-weight:500;font-size:12px">${m.n}</td>
+      <td>${cityBadge(m.city)}</td>
+      <td style="font-size:12px;color:#888">${m.g}</td>
+      <td style="font-size:12px">${fsDate?`<span style="background:#eeedfe;color:#3c3489;border-radius:4px;padding:1px 6px;font-size:11px">${fsDate}</span>`:'<span style="color:#ccc;font-size:11px">not set</span>'}</td>
+      <td><span style="font-size:13px;font-weight:500;color:#3c3489">${c.present}</span><span style="font-size:11px;color:#888"> session${c.present===1?'':'s'}</span></td>
+      <td><button onclick="openMemberModal('${nameEsc}')" title="Edit guest" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px">&#9998;</button></td>
+    </tr>`;
+  }).join('');
+  if(!guests.length) body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">No guests yet. Add guests using the button above.</td></tr>`;
+
+  // Guest metrics
+  const totalGuests=MEMBERS.filter(m=>m.gc==='Guest').length;
+  const returning=MEMBERS.filter(m=>m.gc==='Guest'&&calcMember(m.n).present>1).length;
+  document.getElementById('guest-metrics').innerHTML=`
+    <div class="metric"><div class="metric-label">Total guests</div><div class="metric-val">${totalGuests}</div></div>
+    <div class="metric"><div class="metric-label">Visited 2+ times</div><div class="metric-val">${returning}</div><div class="metric-sub">potential regulars</div></div>
+    <div class="metric"><div class="metric-label">One-time only</div><div class="metric-val">${totalGuests-returning}</div></div>
+  `;
+}
+
+// ── WEDNESDAY RESTRICTION ─────────────────────────────────────────────────────
+function validateWednesday(input){
+  const warn=document.getElementById('dayWarning');
+  if(!input.value){warn.style.display='none';return;}
+  const d=new Date(input.value+'T12:00:00');
+  if(d.getDay()!==3){
+    warn.style.display='inline';
+    // Snap to nearest Wednesday
+    const diff=3-d.getDay();
+    const snap=new Date(d);
+    snap.setDate(d.getDate()+(diff<=0?diff+7:diff));
+    input.value=snap.toISOString().split('T')[0];
+    setTimeout(()=>warn.style.display='none',2500);
+  } else {
+    warn.style.display='none';
+  }
+}
+
+// ── IMPORT FROM SHEETS ────────────────────────────────────────────────────────
+let _importParsedPresent=[];
+let _importAPIPresent=[];
+
+function openImportModal(){
+  document.getElementById('importModal').className='member-modal open';
+  const savedKey=localStorage.getItem('gidi_gc_api_key')||'';
+  document.getElementById('imp-api-key').value=savedKey;
+  document.getElementById('imp-paste-preview').innerHTML='';
+  document.getElementById('imp-api-preview').innerHTML='';
+  document.getElementById('imp-paste-apply').style.display='none';
+  document.getElementById('imp-api-apply').style.display='none';
+  _importParsedPresent=[];_importAPIPresent=[];
+  switchImportTab('paste');
+}
+function closeImportModal(){document.getElementById('importModal').className='member-modal';}
+function handleImportBgClick(e){if(e.target===document.getElementById('importModal'))closeImportModal();}
+
+function switchImportTab(tab){
+  document.getElementById('imp-panel-paste').style.display=tab==='paste'?'block':'none';
+  document.getElementById('imp-panel-api').style.display=tab==='api'?'block':'none';
+  const pBtn=document.getElementById('imp-tab-paste'),aBtn=document.getElementById('imp-tab-api');
+  pBtn.style.background=tab==='paste'?'#e1f5ee':'#fafaf8';pBtn.style.color=tab==='paste'?'#085041':'#888';pBtn.style.fontWeight=tab==='paste'?'500':'normal';
+  aBtn.style.background=tab==='api'?'#e6f1fb':'#fafaf8';aBtn.style.color=tab==='api'?'#0c447c':'#888';aBtn.style.fontWeight=tab==='api'?'500':'normal';
+}
+function saveApiKey(){const k=document.getElementById('imp-api-key').value.trim();if(k)localStorage.setItem('gidi_gc_api_key',k);else localStorage.removeItem('gidi_gc_api_key');}
+
+function validateImportWed(input){
+  const warnId=input.id==='imp-paste-date'?'imp-paste-date-warn':'imp-api-date-warn';
+  const warn=document.getElementById(warnId);
+  if(!input.value){warn.style.display='none';return;}
+  const d=new Date(input.value+'T12:00:00');
+  if(d.getDay()!==3){
+    warn.style.display='block';
+    const diff=3-d.getDay();const snap=new Date(d);snap.setDate(d.getDate()+(diff<=0?diff+7:diff));
+    input.value=snap.toISOString().split('T')[0];
+    setTimeout(()=>warn.style.display='none',2500);
+  }else warn.style.display='none';
+}
+
+function normName(n){return n.toLowerCase().replace(/[^a-z\s]/g,'').replace(/\s+/g,' ').trim();}
+function matchName(raw,memberList){
+  const r=normName(raw);
+  let m=memberList.find(x=>normName(x.n)===r);
+  if(m)return{member:m,confidence:'exact'};
+  const rparts=r.split(' ');const rSur=rparts[rparts.length-1];const rFirst=rparts[0]&&rparts[0][0];
+  m=memberList.find(x=>{const p=normName(x.n).split(' ');return p[p.length-1]===rSur&&p[0]&&p[0][0]===rFirst;});
+  if(m)return{member:m,confidence:'high'};
+  const bySur=memberList.filter(x=>normName(x.n).split(' ').pop()===rSur);
+  if(bySur.length===1)return{member:bySur[0],confidence:'medium'};
+  m=memberList.find(x=>{const p=normName(x.n).split(' ');return rparts.some(rw=>rw.length>2&&p.includes(rw));});
+  if(m)return{member:m,confidence:'low'};
+  return null;
+}
+
+// Determines whether a tick-cell value counts as "present"
+function isTick(val){
+  const v=(val||'').toString().trim().toLowerCase();
+  return['✓','✔','☑','true','yes','y','1','x','present','p','√','checked','done','✅'].includes(v)||v==='true'||(v!==''&&v!=='0'&&v!=='false'&&v!=='no'&&v!=='n'&&v!=='absent'&&v!=='a'&&v!=='-'&&v!=='none'&&v.length>0&&v!=='false');
+}
+// More conservative: only known positive values
+function isTickStrict(val){
+  const v=(val||'').toString().trim().toLowerCase();
+  return['✓','✔','☑','true','yes','y','1','x','present','p','√','checked','done','✅','◉'].includes(v);
+}
+
+// Parse pasted spreadsheet rows into [{name, ticked}]
+function parseTickRows(raw,nameColIdx,tickColIdx){
+  const rows=raw.split(/\r?\n/).map(r=>r.split(/\t/));
+  const result=[];
+  rows.forEach(cells=>{
+    const nameCell=(cells[nameColIdx]||'').trim();
+    const tickCell=(cells[tickColIdx]||'').trim();
+    if(!nameCell)return;
+    // Skip header rows: if name cell looks like a column header
+    const lc=nameCell.toLowerCase();
+    if(['name','names','member','members','attendee','person','full name'].includes(lc))return;
+    result.push({name:nameCell,ticked:isTickStrict(tickCell)});
+  });
+  return result;
+}
+
+// Column letter to 0-based index (A=0, B=1, ...)
+function colLetterToIdx(letter){
+  let idx=0;
+  const u=(letter||'A').toUpperCase().trim();
+  for(let i=0;i<u.length;i++)idx=idx*26+(u.charCodeAt(i)-64);
+  return idx-1;
+}
+
+function parseRawNames(raw){return raw.split(/[\n,\t]+/).map(s=>s.trim()).filter(s=>s.length>1);}
+
+function buildImportPreview(rows,previewEl,applyBtn,resultStore){
+  // rows: [{name, ticked}] or string[] (legacy present-only)
+  // Normalise to [{name, ticked}]
+  const normalised=rows.map(r=>typeof r==='string'?{name:r,ticked:true}:r);
+  if(!normalised.length){previewEl.innerHTML='<div style="font-size:13px;color:#888">No rows found. Check your paste or column letters.</div>';applyBtn.style.display='none';return;}
+
+  const matched=[],unmatched=[];
+  normalised.forEach(({name,ticked})=>{
+    const res=matchName(name,MEMBERS);
+    if(res)matched.push({raw:name,ticked,...res});
+    else unmatched.push({name,ticked});
+  });
+
+  const seen=new Set();
+  const um=matched.filter(x=>{if(seen.has(x.member.n))return false;seen.add(x.member.n);return true;});
+  resultStore.length=0;
+  um.filter(x=>x.ticked).forEach(x=>resultStore.push(x.member.n));
+
+  const presentCount=um.filter(x=>x.ticked).length;
+  const absentCount=um.filter(x=>!x.ticked).length;
+  const unmatchedCount=unmatched.length;
+
+  const cc={exact:'#085041',high:'#0c447c',medium:'#633806',low:'#791f1f'};
+  const cb={exact:'#e1f5ee',high:'#e6f1fb',medium:'#faeeda',low:'#fcebeb'};
+  const cl={exact:'Exact',high:'High',medium:'Partial',low:'Weak'};
+
+  previewEl.innerHTML=`
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500;background:#e1f5ee;color:#085041">${presentCount} present</span>
+      <span style="padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500;background:#fcebeb;color:#791f1f">${absentCount} absent</span>
+      ${unmatchedCount?`<span style="padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500;background:#faeeda;color:#633806">${unmatchedCount} unrecognised</span>`:''}
+    </div>
+    ${um.length?`<div style="border:0.5px solid #e0e0d8;border-radius:8px;overflow:hidden;margin-bottom:10px;max-height:220px;overflow-y:auto">
+      ${um.map(x=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:0.5px solid #e0e0d8;font-size:12px;background:${x.ticked?'':'#fafaf8'}">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:16px;height:16px;border-radius:3px;background:${x.ticked?'#1D9E75':'#E24B4A'};display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#fff;flex-shrink:0">${x.ticked?'✓':'✗'}</span>
+          <span style="font-weight:500">${x.member.n}</span>
+          ${x.raw!==x.member.n?`<span style="color:#aaa">(from: "${x.raw}")</span>`:''}
+        </div>
+        <span style="padding:1px 7px;border-radius:20px;font-size:10px;font-weight:500;background:${cb[x.confidence]};color:${cc[x.confidence]}">${cl[x.confidence]}</span>
+      </div>`).join('')}
+    </div>`:''}
+    ${unmatchedCount?`<div style="background:#faeeda;color:#633806;border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:8px">
+      <strong>Not recognised (${unmatchedCount}):</strong> ${unmatched.map(u=>u.name).join(', ')}<br>
+      <span style="font-size:11px">These rows will be skipped. Check spelling or add them as members first.</span>
+    </div>`:''}
+    <div style="font-size:12px;color:#888">Members in your list <strong>not found in the sheet</strong> will also be marked absent.</div>
+  `;
+  applyBtn.style.display=um.length?'inline-flex':'none';
+}
+
+function previewPasteImport(){
+  const raw=document.getElementById('imp-paste-names').value;
+  const nameCol=colLetterToIdx(document.getElementById('imp-col-name').value);
+  const tickCol=colLetterToIdx(document.getElementById('imp-col-tick').value);
+  const rows=parseTickRows(raw,nameCol,tickCol);
+  if(!rows.length){
+    // Fallback: treat as plain name list (all present)
+    const names=parseRawNames(raw);
+    buildImportPreview(names,document.getElementById('imp-paste-preview'),document.getElementById('imp-paste-apply'),_importParsedPresent);
+  } else {
+    buildImportPreview(rows,document.getElementById('imp-paste-preview'),document.getElementById('imp-paste-apply'),_importParsedPresent);
+  }
+}
+function applyPasteImport(){
+  const dk=document.getElementById('imp-paste-date').value;if(!dk){alert('Please select a session date.');return;}
+  applyImport(dk,_importParsedPresent,'paste');
+}
+
+async function fetchFromSheetAPI(){
+  const apiKey=document.getElementById('imp-api-key').value.trim();
+  const rawUrl=document.getElementById('imp-sheet-url').value.trim();
+  const tab=document.getElementById('imp-sheet-tab').value.trim()||'Sheet1';
+  const nameColLetter=(document.getElementById('imp-col-name').value||'A').toUpperCase().trim();
+  const tickColLetter=(document.getElementById('imp-col-tick').value||'B').toUpperCase().trim();
+  const btn=document.getElementById('imp-api-fetch-btn');
+  const previewEl=document.getElementById('imp-api-preview');
+  if(!apiKey){previewEl.innerHTML='<div style="color:#791f1f;font-size:13px">Please enter your API key.</div>';return;}
+  if(!rawUrl){previewEl.innerHTML='<div style="color:#791f1f;font-size:13px">Please enter the sheet URL or ID.</div>';return;}
+  let sheetId=rawUrl;
+  const um=rawUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);if(um)sheetId=um[1];
+
+  // Fetch both columns in one request by expanding range
+  // Determine the wider range covering both columns
+  const cols=[nameColLetter,tickColLetter].sort();
+  const range=`${encodeURIComponent(tab)}!${cols[0]}:${cols[1]}`;
+  const url=`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`;
+  btn.textContent='Fetching...';btn.disabled=true;
+  previewEl.innerHTML='<div style="font-size:13px;color:#888">Loading from Google Sheets\u2026</div>';
+  try{
+    const resp=await fetch(url);
+    if(!resp.ok){const err=await resp.json().catch(()=>({error:{message:resp.statusText}}));throw new Error(err?.error?.message||resp.statusText);}
+    const data=await resp.json();
+    const values=data.values||[];
+    if(!values.length){previewEl.innerHTML='<div style="color:#791f1f;font-size:13px">No data found. Check the tab name and column letters.</div>';btn.textContent='Fetch from sheet';btn.disabled=false;return;}
+
+    // Figure out the offset: the range starts at cols[0], so we need the relative index of each col
+    const startColIdx=colLetterToIdx(cols[0]);
+    const nameIdx=colLetterToIdx(nameColLetter)-startColIdx;
+    const tickIdx=colLetterToIdx(tickColLetter)-startColIdx;
+
+    const rows=[];
+    values.forEach(row=>{
+      const nameCell=(row[nameIdx]||'').trim();
+      const tickCell=(row[tickIdx]||'').trim();
+      if(!nameCell)return;
+      const lc=nameCell.toLowerCase();
+      if(['name','names','member','members','attendee','person','full name'].includes(lc))return;
+      rows.push({name:nameCell,ticked:isTickStrict(tickCell)});
+    });
+
+    if(!rows.length){previewEl.innerHTML='<div style="color:#791f1f;font-size:13px">No name data found. Check column letters.</div>';btn.textContent='Fetch from sheet';btn.disabled=false;return;}
+    buildImportPreview(rows,previewEl,document.getElementById('imp-api-apply'),_importAPIPresent);
+  }catch(e){
+    previewEl.innerHTML=`<div style="background:#fcebeb;color:#791f1f;border-radius:8px;padding:10px 12px;font-size:13px"><strong>Error:</strong> ${e.message}<br><span style="font-size:11px">Common causes: wrong API key, sheet not set to public, incorrect sheet ID, Sheets API not enabled, or wrong column letters.</span></div>`;
+  }
+  btn.textContent='Fetch from sheet';btn.disabled=false;
+}
+function applyAPIImport(){
+  const dk=document.getElementById('imp-api-date').value;if(!dk){alert('Please select a session date.');return;}
+  applyImport(dk,_importAPIPresent,'api');
+}
+
+function applyImport(dateKey,presentNames,source){
+  if(!presentNames.length){showToast('No matched names to import');return;}
+  const presSet=new Set(presentNames);
+  if(!attendance[dateKey])attendance[dateKey]={};
+  MEMBERS.forEach(m=>{attendance[dateKey][m.n]=presSet.has(m.n)?'present':'absent';});
+  const ex=SESSIONS_DEF.find(s=>s.key===dateKey);
+  const label=ex?ex.date:new Date(dateKey+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  if(!ex){SESSIONS_DEF.push({date:label,key:dateKey});SESSIONS_DEF.sort((a,b)=>a.key.localeCompare(b.key));}
+  closeImportModal();
+  recalcAll();saveAll();renderSessionList();
+  loadRecordSession(dateKey);
+  switchTab('record',document.querySelector('[data-id=record]'));
+  showToast(`Imported: ${presentNames.length} present, ${MEMBERS.length-presentNames.length} absent. Review and save.`,3500);
+}
+
+let _editingMemberName=null;
+
+function populateFirstSessionDropdown(selectedKey){
+  const sel=document.getElementById('mf-firstsession');
+  const recs=getRecordedSessions();
+  sel.innerHTML='<option value="">Not set</option>'+recs.map(s=>`<option value="${s.key}"${s.key===selectedKey?' selected':''}>${s.date}</option>`).join('');
+}
+
+function openMemberModal(name,defaultGc){
+  _editingMemberName=name;
+  const modal=document.getElementById('memberModal');
+  const title=document.getElementById('memberModalTitle');
+  const delBtn=document.getElementById('mf-delete-btn');
+  const err=document.getElementById('mf-error');
+  err.style.display='none';
+  hideDeleteConfirm();
+  if(name){
+    title.textContent='Edit member';
+    delBtn.style.display='inline-flex';
+    const m=MEMBERS.find(x=>x.n===name);
+    if(!m)return;
+    document.getElementById('mf-name').value=m.n;
+    document.getElementById('mf-gender').value=m.g;
+    document.getElementById('mf-city').value=m.city||'';
+    document.getElementById('mf-gc').value=m.gc||'';
+    document.getElementById('mf-phone').value=m.phone||'';
+    document.getElementById('mf-email').value=m.email||'';
+    document.getElementById('mf-bday').value=birthdays[m.n]||'';
+    populateFirstSessionDropdown(firstSession[m.n]||'');
+  } else {
+    title.textContent='Add member';
+    delBtn.style.display='none';
+    document.getElementById('mf-name').value='';
+    document.getElementById('mf-gender').value='';
+    document.getElementById('mf-city').value='';
+    document.getElementById('mf-gc').value=defaultGc||'';
+    document.getElementById('mf-phone').value='';
+    document.getElementById('mf-email').value='';
+    document.getElementById('mf-bday').value='';
+    populateFirstSessionDropdown('');
+  }
+  modal.className='member-modal open';
+  document.getElementById('mf-name').focus();
+}
+
+function closeMemberModal(){
+  document.getElementById('memberModal').className='member-modal';
+  _editingMemberName=null;
+}
+
+function handleModalBgClick(e){
+  if(e.target===document.getElementById('memberModal'))closeMemberModal();
+}
+
+function saveMember(){
+  const err=document.getElementById('mf-error');
+  const name=document.getElementById('mf-name').value.trim();
+  const gender=document.getElementById('mf-gender').value;
+  const city=document.getElementById('mf-city').value;
+  const gc=document.getElementById('mf-gc').value;
+  const phone=document.getElementById('mf-phone').value.trim();
+  const email=document.getElementById('mf-email').value.trim();
+  const bday=document.getElementById('mf-bday').value.trim();
+  const fsKey=document.getElementById('mf-firstsession').value;
+
+  // Validate
+  if(!name){err.textContent='Name is required.';err.style.display='block';return;}
+  if(!gender){err.textContent='Gender is required.';err.style.display='block';return;}
+  if(!city){err.textContent='City Church status is required.';err.style.display='block';return;}
+  if(!gc){err.textContent='GC Attendee status is required.';err.style.display='block';return;}
+  if(bday&&!parseBday(bday)){err.textContent='Birthday must be in DD/MM format (e.g. 14/03).';err.style.display='block';return;}
+
+  const isEdit=!!_editingMemberName;
+
+  if(isEdit){
+    const m=MEMBERS.find(x=>x.n===_editingMemberName);
+    if(!m)return;
+    const oldName=m.n;
+    const nameChanged=name!==oldName;
+
+    if(nameChanged){
+      // Check no duplicate
+      if(MEMBERS.find(x=>x.n===name)){err.textContent='A member with this name already exists.';err.style.display='block';return;}
+      // Migrate all data keyed by name
+      Object.keys(attendance).forEach(sk=>{
+        if(attendance[sk][oldName]!==undefined){attendance[sk][name]=attendance[sk][oldName];delete attendance[sk][oldName];}
+      });
+      Object.keys(absenceReasons).forEach(sk=>{
+        if(absenceReasons[sk][oldName]!==undefined){absenceReasons[sk][name]=absenceReasons[sk][oldName];delete absenceReasons[sk][oldName];}
+      });
+      if(firstSession[oldName]!==undefined){firstSession[name]=firstSession[oldName];delete firstSession[oldName];}
+      if(birthdays[oldName]!==undefined){birthdays[name]=birthdays[oldName];delete birthdays[oldName];}
+    }
+
+    m.n=name;m.g=gender;m.city=city;m.gc=gc;m.gcOrig=m.gcOrig||gc;m.phone=phone;m.email=email;
+    if(bday)birthdays[name]=bday;else delete birthdays[name];
+    if(fsKey)firstSession[name]=fsKey;else delete firstSession[name];
+    showToast('Member updated');
+  } else {
+    // New member
+    if(MEMBERS.find(x=>x.n===name)){err.textContent='A member with this name already exists.';err.style.display='block';return;}
+    MEMBERS.push({n:name,g:gender,city,gc,gcOrig:gc,phone,email});
+    if(bday)birthdays[name]=bday;
+    if(fsKey)firstSession[name]=fsKey;
+    // Initialise as absent for all existing recorded sessions
+    Object.keys(attendance).forEach(sk=>{attendance[sk][name]='absent';});
+    showToast('Member added');
+  }
+
+  closeMemberModal();
+  recalcAll();
+  saveAll();
+}
+
+function showDeleteConfirm(){document.getElementById('mf-delete-confirm').className='delete-confirm show';}
+function hideDeleteConfirm(){document.getElementById('mf-delete-confirm').className='delete-confirm';}
+
+function confirmDeleteMember(){
+  if(!_editingMemberName)return;
+  const name=_editingMemberName;
+  // Remove from MEMBERS array
+  const idx=MEMBERS.findIndex(x=>x.n===name);
+  if(idx>=0)MEMBERS.splice(idx,1);
+  // Clean up all data
+  Object.keys(attendance).forEach(sk=>{delete attendance[sk][name];});
+  Object.keys(absenceReasons).forEach(sk=>{delete absenceReasons[sk][name];});
+  delete firstSession[name];
+  delete birthdays[name];
+  closeMemberModal();
+  recalcAll();
+  saveAll();
+  showToast('Member deleted');
+}
+
+// ── MEMBERS ───────────────────────────────────────────────────────────────────
+function renderMembers(){
+  const search=(document.getElementById('mSearch').value||'').toLowerCase();
+  const fGC=document.getElementById('fGC').value,fCity=document.getElementById('fCity').value,fGen=document.getElementById('fGen').value,fChanged=document.getElementById('fChanged').value;
+  const recs=getRecordedSessions();
+  const data=MEMBERS.filter(m=>{
+    if(m.gc==='Guest')return false; // guests go in their own tab
+    if(search&&!m.n.toLowerCase().includes(search))return false;
+    if(fGC&&m.gc!==fGC)return false;if(fCity&&m.city!==fCity)return false;
+    if(fGen&&m.g!==fGen)return false;if(fChanged==='changed'&&m.gc===m.gcOrig)return false;return true;
+  }).sort(bySurname);
+  document.getElementById('mBody').innerHTML=data.map(m=>{
+    const c=calcMember(m.n);const changed=m.gc!==m.gcOrig;
+    const allRecs=getRecordedSessions();
+    const dots=allRecs.map(s=>{
+      const beforeFirst=firstSession[m.n]&&s.key<firstSession[m.n];
+      if(beforeFirst)return`<div class="dot" style="background:#e0e0d8;opacity:.4" title="Before first visit"></div>`;
+      const st=attendance[s.key]?attendance[s.key][m.n]:'unknown';
+      const r=absenceReasons[s.key]?absenceReasons[s.key][m.n]:'';
+      const isFirst=s.key===firstSession[m.n];
+      const cls=st==='present'?'dot-y':st==='absent'?'dot-n':'dot-u';
+      const ring=isFirst?'outline:2px solid #7F77DD;outline-offset:1px;':'';
+      return`<div class="dot ${cls}" style="${ring}" title="${s.date.replace(' 2026','')}${isFirst?' \u2605 First visit':''}${r?' \u00b7 '+r:''}"></div>`;
+    }).join('');
+    const rc=c.rate>=75?'abs-low':c.rate>=30?'abs-med':'abs-high';
+    const gcCell=changed?`${gcBadge(m.gcOrig)}<span class="arrow">&rarr;</span>${gcBadge(m.gc,true)}`:gcBadge(m.gc);
+    const fs=firstSession[m.n]?`<span style="font-size:10px;background:#eeedfe;color:#3c3489;border-radius:4px;padding:1px 5px;white-space:nowrap">${getRecordedSessions().find(s=>s.key===firstSession[m.n])?.date.replace(' 2026','')||''}</span>`:'<span style="font-size:11px;color:#ccc">not set</span>';
+    const nameEsc=m.n.replace(/'/g,"\\'");
+    return`<tr><td style="font-weight:500;font-size:12px">${m.n}</td><td>${cityBadge(m.city)}</td><td style="white-space:nowrap">${gcCell}</td><td style="font-size:11px">${fs}</td><td><span class="${rc}">${c.present}/${c.possible}</span></td><td><span class="${rc}">${c.rate}%</span></td><td><div class="dot-wrap">${dots}</div></td><td><button onclick="openMemberModal('${nameEsc}')" title="Edit member" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px" aria-label="Edit ${m.n}">&#9998;</button></td></tr>`;
+  }).join('');
+}
+
+// ── RECORD ────────────────────────────────────────────────────────────────────
+function renderSessionList(){
+  const listEl=document.getElementById('sessionListArea');
+  if(!listEl)return;
+  const recs=getRecordedSessions();
+  if(!recs.length){
+    listEl.innerHTML='<div style="font-size:13px;color:#888;margin-bottom:1rem">No sessions recorded yet. Use the picker below to create one.</div>';
+    return;
+  }
+  const sorted=[...recs].reverse(); // most recent first
+  listEl.innerHTML=`
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden;margin-bottom:0">
+      <div style="padding:12px 14px;border-bottom:0.5px solid #e0e0d8;display:flex;align-items:center;justify-content:space-between">
+        <p class="sec-title" style="margin-bottom:0">Saved sessions (${recs.length})</p>
+      </div>
+      ${sorted.map(s=>{
+        let present=0,total=0;
+        MEMBERS.forEach(m=>{
+          if(firstSession[m.n]&&firstSession[m.n]>s.key)return;
+          total++;
+          if(attendance[s.key]&&attendance[s.key][m.n]==='present')present++;
+        });
+        const isLatest=s.key===sorted[0].key;
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:0.5px solid #e0e0d8;gap:10px;flex-wrap:wrap;background:${isLatest?'#f2fbf7':''}">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div>
+              <div style="font-size:13px;font-weight:500;color:#1a1a1a;display:flex;align-items:center;gap:6px">
+                ${s.date}
+                ${isLatest?'<span style="font-size:10px;background:#e1f5ee;color:#085041;border-radius:20px;padding:1px 7px;font-weight:500">Latest</span>':''}
+              </div>
+              <div style="font-size:12px;color:#888;margin-top:2px">
+                <span style="color:#1D9E75;font-weight:500">${present} present</span>
+                &middot; <span style="color:#E24B4A">${total-present} absent</span>
+                &middot; ${total} eligible
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button class="btn btn-primary btn-sm" onclick="openSessionByKey('${s.key}')">&#9998; Open &amp; edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSession('${s.key}','${s.date.replace(/'/g,"\\'")}')">&#128465; Delete</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function openSessionByKey(key){
+  document.getElementById('sessionDate').value=key;
+  loadRecordSession(key);
+  // Scroll to record area
+  document.getElementById('recordArea').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function deleteSession(key,label){
+  if(!confirm(`Delete session "${label}"? This will permanently remove all attendance data for this date.`))return;
+  // Remove attendance and absence reasons for this session
+  delete attendance[key];
+  delete absenceReasons[key];
+  // Remove from SESSIONS_DEF if it was a custom session (not in original schedule, or was added dynamically)
+  // We remove it from the recorded pool by simply not having attendance data — but also remove from SESSIONS_DEF if custom
+  const defIdx=SESSIONS_DEF.findIndex(s=>s.key===key);
+  if(defIdx>=0){
+    // Only remove from SESSIONS_DEF if it was a dynamically added session (not in the original 21)
+    const originalKeys=['2026-04-08','2026-04-15','2026-04-22','2026-04-29','2026-05-06','2026-05-13','2026-05-20','2026-05-27','2026-06-03','2026-06-10','2026-06-17','2026-09-09','2026-09-16','2026-09-23','2026-09-30','2026-10-07','2026-10-14','2026-10-28','2026-11-04','2026-11-11','2026-11-18'];
+    if(!originalKeys.includes(key))SESSIONS_DEF.splice(defIdx,1);
+  }
+  // Clear firstSession references pointing to this key
+  Object.keys(firstSession).forEach(name=>{if(firstSession[name]===key)delete firstSession[name];});
+  // Clear recordArea if it was showing this session
+  const area=document.getElementById('recordArea');
+  if(area.innerHTML.includes(key)||area.innerHTML.includes(label))area.innerHTML='';
+  showToast(`Session "${label}" deleted`);
+  recalcAll();saveAll();
+  renderSessionList();
+}
+
+function loadRecordSession(keyOverride){
+  const d=keyOverride||document.getElementById('sessionDate').value;
+  if(!d){alert('Please select a session date.');return;}
+  const ex=SESSIONS_DEF.find(s=>s.key===d);
+  const label=ex?ex.date:new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  if(!attendance[d])attendance[d]={};
+  document.getElementById('recordArea').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+      <div><div style="font-size:14px;font-weight:500">${label}</div><div style="font-size:12px;color:#888;margin-top:2px">Mark present/absent. Toggle "First visit" for anyone attending for the first time — absenteeism will be calculated from this session onward.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm" onclick="markAll('${d}','present')">Mark all present</button>
+        <button class="btn btn-sm" onclick="markAll('${d}','absent')">Clear all</button>
+        <button class="btn btn-success btn-sm" onclick="saveSession('${d}','${label}')">Save session</button>
+      </div>
+    </div>
+    <div style="font-size:11px;color:#888;margin-bottom:8px;display:flex;gap:16px">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#1D9E75;margin-right:4px;vertical-align:middle"></span>Present</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#E24B4A;margin-right:4px;vertical-align:middle"></span>Absent</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#7F77DD;margin-right:4px;vertical-align:middle"></span>First visit</span>
+    </div>
+    <div class="record-wrap">${[...MEMBERS].sort(bySurname).map((m,i)=>{
+      const cur=attendance[d][m.n]||'absent';
+      const r=absenceReasons[d]?absenceReasons[d][m.n]:'';
+      const isFV=firstSession[m.n]===d;
+      const hasFV=!!firstSession[m.n]&&firstSession[m.n]!==d;
+      const fvLabel=hasFV?`<span style="font-size:10px;color:#888">joined ${getRecordedSessions().find(s=>s.key===firstSession[m.n])?.date.replace(' 2026','')||''}</span>`:'';
+      return`<div class="member-row" id="mrow-${i}" style="${isFV?'background:#f5f3ff;border-left:3px solid #7F77DD;':'border-left:3px solid transparent;'}">
+        <div>
+          <div style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px">${m.n}${isFV?'<span style="font-size:10px;background:#eeedfe;color:#3c3489;border-radius:4px;padding:1px 6px">&#9733; First visit</span>':''}</div>
+          <div style="font-size:11px;color:#888;margin-top:1px">${m.gc} &middot; ${m.g} ${fvLabel}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+          ${!hasFV?`<button class="btn btn-sm" id="fvbtn-${i}" style="${isFV?'background:#eeedfe;color:#3c3489;border-color:#afa9ec;':''}" onclick="toggleFirstVisit('${d}',${i},'${m.n}')">${isFV?'&#9733; First visit':'Mark first visit'}</button>`:''}
+          <select class="reason-sel${cur==='absent'?' show':''}" id="rsn-${i}" onchange="setReason('${d}',${i},'${m.n}')"><option value="">Reason...</option>${REASONS.map(r2=>`<option value="${r2}"${r===r2?' selected':''}>${r2}</option>`).join('')}</select>
+          <button class="toggle-btn ${cur==='present'?'present':'absent'}" id="tbtn-${i}" onclick="toggleMember('${d}',${i},'${m.n}')">${cur==='present'?'Present':'Absent'}</button>
+        </div>
+      </div>`;
+    }).join('')}</div>
+    <div id="saveMsg" style="margin-top:12px;font-size:13px;color:#888"></div>`;
+}
+function toggleMember(sk,idx,name){
+  if(!attendance[sk])attendance[sk]={};const cur=attendance[sk][name]||'absent';const next=cur==='present'?'absent':'present';
+  attendance[sk][name]=next;const btn=document.getElementById('tbtn-'+idx);const rsn=document.getElementById('rsn-'+idx);
+  btn.className='toggle-btn '+(next==='present'?'present':'absent');btn.textContent=next==='present'?'Present':'Absent';
+  rsn.className='reason-sel'+(next==='absent'?' show':'');if(next==='present')rsn.value='';
+}
+function setReason(sk,idx,name){const val=document.getElementById('rsn-'+idx).value;if(!absenceReasons[sk])absenceReasons[sk]={};if(val)absenceReasons[sk][name]=val;else delete absenceReasons[sk][name];}
+function toggleFirstVisit(sk,idx,name){
+  if(firstSession[name]===sk){
+    // un-mark
+    delete firstSession[name];
+    const btn=document.getElementById('fvbtn-'+idx);
+    if(btn){btn.style.background='';btn.style.color='';btn.style.borderColor='';btn.innerHTML='Mark first visit';}
+    const row=document.getElementById('mrow-'+idx);
+    if(row){row.style.background='';row.style.borderLeft='3px solid transparent';}
+    const nameEl=row?row.querySelector('div>div:first-child'):null;
+    if(nameEl){const star=nameEl.querySelector('span[style*="eeedfe"]');if(star)star.remove();}
+  } else {
+    // mark as first visit — remove from any previous session
+    Object.keys(firstSession).forEach(n=>{if(firstSession[n]===sk&&n!==name){}});
+    firstSession[name]=sk;
+    const btn=document.getElementById('fvbtn-'+idx);
+    if(btn){btn.style.background='#eeedfe';btn.style.color='#3c3489';btn.style.borderColor='#afa9ec';btn.innerHTML='&#9733; First visit';}
+    const row=document.getElementById('mrow-'+idx);
+    if(row){row.style.background='#f5f3ff';row.style.borderLeft='3px solid #7F77DD';}
+  }
+}
+function markAll(sk,status){[...MEMBERS].sort(bySurname).forEach((m,i)=>{attendance[sk][m.n]=status;const btn=document.getElementById('tbtn-'+i);const rsn=document.getElementById('rsn-'+i);if(!btn)return;btn.className='toggle-btn '+(status==='present'?'present':'absent');btn.textContent=status==='present'?'Present':'Absent';rsn.className='reason-sel'+(status==='absent'?' show':'');});}
+function saveSession(sk,label){
+  MEMBERS.forEach(m=>{if(!attendance[sk][m.n])attendance[sk][m.n]='absent';});
+  document.getElementById('saveMsg').innerHTML='<span style="color:#085041">Session "'+label+'" saved. First-visit markers applied.</span>';
+  if(!SESSIONS_DEF.find(s=>s.key===sk)){SESSIONS_DEF.push({date:label,key:sk});SESSIONS_DEF.sort((a,b)=>a.key.localeCompare(b.key));}
+  recalcAll();saveAll();renderSessionList();
+}
+
+// ── ABSENTEEISM ───────────────────────────────────────────────────────────────
+function renderAbsenteeism(){
+  const sortBy=document.getElementById('absSortBy').value,filter=document.getElementById('absFilter').value;
+  // Always exclude guests from absenteeism calculations
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  let data=nonGuests.map(m=>({...m,...calcMember(m.n)}));
+  if(filter==='Core')data=data.filter(m=>m.gc==='Core');if(filter==='high')data=data.filter(m=>m.absRate>50);if(filter==='never')data=data.filter(m=>m.present===0);
+  data.sort((a,b)=>sortBy==='absRate'?b.absRate-a.absRate:sortBy==='streak'?b.curStreak-a.curStreak:bySurname(a,b));
+  const all=nonGuests.map(m=>calcMember(m.n));
+  const avgAbs=Math.round(all.reduce((a,b)=>a+b.absRate,0)/all.length);
+  document.getElementById('abs-metrics').innerHTML=`<div class="metric"><div class="metric-label">Avg absence</div><div class="metric-val">${avgAbs}%</div><div class="metric-sub">excl. guests</div></div><div class="metric"><div class="metric-label">&gt;70% absent</div><div class="metric-val">${all.filter(d=>d.absRate>70).length}</div></div><div class="metric"><div class="metric-label">Never attended</div><div class="metric-val">${all.filter(d=>d.present===0).length}</div></div><div class="metric"><div class="metric-label">Streak &ge;2</div><div class="metric-val">${all.filter(d=>d.curStreak>=2).length}</div><div class="metric-sub">consecutive absences</div></div>`;
+  dc('absGCChart');dc('reasonChart');
+  // GC groups: exclude Guest bucket from the avg absence chart
+  const gcGroups={Core:[],Frequent:[],Rare:[],Unresponsive:[]};
+  nonGuests.forEach(m=>{const c=calcMember(m.n);if(gcGroups[m.gc])gcGroups[m.gc].push(c.absRate);});
+  const gcLabels=Object.keys(gcGroups);
+  charts['absGCChart']=new Chart(document.getElementById('absGCChart'),{type:'bar',data:{labels:gcLabels,datasets:[{label:'Avg absence %',data:gcLabels.map(k=>gcGroups[k].length?Math.round(gcGroups[k].reduce((a,b)=>a+b,0)/gcGroups[k].length):0),backgroundColor:['#1D9E75','#378ADD','#EF9F27','#E24B4A'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'}}}}});
+  const totR={Travel:0,Sick:0,Exam:0,Work:0,Other:0};
+  // Only count absence reasons for non-guests
+  Object.keys(absenceReasons).forEach(sk=>{
+    nonGuests.forEach(m=>{const r=absenceReasons[sk]&&absenceReasons[sk][m.n];if(r&&totR[r]!==undefined)totR[r]++;});
+  });
+  charts['reasonChart']=new Chart(document.getElementById('reasonChart'),{type:'bar',data:{labels:Object.keys(totR),datasets:[{label:'Count',data:Object.values(totR),backgroundColor:Object.keys(totR).map(k=>REASON_COLORS[k]),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}});
+  document.getElementById('absList').innerHTML=data.map(m=>{
+    const rc=m.absRate>=70?'abs-high':m.absRate>=40?'abs-med':'abs-low';const flag=m.curStreak>=2?`<div style="font-size:11px;color:#a32d2d;margin-top:3px">&#9888; ${m.curStreak} consecutive absences</div>`:'';
+    const topR=Object.entries(m.reasons).sort((a,b)=>b[1]-a[1]).filter(e=>e[1]>0)[0];
+    return`<div class="abs-card"><div style="width:36px;height:36px;border-radius:50%;background:#f5f5f3;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:#888;flex-shrink:0">${ini(m.n)}</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">${m.n}</div><div style="font-size:11px;color:#888;margin-top:2px">${gcBadge(m.gc)} ${cityBadge(m.city)} &middot; ${m.g}${topR?' &middot; '+reasonBadge(topR[0]):''}</div>${flag}</div><div style="text-align:right;flex-shrink:0"><div class="${rc}" style="font-size:15px">${m.absRate}%</div><div style="font-size:11px;color:#888">absent</div><div class="pct-bar" style="width:70px"><div class="pct-fill pct-red" style="width:${m.absRate}%"></div></div></div></div>`;
+  }).join('');
+}
+
+// ── TRENDS ────────────────────────────────────────────────────────────────────
+function populateTrendSelect(){
+  const sel=document.getElementById('trendMember');const cur=sel.value;
+  sel.innerHTML='<option value="">Select member...</option>'+MEMBERS.filter(m=>m.gc!=='Guest').sort(bySurname).map(m=>`<option value="${m.n}"${m.n===cur?' selected':''}>${m.n}</option>`).join('');
+}
+function renderTrend(){
+  const name=document.getElementById('trendMember').value;const area=document.getElementById('trendArea');
+  if(!name){area.innerHTML='';return;}
+  const m=MEMBERS.find(x=>x.n===name);const c=calcMember(name);
+  const allRecs=getRecordedSessions();
+  const activeSessions=getActiveSessions(name);
+  const fsKey=firstSession[name];
+  const fsDate=fsKey?allRecs.find(s=>s.key===fsKey)?.date:'';
+  const flags=[];
+  if(fsDate)flags.push(`<span style="display:inline-flex;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;background:#eeedfe;color:#3c3489;margin-right:6px">&#9733; First visit: ${fsDate.replace(' 2026','')}</span>`);
+  if(c.present===0&&c.possible>0)flags.push('<span style="display:inline-flex;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;background:#fcebeb;color:#791f1f;margin-right:6px">Never attended</span>');
+  if(c.curStreak>=2)flags.push(`<span style="display:inline-flex;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;background:#fcebeb;color:#791f1f;margin-right:6px">${c.curStreak} consecutive absences</span>`);
+  const topR=Object.entries(c.reasons).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]);
+  if(topR.length&&topR[0][1]>=2)flags.push(`<span style="display:inline-flex;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;background:#faeeda;color:#633806;margin-right:6px">Repeated: ${topR[0][0]} (${topR[0][1]}&times;)</span>`);
+
+  // Build chips: grey out sessions before first visit
+  const chips=allRecs.map(s=>{
+    const beforeJoin=fsKey&&s.key<fsKey;
+    if(beforeJoin)return`<span class="session-chip" style="background:#f0efe8;color:#bbb;text-decoration:line-through" title="Before first visit">${s.date.replace(' 2026','')}</span>`;
+    const st=attendance[s.key]?attendance[s.key][name]:'unknown';
+    const r=absenceReasons[s.key]?absenceReasons[s.key][name]:'';
+    const isFirst=s.key===fsKey;
+    return`<span class="session-chip ${st==='present'?'chip-present':'chip-absent'}" style="${isFirst?'outline:2px solid #7F77DD;outline-offset:1px;':''}" title="${isFirst?'First visit \u2605 ':''}">${s.date.replace(' 2026','')}${isFirst?' &#9733;':''}${r?' &middot; '+r:''}</span>`;
+  }).join('');
+
+  area.innerHTML=`<div class="profile-card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
+      <div class="avatar">${ini(name)}</div>
+      <div>
+        <div style="font-size:15px;font-weight:500">${name}</div>
+        <div style="font-size:12px;color:#888;margin-top:2px">${gcBadge(m.gc)} ${cityBadge(m.city)} &middot; ${m.g}</div>
+        ${flags.length?`<div style="margin-top:6px">${flags.join('')}</div>`:''}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(85px,1fr));gap:8px;margin-bottom:1rem">
+      <div class="metric"><div class="metric-label">Attended</div><div class="metric-val">${c.present}/${c.possible}</div></div>
+      <div class="metric"><div class="metric-label">Rate</div><div class="metric-val">${c.rate}%</div></div>
+      <div class="metric"><div class="metric-label">Cur streak</div><div class="metric-val">${c.curStreak}</div><div class="metric-sub">absences</div></div>
+      ${fsKey?`<div class="metric"><div class="metric-label">Sessions tracked</div><div class="metric-val">${c.possible}</div><div class="metric-sub">from first visit</div></div>`:''}
+    </div>
+    <p class="sec-title">Session history${fsKey?` <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">&mdash; strikethrough = before first visit (excluded from rate)</span>`:''}  </p>
+    <div style="margin-bottom:1rem">${chips||'<span style="font-size:13px;color:#888">No sessions yet</span>'}</div>
+    ${topR.length?`<p class="sec-title">Absence reasons</p><div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:1rem">${topR.map(([r,cnt])=>`<div style="display:flex;align-items:center;gap:5px;font-size:13px"><span style="width:10px;height:10px;border-radius:2px;background:${REASON_COLORS[r]};display:inline-block"></span><span>${r}</span><span style="color:#888">${cnt}&times;</span></div>`).join('')}</div>`:''}
+    <div style="position:relative;width:100%;height:130px"><canvas id="trendChart" role="img" aria-label="Stepped line chart for ${name}">Attendance trend</canvas></div>
+  </div>`;
+  dc('trendChart');
+  if(activeSessions.length){
+    charts['trendChart']=new Chart(document.getElementById('trendChart'),{
+      type:'line',
+      data:{
+        labels:activeSessions.map(s=>s.date.replace(' 2026','')),
+        datasets:[{
+          label:'Attendance',
+          data:activeSessions.map(s=>(attendance[s.key]&&attendance[s.key][name]==='present')?1:0),
+          borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.08)',
+          pointBackgroundColor:activeSessions.map(s=>{
+            if(s.key===fsKey)return'#7F77DD';
+            return(attendance[s.key]&&attendance[s.key][name]==='present')?'#1D9E75':'#E24B4A';
+          }),
+          pointRadius:activeSessions.map(s=>s.key===fsKey?8:6),
+          tension:0,fill:true,stepped:true
+        }]
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:45,autoSkip:false}},y:{min:-0.1,max:1.1,ticks:{callback:v=>v===1?'Present':v===0?'Absent':'',stepSize:1},grid:{color:'rgba(0,0,0,0.06)'}}}}
+    });
+  }
+}
+
+// ── RECALCULATE ───────────────────────────────────────────────────────────────
+function previewRecalc(){
+  const thC=parseInt(document.getElementById('th-core').value)||75,thF=parseInt(document.getElementById('th-freq').value)||50,thR=parseInt(document.getElementById('th-rare').value)||30;
+  pendingChanges=[];const recs=getRecordedSessions();
+  const mRates=MEMBERS.map(m=>{const c=calcMember(m.n);const ns=recs.length>0?rateToStatus(c.rate,thC,thF,thR):m.gc;if(ns!==m.gc&&m.gc!=='Guest')pendingChanges.push({name:m.n,from:m.gc,to:ns,rate:c.rate});return{...m,rate:c.rate,newStatus:ns};}).sort((a,b)=>b.rate-a.rate);
+  const preview=document.getElementById('recalcPreview');
+  if(pendingChanges.length){
+    document.getElementById('applyBtn').style.display='inline-flex';document.getElementById('recalcBanner').className='recalc-banner show';
+    document.getElementById('bannerMsg').textContent=`${pendingChanges.length} status change${pendingChanges.length===1?'':'s'} detected \u2014 review below and click Apply to confirm.`;
+    preview.innerHTML=`<p class="sec-title">Status changes (${pendingChanges.length})</p><div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:0 14px;margin-bottom:1.5rem">${pendingChanges.map(ch=>`<div class="change-row"><div style="font-size:13px;font-weight:500;flex:1">${ch.name}</div><div style="font-size:12px;color:#888;margin-right:10px">${ch.rate}% attendance</div><div style="display:flex;align-items:center;gap:4px">${gcBadge(ch.from)}<span class="arrow">&rarr;</span>${gcBadge(ch.to)}</div></div>`).join('')}</div>`;
+  }else{document.getElementById('applyBtn').style.display='none';document.getElementById('recalcBanner').className='recalc-banner';preview.innerHTML='<div style="font-size:13px;color:#888;margin-bottom:1.5rem">No status changes needed.</div>';}
+  const wrap=document.getElementById('recalcChartWrap');const h=Math.max(240,mRates.length*22+90);
+  wrap.style.cssText=`height:${h}px;padding:1rem;border:0.5px solid #e0e0d8;border-radius:10px;background:#fff;margin-bottom:1.5rem`;
+  dc('recalcChart');
+  charts['recalcChart']=new Chart(document.getElementById('recalcChart'),{type:'bar',data:{labels:mRates.map(m=>m.n),datasets:[{label:'Attendance rate %',data:mRates.map(m=>m.rate),backgroundColor:mRates.map(m=>{const ns=m.newStatus;return ns==='Core'?'#1D9E75':ns==='Frequent'?'#378ADD':ns==='Rare'?'#EF9F27':'#E24B4A';}),borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:0,max:100,ticks:{callback:v=>v+'%',font:{size:10}}},y:{ticks:{font:{size:10}}}}}});
+}
+function applyRecalc(){
+  if(!pendingChanges.length)return;
+  pendingChanges.forEach(ch=>{const m=MEMBERS.find(x=>x.n===ch.name);if(m)m.gc=ch.to;});
+  pendingChanges=[];document.getElementById('applyBtn').style.display='none';document.getElementById('recalcBanner').className='recalc-banner';
+  document.getElementById('recalcPreview').innerHTML='<div style="font-size:13px;color:#085041;margin-bottom:1rem">Status changes applied successfully.</div>';
+  recalcAll();saveAll();previewRecalc();
+}
+
+// ── SUMMARY / PRINT ───────────────────────────────────────────────────────────
+function openSummary(){
+  const recs=getRecordedSessions();
+  const now=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const allCalc=nonGuests.map(m=>({...m,...calcMember(m.n)}));
+  const avg=recs.length?Math.round(recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
+  const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};MEMBERS.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
+  const sessTots=recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
+  const bdaySoon=MEMBERS.filter(m=>{const d=daysUntil(birthdays[m.n]);return d!==null&&d<=30;}).sort((a,b)=>daysUntil(birthdays[a.n])-daysUntil(birthdays[b.n]));
+
+  // ── Last session absences (excl. guests) ───────────────────────────────────
+  const lastSess=recs.length?recs[recs.length-1]:null;
+  const lastAbsent=lastSess?[...nonGuests].filter(m=>{
+    if(firstSession[m.n]&&firstSession[m.n]>lastSess.key)return false;
+    return attendance[lastSess.key]?attendance[lastSess.key][m.n]!=='present':true;
+  }).sort(byFirstName):[];
+  const lastPresent=lastSess?nonGuests.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length:0;
+
+  // ── Last-session absence reasons ──────────────────────────────────────────
+  const lastR={Travel:0,Sick:0,Exam:0,Work:0,Other:0};
+  if(lastSess&&absenceReasons[lastSess.key]){
+    Object.values(absenceReasons[lastSess.key]).forEach(r=>{if(r&&lastR[r]!==undefined)lastR[r]++;});
+  }
+  const lastReasonSummary=Object.entries(lastR).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]).map(([r,n])=>`${r}: ${n}`).join(' · ')||'None logged';
+
+  // ── Members needing follow-up: 2+ consecutive absences ────────────────────
+  const followUp=allCalc.filter(m=>m.curStreak>=2).sort((a,b)=>b.curStreak-a.curStreak||byFirstName(a,b));
+
+  // ── Streak breakdown table ─────────────────────────────────────────────────
+  const streakCounts={};
+  allCalc.forEach(m=>{
+    if(m.curStreak>=2){
+      streakCounts[m.curStreak]=(streakCounts[m.curStreak]||0)+1;
+    }
+  });
+  const streakRows=Object.entries(streakCounts).sort((a,b)=>Number(b[0])-Number(a[0]));
+
+  document.getElementById('summaryContent').innerHTML=`
+    <div style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);color:#fff;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px">
+      <div style="font-size:24px;margin-bottom:6px">&#128203;</div>
+      <div style="font-size:18px;font-weight:600">Gidi GC</div>
+      <div style="font-size:13px;opacity:.7;margin-top:2px">Attendance Summary &middot; ${now}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      ${[['All attendees',MEMBERS.length,'to date'],['Members &amp; attendees',nonGuests.length,'excl. guests'],['Sessions recorded',recs.length,'of '+SESSIONS_DEF.length+' planned'],['Avg attendance',avg,'per session (excl. guests)']].map(([l,v,s])=>`<div style="background:#f5f5f3;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:700;color:#1a1a1a">${v}</div><div style="font-size:10px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:4px">${l}</div>${s?`<div style="font-size:10px;color:#aaa;margin-top:2px">${s}</div>`:''}</div>`).join('')}
+    </div>
+
+    ${bdaySoon.length?`<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:600;color:#3c3489;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">&#127874; Birthdays — next 30 days</div>
+      ${bdaySoon.map(m=>{const d=daysUntil(birthdays[m.n]);const b=parseBday(birthdays[m.n]);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8"><span style="font-size:14px;font-weight:500">${m.n}</span><span style="font-size:12px;color:${d===0?'#085041':d<=7?'#633806':'#888'};font-weight:${d<=7?'600':'400'}">${d===0?'&#127874; Today':d<=7?'In '+d+' days':MONTHS[b.mo]+' '+b.d}</span></div>`;}).join('')}
+    </div>`:''}
+
+    <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">GC status breakdown</div>
+      ${Object.entries(gcC).map(([gc,n])=>{const bg={Core:'#e1f5ee',Frequent:'#e6f1fb',Rare:'#faeeda',Unresponsive:'#fcebeb',Guest:'#f1efe8'}[gc];const fg={Core:'#085041',Frequent:'#0c447c',Rare:'#633806',Unresponsive:'#791f1f',Guest:'#444441'}[gc];const pct=Math.round((n/MEMBERS.length)*100);return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;background:${bg};color:${fg};min-width:100px">${gc}</span><div style="flex:1;height:6px;background:#f0efe8;border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${fg};border-radius:3px"></div></div><span style="font-size:13px;font-weight:600;color:#1a1a1a;min-width:24px;text-align:right">${n}</span></div>`;}).join('')}
+    </div>
+
+    <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Session attendance (excl. guests)</div>
+      ${sessTots.map((s,i)=>{const isLast=i===sessTots.length-1;return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8;${isLast?'background:#f2fbf7;margin:0 -4px;padding:8px 4px;border-radius:6px;border-bottom:none':''}"><span style="font-size:${isLast?'14':'13'}px;font-weight:${isLast?'600':'400'};color:#1a1a1a">${s.date}${isLast?' <span style="font-size:10px;background:#e1f5ee;color:#085041;border-radius:20px;padding:1px 6px;margin-left:4px;font-weight:500">Latest</span>':''}</span><span style="font-size:${isLast?'18':'14'}px;font-weight:700;color:${isLast?'#1D9E75':'#1a1a1a'}">${s.total}</span></div>`;}).join('')}
+    </div>
+
+    ${lastSess?`<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Last session &mdash; ${lastSess.date}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div style="background:#f2fbf7;border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:#1D9E75">${lastPresent}</div><div style="font-size:11px;color:#085041;margin-top:2px;font-weight:600">PRESENT</div></div>
+        <div style="background:#fcebeb;border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:#a32d2d">${lastAbsent.length}</div><div style="font-size:11px;color:#791f1f;margin-top:2px;font-weight:600">ABSENT</div></div>
+      </div>
+      <div style="font-size:12px;color:#888;margin-bottom:10px">Absence reasons: ${lastReasonSummary}</div>
+      ${lastAbsent.length?`<div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Absent members</div>${lastAbsent.map(m=>{const streak=calcMember(m.n).curStreak;const sc=streak>=4?'#a32d2d':streak>=2?'#ba7517':'#aaa';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8"><div><div style="font-size:14px;font-weight:500">${m.n}</div><span style="font-size:11px;color:#888">${m.gc}</span></div><span style="font-size:12px;font-weight:600;color:${sc}">${streak} missed</span></div>`;}).join('')}`:'<div style="font-size:14px;color:#3b6d11;font-weight:500">Everyone attended! &#127881;</div>'}
+    </div>`:''}
+
+    ${followUp.length?`<div style="background:#faeeda;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #ef9f27">
+      <div style="font-size:11px;font-weight:600;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">&#9888; Members needing follow-up (2+ absences in a row)</div>
+      ${followUp.map(m=>{const sc=m.curStreak>=4?'#a32d2d':'#ba7517';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid rgba(0,0,0,0.07)"><div><div style="font-size:14px;font-weight:600;color:#1a1a1a">${m.n}</div><span style="font-size:11px;color:#888">${m.gc}</span></div><span style="font-size:13px;font-weight:700;color:${sc}">${m.curStreak} in a row</span></div>`;}).join('')}
+    </div>`:''}
+
+    ${streakRows.length?`<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Absence streak breakdown</div>
+      ${streakRows.map(([streak,count])=>{const sc=Number(streak)>=4?'#a32d2d':'#ba7517';return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8"><div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${sc};display:inline-block"></span><span style="font-size:14px;font-weight:500;color:#1a1a1a">${streak} in a row</span></div><span style="font-size:18px;font-weight:700;color:${sc}">${count}</span></div>`;}).join('')}
+    </div>`:''}
+
+    <div style="text-align:center;font-size:11px;color:#aaa;padding-top:8px">Gidi GC Attendance Tracking &middot; ${now}</div>
+  `;
+  document.getElementById('summaryModal').style.display='block';
+}
+function closeSummary(){document.getElementById('summaryModal').style.display='none';}
+function copySummaryText(){
+  navigator.clipboard.writeText(document.getElementById('summaryContent').innerText)
+    .then(()=>showToast('Copied to clipboard'))
+    .catch(()=>showToast('Copy failed \u2014 try selecting manually',3000));
+}
+
+function openWebSummary(){
+  const recs=getRecordedSessions();
+  const now=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  const allCalc=MEMBERS.filter(m=>m.gc!=='Guest').map(m=>({...m,...calcMember(m.n)}));
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const avg=recs.length?Math.round(recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
+  const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};MEMBERS.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
+  const sessTots=recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
+
+  // Birthdays
+  const bdaySoon=MEMBERS.filter(m=>{const d=daysUntil(birthdays[m.n]);return d!==null&&d<=30;}).sort((a,b)=>daysUntil(birthdays[a.n])-daysUntil(birthdays[b.n]));
+
+  // Last session
+  const lastSess=recs.length?recs[recs.length-1]:null;
+  const lastAbsent=lastSess?[...nonGuests].filter(m=>{
+    if(firstSession[m.n]&&firstSession[m.n]>lastSess.key)return false;
+    return attendance[lastSess.key]?attendance[lastSess.key][m.n]!=='present':true;
+  }).sort(byFirstName):[];
+  const lastPresent=lastSess?nonGuests.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length:0;
+  const lastR={Travel:0,Sick:0,Exam:0,Work:0,Other:0};
+  if(lastSess&&absenceReasons[lastSess.key]){nonGuests.forEach(m=>{const r=absenceReasons[lastSess.key][m.n];if(r&&lastR[r]!==undefined)lastR[r]++;});}
+  const lastReasonSummary=Object.entries(lastR).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]).map(([r,n])=>`${r} (${n})`).join(', ')||'None logged';
+
+  // Follow-up
+  const followUp=allCalc.filter(m=>m.curStreak>=2).sort((a,b)=>b.curStreak-a.curStreak||byFirstName(a,b));
+  const streakCounts={};allCalc.forEach(m=>{if(m.curStreak>=2)streakCounts[m.curStreak]=(streakCounts[m.curStreak]||0)+1;});
+  const streakRows=Object.entries(streakCounts).sort((a,b)=>Number(b[0])-Number(a[0]));
+
+  const gcColors={Core:['#e1f5ee','#085041'],Frequent:['#e6f1fb','#0c447c'],Rare:['#faeeda','#633806'],Unresponsive:['#fcebeb','#791f1f'],Guest:['#f1efe8','#444441']};
+
+  const section=(title,body)=>`
+    <div style="background:#fff;border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,0.07)">
+      <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">${title}</div>
+      ${body}
+    </div>`;
+
+  const nameRow=(name,gc,right,rightColor)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid #f0efe8;gap:8px">
+      <div>
+        <div style="font-size:15px;font-weight:500;color:#1a1a1a">${name}</div>
+        <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;background:${gcColors[gc]?.[0]||'#f1efe8'};color:${gcColors[gc]?.[1]||'#444'};margin-top:3px">${gc}</span>
+      </div>
+      <div style="font-size:13px;font-weight:500;color:${rightColor||'#888'};flex-shrink:0;text-align:right">${right}</div>
+    </div>`;
+
+  const html=`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Gidi GC \u2014 Summary ${now}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0efe8;color:#1a1a1a;font-size:15px;line-height:1.5;min-height:100vh}
+.hero{background:linear-gradient(135deg,#1a1a1a 0%,#2d2d2d 100%);color:#fff;padding:28px 20px 24px;text-align:center}
+.hero-emoji{font-size:36px;margin-bottom:8px}
+.hero h1{font-size:22px;font-weight:600;letter-spacing:.01em}
+.hero p{font-size:13px;opacity:.55;margin-top:6px}
+.body{padding:16px 14px 40px;max-width:480px;margin:0 auto}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.stat{background:#fff;border-radius:12px;padding:14px 10px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
+.stat-val{font-size:26px;font-weight:600;color:#1a1a1a;line-height:1}
+.stat-label{font-size:11px;color:#888;margin-top:5px;line-height:1.3}
+.card{background:#fff;border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
+.card-title{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
+.row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:0.5px solid #f0efe8;gap:8px}
+.row:last-child{border-bottom:none;padding-bottom:0}
+.row-name{font-size:15px;font-weight:500;color:#1a1a1a}
+.row-sub{font-size:12px;color:#888;margin-top:2px}
+.row-right{font-size:13px;font-weight:500;flex-shrink:0;text-align:right}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500;margin:2px}
+.gc-bar{height:8px;border-radius:4px;margin-bottom:6px}
+.warn-box{background:#faeeda;border-radius:12px;padding:14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px}
+.warn-icon{font-size:20px;flex-shrink:0;margin-top:1px}
+.warn-body{font-size:14px;color:#633806;font-weight:500}
+.warn-sub{font-size:12px;color:#8a5010;margin-top:3px}
+.sess-chip{display:inline-flex;align-items:center;justify-content:space-between;background:#f5f5f3;border-radius:10px;padding:10px 14px;margin-bottom:8px;width:100%}
+.sess-date{font-size:13px;font-weight:500;color:#1a1a1a}
+.sess-count{font-size:13px;color:#1D9E75;font-weight:600}
+.streak-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;flex-shrink:0}
+footer{text-align:center;font-size:11px;color:#aaa;margin-top:8px;padding-bottom:20px}
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="hero-emoji">&#128203;</div>
+  <h1>Gidi GC &mdash; Attendance</h1>
+  <p>${now}</p>
+</div>
+<div class="body">
+
+  <!-- KEY NUMBERS -->
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-val">${MEMBERS.length}</div><div class="stat-label">All attendees to date</div></div>
+    <div class="stat"><div class="stat-val">${nonGuests.length}</div><div class="stat-label">Members &amp; attendees</div></div>
+    <div class="stat"><div class="stat-val">${recs.length}</div><div class="stat-label">Sessions recorded</div></div>
+    <div class="stat"><div class="stat-val">${avg}</div><div class="stat-label">Avg attendance (excl. guests)</div></div>
+    <div class="stat"><div class="stat-val">${Math.round(allCalc.reduce((a,b)=>a+b.rate,0)/Math.max(allCalc.length,1))}%</div><div class="stat-label">Avg attendance rate</div></div>
+    <div class="stat"><div class="stat-val">${followUp.length}</div><div class="stat-label">Need follow-up</div></div>
+  </div>
+
+  ${bdaySoon.length?`
+  <!-- BIRTHDAYS -->
+  <div class="card">
+    <div class="card-title">&#127874; Birthdays in the next 30 days</div>
+    ${bdaySoon.map(m=>{
+      const d=daysUntil(birthdays[m.n]);const b=parseBday(birthdays[m.n]);
+      const badge=d===0?'&#127874; Today!':d<=7?`In ${d} day${d===1?'':'s'}`:`${MONTHS[b.mo]} ${b.d} &middot; ${d}d`;
+      const badgeColor=d===0?'#085041':d<=7?'#633806':'#888';
+      const badgeBg=d===0?'#e1f5ee':d<=7?'#faeeda':'#f5f5f3';
+      return`<div class="row"><div><div class="row-name">${m.n}</div><span class="badge" style="background:${gcColors[m.gc]?.[0]||'#f1efe8'};color:${gcColors[m.gc]?.[1]||'#444'};margin-top:4px">${m.gc}</span></div><span class="badge" style="background:${badgeBg};color:${badgeColor};font-size:12px">${badge}</span></div>`;
+    }).join('')}
+  </div>`:''}
+
+  <!-- GC STATUS -->
+  <div class="card">
+    <div class="card-title">GC status breakdown</div>
+    ${Object.entries(gcC).map(([gc,n])=>{
+      const pct=Math.round((n/MEMBERS.length)*100);
+      return`<div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span class="badge" style="background:${gcColors[gc]?.[0]||'#f1efe8'};color:${gcColors[gc]?.[1]||'#444'}">${gc}</span>
+          <span style="font-size:14px;font-weight:600;color:#1a1a1a">${n}</span>
+        </div>
+        <div style="height:6px;background:#f0efe8;border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${gcColors[gc]?.[1]||'#888'};border-radius:3px"></div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+
+  <!-- SESSION ATTENDANCE -->
+  <div class="card">
+    <div class="card-title">Session attendance (excl. guests)</div>
+    ${sessTots.map((s,i)=>i===sessTots.length-1?
+      `<div style="background:#f2fbf7;border-radius:10px;padding:12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+        <div><div class="sess-date">${s.date}</div><div style="font-size:11px;color:#085041;margin-top:2px;font-weight:500">Latest</div></div>
+        <div style="font-size:22px;font-weight:700;color:#1D9E75">${s.total}</div>
+      </div>`:
+      `<div class="sess-chip"><span class="sess-date">${s.date}</span><span class="sess-count">${s.total}</span></div>`
+    ).join('')}
+  </div>
+
+  ${lastSess?`
+  <!-- LAST SESSION DETAIL -->
+  <div class="card">
+    <div class="card-title">Last session &mdash; ${lastSess.date}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div class="stat" style="box-shadow:none;background:#f2fbf7"><div class="stat-val" style="color:#1D9E75">${lastPresent}</div><div class="stat-label">Present</div></div>
+      <div class="stat" style="box-shadow:none;background:#fcebeb"><div class="stat-val" style="color:#a32d2d">${lastAbsent.length}</div><div class="stat-label">Absent</div></div>
+    </div>
+    <div style="font-size:12px;color:#888;margin-bottom:12px">Absence reasons: ${lastReasonSummary}</div>
+    ${lastAbsent.length?`<div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Who was absent</div>${lastAbsent.map(m=>{
+      const streak=calcMember(m.n).curStreak;
+      const sc=streak>=4?'#a32d2d':streak>=2?'#ba7517':'#aaa';
+      return`<div class="row"><div><div class="row-name">${m.n}</div><span class="badge" style="background:${gcColors[m.gc]?.[0]||'#f1efe8'};color:${gcColors[m.gc]?.[1]||'#444'};margin-top:3px">${m.gc}</span></div><div class="row-right" style="color:${sc}">${streak} missed</div></div>`;
+    }).join('')}`:'<div style="font-size:14px;color:#3b6d11">Everyone attended! &#127881;</div>'}
+  </div>`:''}
+
+  ${followUp.length?`
+  <!-- FOLLOW UP -->
+  <div class="warn-box">
+    <div class="warn-icon">&#9888;</div>
+    <div><div class="warn-body">${followUp.length} member${followUp.length===1?'':'s'} need${followUp.length===1?'s':''} follow-up</div><div class="warn-sub">Missed 2 or more sessions in a row</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Members needing follow-up</div>
+    ${followUp.map(m=>{
+      const sc=m.curStreak>=4?'#a32d2d':'#ba7517';
+      return`<div class="row"><div><div class="row-name">${m.n}</div><span class="badge" style="background:${gcColors[m.gc]?.[0]||'#f1efe8'};color:${gcColors[m.gc]?.[1]||'#444'};margin-top:3px">${m.gc}</span></div><div class="row-right" style="color:${sc};font-size:14px">${m.curStreak} in a row</div></div>`;
+    }).join('')}
+  </div>`:''}
+
+  ${streakRows.length?`
+  <!-- STREAK BREAKDOWN -->
+  <div class="card">
+    <div class="card-title">Absence streak breakdown</div>
+    ${streakRows.map(([streak,count])=>{
+      const sc=Number(streak)>=4?'#a32d2d':'#ba7517';
+      return`<div class="row"><div style="display:flex;align-items:center;gap:8px"><span style="background:${sc};width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0"></span><span style="font-size:15px;font-weight:500;color:#1a1a1a">${streak} in a row</span></div><span style="font-size:18px;font-weight:700;color:${sc}">${count}</span></div>`;
+    }).join('')}
+  </div>`:''}
+
+</div>
+<footer>Gidi GC Attendance Tracking &middot; ${now}</footer>
+</body>
+</html>`;
+
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const win=window.open(url,'_blank');
+  if(!win){
+    const a=document.createElement('a');
+    a.href=url;
+    a.download='gidi-gc-summary-'+new Date().toISOString().split('T')[0]+'.html';
+    a.click();
+    showToast('Saved — open the file in your browser to view & share',3500);
+  } else {
+    showToast('Opened in new tab. Screenshot or download to share.',3000);
+  }
+  setTimeout(()=>URL.revokeObjectURL(url),90000);
+}
+
+// ── MASTER ────────────────────────────────────────────────────────────────────
+function recalcAll(){
+  renderOverview();renderMembers();renderGuests();renderAbsenteeism();populateTrendSelect();renderOverviewBirthdays();renderOverviewAbsent();renderLast3Sessions();
+  const recs=getRecordedSessions();
+  document.getElementById('mainNotice').textContent=`${recs.length} session${recs.length===1?'':'s'} recorded of ${SESSIONS_DEF.length} planned. Data saves automatically to this browser. Members marked \u2746 have updated statuses.`;
+}
+
+// ── MOBILE NAV ────────────────────────────────────────────────────────────────
+function setMobNav(el){
+  document.querySelectorAll('.mob-nav-btn').forEach(b=>b.classList.remove('active'));
+  if(el)el.classList.add('active');
+  closeMobMore();
+}
+function toggleMobMore(){
+  const m=document.getElementById('mobMore');
+  m.style.display=m.style.display==='none'?'block':'none';
+}
+function closeMobMore(){document.getElementById('mobMore').style.display='none';}
+
+function switchTab(id,el){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  if(el)el.classList.add('active');
+  // Sync mobile bottom nav
+  const mainTabs=['overview','members','record','absenteeism'];
+  document.querySelectorAll('.mob-nav-btn').forEach(b=>{
+    b.classList.remove('active');
+    if(b.dataset.tab===id)b.classList.add('active');
+  });
+  if(id==='trends')populateTrendSelect();
+  if(id==='recalc')previewRecalc();
+  if(id==='birthdays')renderBirthdays();
+  if(id==='guests')renderGuests();
+  if(id==='record')renderSessionList();
+  window.scrollTo(0,0);
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+initSeedData();
+const restored=loadSaved();
+recalcAll();
+if(restored)showToast('Restored from last session',2500);
+</script>
+</body>
+</html>
