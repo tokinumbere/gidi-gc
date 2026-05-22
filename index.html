@@ -190,40 +190,27 @@ tr:hover td{background:#fafaf8}
   .app{padding-bottom:74px}
 }
 @media print{
-  /* Hide everything except the summary modal content */
+  /* When printing, only show the #printArea div */
   body>*{display:none!important}
-  .modal-overlay{display:block!important;position:static!important;background:none!important;overflow:visible!important}
-  .modal-box{box-shadow:none!important;border-radius:0!important;max-width:100%!important;margin:0!important}
-  .modal-header{display:none!important}
-  #summaryContent{max-height:none!important;overflow:visible!important;padding:0!important}
-  /* Mobile/phone page size */
+  #printArea{display:block!important;position:static!important;background:#fff!important}
   @page{size:400px auto;margin:10mm 6mm}
   body{background:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  /* Card styling for print */
-  #summaryContent>div{
-    background:#fff!important;
-    border:1px solid #e0e0d8!important;
-    border-radius:10px!important;
-    padding:14px!important;
-    margin-bottom:12px!important;
-    page-break-inside:avoid!important;
+  #printArea>div{
+    background:#fff!important;border:1px solid #e0e0d8!important;border-radius:10px!important;
+    padding:14px!important;margin-bottom:12px!important;page-break-inside:avoid!important;
   }
-  /* Prevent table rows from splitting */
   tr{page-break-inside:avoid}
-  /* Shrink tables for narrow width */
   table{font-size:12px!important}
   th,td{padding:6px 8px!important}
-  /* Larger section headings */
   [style*="text-transform:uppercase"]{font-size:10px!important}
-  /* Keep colours */
   span[style*="background"]{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  /* Title block */
-  #summaryContent>div:first-child{border:none!important;background:linear-gradient(135deg,#1a1a1a,#2d2d2d)!important;color:#fff!important;text-align:center!important;border-radius:12px!important}
+  #printArea>div:first-child{border:none!important;background:linear-gradient(135deg,#1a1a1a,#2d2d2d)!important;color:#fff!important;text-align:center!important;border-radius:12px!important}
 }
 </style>
 </head>
 <body>
 <div class="save-toast" id="saveToast"></div>
+<div id="printArea" style="display:none;padding:14px"></div>
 
 <div class="app">
 <div class="top-bar">
@@ -364,7 +351,36 @@ tr:hover td{background:#fafaf8}
 <!-- ABSENTEEISM -->
 <div id="tab-absenteeism" class="panel">
   <div class="metrics" id="abs-metrics"></div>
-  <div class="filters" style="margin-top:1rem">
+
+  <!-- Session picker -->
+  <div style="background:#fff;border-radius:10px;padding:1rem;border:0.5px solid #e0e0d8;margin-bottom:1rem">
+    <p class="sec-title" style="margin-bottom:10px">Absences by session</p>
+    <div class="filters" style="margin-bottom:0;flex-wrap:wrap;align-items:center">
+      <label style="font-size:13px;color:#888">Session:</label>
+      <select id="absSessionPicker" onchange="renderSessionAbsences()" style="flex:1;min-width:140px">
+        <option value="">Select session...</option>
+      </select>
+      <button class="btn btn-sm" onclick="addReasonCategory()">+ Add reason category</button>
+    </div>
+    <div id="sessionAbsenceArea" style="margin-top:1rem"></div>
+  </div>
+
+  <!-- Reason groups view -->
+  <div id="reasonGroupsArea" style="margin-bottom:1rem"></div>
+
+  <!-- Per-session reason chart -->
+  <div class="chart-wrap" style="height:185px">
+    <p class="sec-title">Absence reasons — <span id="reasonChartLabel">all sessions</span></p>
+    <canvas id="reasonChart" role="img" aria-label="Bar chart of absence reasons for selected session" style="max-height:140px">Absence reasons</canvas>
+  </div>
+
+  <!-- Overall avg absence by GC status -->
+  <div class="chart-wrap" style="height:185px">
+    <p class="sec-title">Avg absence rate by GC status</p>
+    <canvas id="absGCChart" role="img" aria-label="Bar chart of average absence rate by GC status" style="max-height:140px">Absence by GC</canvas>
+  </div>
+
+  <div class="filters" style="margin-bottom:0.5rem">
     <select id="absSortBy" onchange="renderAbsenteeism()">
       <option value="absRate">Sort by absence rate</option>
       <option value="streak">Sort by consecutive absences</option>
@@ -377,15 +393,7 @@ tr:hover td{background:#fafaf8}
     </select>
     <select id="absFilter" onchange="renderAbsenteeism()"><option value="">All members</option><option value="Core">Core only</option><option value="high">High absentees (&gt;50%)</option><option value="never">Never attended</option></select>
   </div>
-  <div class="chart-wrap" style="height:185px">
-    <p class="sec-title">Avg absence rate by GC status</p>
-    <canvas id="absGCChart" role="img" aria-label="Bar chart of average absence rate by GC status" style="max-height:140px">Absence by GC</canvas>
-  </div>
-  <div class="chart-wrap" style="height:175px">
-    <p class="sec-title">Top absence reasons</p>
-    <canvas id="reasonChart" role="img" aria-label="Bar chart of total absence reasons" style="max-height:130px">Absence reasons</canvas>
-  </div>
-  <p class="sec-title">Individual absenteeism</p>
+  <p class="sec-title">Individual absenteeism (all sessions)</p>
   <div id="absList"></div>
 </div>
 
@@ -404,9 +412,60 @@ tr:hover td{background:#fafaf8}
     <div style="font-size:13px;color:#888">Enter birthdays as DD/MM. Reminders appear automatically when a birthday is within 7 days.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary btn-sm" onclick="openBdayImport()">&#8659; Import birthdays</button>
+      <button class="btn btn-success btn-sm" onclick="toggleGCalSetup()">&#128197; Sync to Google Calendar</button>
       <button class="btn btn-danger btn-sm" onclick="clearAllBirthdays()">Clear all</button>
     </div>
   </div>
+
+  <!-- Google Calendar Setup Panel -->
+  <div id="gcalSetupArea" style="display:none;background:#f0f6ff;border:0.5px solid #b3cfee;border-radius:10px;padding:1rem;margin-bottom:1rem">
+    <p class="sec-title" style="margin-bottom:4px;color:#0c447c">&#128197; Sync birthdays to Google Calendar</p>
+    <div style="font-size:12px;color:#555;margin-bottom:14px;line-height:1.6">
+      Creates recurring yearly birthday events on a shared <strong>"Gidi GC Birthdays"</strong> calendar. Members subscribe once and see all birthdays. Re-syncing overwrites existing events.<br>
+      <strong>Setup (one-time):</strong> <a href="https://console.cloud.google.com/" target="_blank" style="color:#0c447c">Google Cloud Console</a> → Enable Calendar API → Create OAuth 2.0 Client ID (Web app) → Add your GitHub Pages URL as Authorised redirect URI.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">OAuth 2.0 Client ID</label>
+        <input class="form-input" id="gcal-client-id" type="text" placeholder="xxxxxxxxx.apps.googleusercontent.com" oninput="saveGCalSettings()">
+        <div style="font-size:11px;color:#888;margin-top:3px">Saved in your browser only.</div>
+      </div>
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">Timezone</label>
+        <select class="form-input" id="gcal-timezone" onchange="saveGCalSettings()">
+          <option value="Europe/London">London (GMT/BST)</option>
+          <option value="Africa/Lagos">Lagos (WAT)</option>
+          <option value="America/New_York">New York (ET)</option>
+          <option value="America/Chicago">Chicago (CT)</option>
+          <option value="America/Los_Angeles">Los Angeles (PT)</option>
+          <option value="Europe/Berlin">Berlin (CET)</option>
+          <option value="Asia/Dubai">Dubai (GST)</option>
+        </select>
+        <div style="font-size:11px;color:#888;margin-top:3px">Birthday events fire at 9:00am in this timezone.</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:12px">
+      <div class="form-row" style="margin-bottom:0">
+        <label class="form-label">Shared Calendar ID</label>
+        <input class="form-input" id="gcal-cal-id" type="text" placeholder="xxxxxxxxx@group.calendar.google.com" oninput="saveGCalSettings()">
+        <div style="font-size:11px;color:#888;margin-top:3px">From Google Calendar → Settings → Calendar ID.</div>
+      </div>
+    </div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:10px 12px;font-size:12px;color:#444;margin-bottom:12px;line-height:1.7;border:0.5px solid #d0dff0">
+      <strong>How members subscribe (one-time):</strong><br>
+      1. You share the calendar's public link (Google Calendar → Settings → "Get shareable link")<br>
+      2. Members open the link → tap <em>"Add to Google Calendar"</em><br>
+      3. All 46 birthdays appear in their calendar. Future syncs update automatically.
+    </div>
+    <div id="gcalStatus" style="font-size:13px;color:#888;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="toggleGCalSetup()">Close</button>
+      <button class="btn btn-primary btn-sm" onclick="gcalSignIn()">&#128275; Connect Google Account</button>
+      <button class="btn btn-success btn-sm" id="gcalSyncBtn" onclick="gcalSyncBirthdays()" style="display:none">&#128197; Sync all birthdays now</button>
+    </div>
+  </div>
+
   <!-- Birthday import area -->
   <div id="bdayImportArea" style="display:none;background:#f5f5f3;border-radius:10px;padding:1rem;margin-bottom:1rem;border:0.5px solid #e0e0d8">
     <p class="sec-title" style="margin-bottom:8px">Import birthdays</p>
@@ -469,7 +528,7 @@ tr:hover td{background:#fafaf8}
     <div class="modal-header">
       <div style="font-size:15px;font-weight:500">Summary sheet</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-success btn-sm" onclick="window.print()">Print / Save PDF</button>
+        <button class="btn btn-success btn-sm" onclick="doPrint()">Print / Save PDF</button>
         <button class="btn btn-purple btn-sm" onclick="openWebSummary()">&#127760; Open as web page</button>
         <button class="btn btn-primary btn-sm" onclick="copySummaryText()">Copy as text</button>
         <button class="btn btn-sm" onclick="closeSummary()">Close</button>
@@ -690,72 +749,28 @@ const SESSIONS_DEF=[
 ];
 const REASONS=['Travel','Sick','Exam','Work','Other'];
 const REASON_COLORS={Travel:'#378ADD',Sick:'#E24B4A',Exam:'#EF9F27',Work:'#7F77DD',Other:'#888780'};
+const COLOR_PALETTE=['#1D9E75','#D4537E','#FF8C42','#6B4FBB','#2196A6','#C62828','#558B2F','#AD1457','#00695C','#4527A0'];
+function getReasonColor(r){return REASON_COLORS[r]||(COLOR_PALETTE[REASONS.indexOf(r)%COLOR_PALETTE.length]);}
+function addReasonCategory(){
+  const name=prompt('Enter new absence reason category name:');
+  if(!name||!name.trim())return;
+  const trimmed=name.trim();
+  if(REASONS.includes(trimmed)){showToast('Category already exists',2500);return;}
+  REASONS.push(trimmed);
+  // Update sort dropdown
+  const sel=document.getElementById('absSortBy');
+  const opt=document.createElement('option');
+  opt.value='reason-'+trimmed;opt.textContent='By reason: '+trimmed;
+  sel.appendChild(opt);
+  saveAll();showToast('Category "'+trimmed+'" added',2500);
+  renderAbsenteeism();renderSessionAbsences();
+}
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const LS_KEY='att_dash_2026_v1';
 
-const MEMBERS_SEED=[
-  {n:'Anita Obidiegwu',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Chinedu Awa',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Chinedu Obidiegwu',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Male'},
-  {n:'Ifeoma Igbokidi',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Ksusha Anom',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Mary Captain',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Nelson Allison',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Male'},
-  {n:'Wunmi Durosinmi-Etti',city:'Attendee',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Damilola Macaulay',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Daniel Asuquo',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
-  {n:'David Idoko',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
-  {n:'Demex Achinga',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
-  {n:'Nengi Goodman',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Nnenna Idoko',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Omodara Olanrewaju',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Precious Erhabor',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Samuel Sagbele',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
-  {n:'Temitope Erhabor',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
-  {n:'Terdoo Anom',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
-  {n:'Terver Akindigh',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
-  {n:'Toki Numbere',city:'Member',gc:'Core',gcOrig:'Core',g:'Male'},
-  {n:'Tomisin Numbere',city:'Member',gc:'Core',gcOrig:'Core',g:'Female'},
-  {n:'Akpor Hari Agboro',city:'Attendee',gc:'Frequent',gcOrig:'Frequent',g:'Male'},
-  {n:'Amanda Zara Nwankwo',city:'Attendee',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
-  {n:'Niyi Joseph',city:'Attendee',gc:'Frequent',gcOrig:'Frequent',g:'Male'},
-  {n:'Vanessa Ebitu',city:'Attendee',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
-  {n:'Asta Akindigh',city:'Member',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
-  {n:'Christiana Omelazu',city:'Member',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
-  {n:'Evi Idoghor',city:'Member',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
-  {n:'Udoo Achinga',city:'Member',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
-  {n:'Blessed Mademeidon',city:'Attendee',gc:'Frequent',gcOrig:'Frequent',g:'Female'},
-  {n:'Chinyere Izu-Ohajinwa',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
-  {n:'Confidence Blankson',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
-  {n:'Esther Ende',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
-  {n:'Georgina Gabriel',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
-  {n:'Happiness Asuquo',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
-  {n:'Izu Ohajinwa',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Male'},
-  {n:'Ololade Soyebi',city:'Attendee',gc:'Rare',gcOrig:'Rare',g:'Female'},
-  {n:'Gloria Garba',city:'Member',gc:'Rare',gcOrig:'Rare',g:'Female'},
-  {n:'Ifeoluwa Williams',city:'Member',gc:'Rare',gcOrig:'Rare',g:'Female'},
-  {n:'Labake Laniyan',city:'Member',gc:'Rare',gcOrig:'Rare',g:'Female'},
-  {n:'Laolu Macaulay',city:'Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Male'},
-  {n:'Emmanuel Williams',city:'Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Male'},
-  {n:'Fisayo A.',city:'Non-Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Female'},
-  {n:'Millicent Rogers',city:'Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Female'},
-  {n:'Emmanuel Adeyemo',city:'Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Female'},
-  {n:'Elizabeth Adeyemo',city:'Attendee',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Female'},
-  {n:'Owoade Yussuff',city:'Member',gc:'Unresponsive',gcOrig:'Unresponsive',g:'Female'},
-  {n:'Phoebe Mademeidon',city:'Member',gc:'Guest',gcOrig:'Guest',g:'Female'},
-  {n:'Shammah Obereika',city:'Member',gc:'Guest',gcOrig:'Guest',g:'Male'},
-  {n:'Ebube Agu',city:'Member',gc:'Guest',gcOrig:'Guest',g:'Male'},
-  {n:'Ibukun Agu',city:'Member',gc:'Guest',gcOrig:'Guest',g:'Female'},
-  {n:'Nnoma Awa',city:'Non-Attendee',gc:'Guest',gcOrig:'Guest',g:'Female'},
-  {n:'Olaitan Akintunde',city:'Member',gc:'Guest',gcOrig:'Guest',g:'Male'}
-];
+const MEMBERS_SEED=[{"n": "Anita Obidiegwu", "gc": "Unresponsive", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Chinedu Awa", "gc": "Core", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Chinedu Obidiegwu", "gc": "Unresponsive", "gcOrig": "Core", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Ifeoma Igbokidi", "gc": "Unresponsive", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Ksusha Anom", "gc": "Unresponsive", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Mary Captain", "gc": "Frequent", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Nelson Allison", "gc": "Frequent", "gcOrig": "Core", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Wunmi Durosinmi-Etti", "gc": "Core", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Damilola Macaulay", "gc": "Rare", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Daniel Asuquo", "gc": "Unresponsive", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "David Idoko", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Demex Achinga", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Nengi Goodman", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Nnenna Idoko", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Omodara Olanrewaju", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Precious Erhabor", "gc": "Rare", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Samuel Sagbele", "gc": "Rare", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Temitope Erhabor", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Terdoo Anom", "gc": "Rare", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Terver Akindigh", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Toki Numbere", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Tomisin Numbere", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Akpor Hari Agboro", "gc": "Unresponsive", "gcOrig": "Frequent", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Amanda Zara Nwankwo", "gc": "Unresponsive", "gcOrig": "Frequent", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Niyi Joseph", "gc": "Core", "gcOrig": "Frequent", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Vanessa Ebitu", "gc": "Rare", "gcOrig": "Frequent", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Asta Akindigh", "gc": "Core", "gcOrig": "Frequent", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Christiana Omelazu", "gc": "Core", "gcOrig": "Frequent", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Evi Idoghor", "gc": "Core", "gcOrig": "Frequent", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Udoo Achinga", "gc": "Guest", "gcOrig": "Frequent", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Blessed Mademeidon", "gc": "Frequent", "gcOrig": "Frequent", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Chinyere Izu-Ohajinwa", "gc": "Frequent", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Confidence Blankson", "gc": "Rare", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Esther Ende", "gc": "Frequent", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Georgina Gabriel", "gc": "Unresponsive", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Happiness Asuquo", "gc": "Rare", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Izu Ohajinwa", "gc": "Frequent", "gcOrig": "Rare", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Ololade Soyebi", "gc": "Frequent", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Gloria Garba", "gc": "Frequent", "gcOrig": "Rare", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Ifeoluwa Williams", "gc": "Rare", "gcOrig": "Rare", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Labake Laniyan", "gc": "Frequent", "gcOrig": "Rare", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Laolu Macaulay", "gc": "Unresponsive", "gcOrig": "Unresponsive", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Emmanuel Williams", "gc": "Frequent", "gcOrig": "Unresponsive", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Fisayo A.", "gc": "Guest", "gcOrig": "Unresponsive", "city": "Non-Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Millicent Rogers", "gc": "Rare", "gcOrig": "Unresponsive", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Emmanuel Adeyemo", "gc": "Guest", "gcOrig": "Unresponsive", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Elizabeth Adeyemo", "gc": "Guest", "gcOrig": "Unresponsive", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Owoade Yussuff", "gc": "Guest", "gcOrig": "Unresponsive", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Phoebe Mademeidon", "gc": "Guest", "gcOrig": "Guest", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Shammah Obereika", "gc": "Unresponsive", "gcOrig": "Guest", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Ebube Agu", "gc": "Guest", "gcOrig": "Guest", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Ibukun Agu", "gc": "Guest", "gcOrig": "Guest", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Nnoma Awa", "gc": "Guest", "gcOrig": "Guest", "city": "Non-Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Olaitan Akintunde", "gc": "Guest", "gcOrig": "Guest", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Phebe Mademeidon", "gc": "Frequent", "gcOrig": "Guest", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Nneoma Awa", "gc": "Guest", "gcOrig": "Guest", "city": "Non-Attendee", "g": "Female", "phone": "", "email": ""}];
 
-const SEED_ATT={
-  '2026-04-08':{present:['Chinedu Awa','Nelson Allison','Wunmi Durosinmi-Etti','David Idoko','Demex Achinga','Nengi Goodman','Nnenna Idoko','Omodara Olanrewaju','Samuel Sagbele','Terdoo Anom','Terver Akindigh','Toki Numbere','Tomisin Numbere','Niyi Joseph','Asta Akindigh','Christiana Omelazu','Evi Idoghor','Blessed Mademeidon','Chinyere Izu-Ohajinwa','Confidence Blankson','Esther Ende','Happiness Asuquo','Izu Ohajinwa','Ifeoluwa Williams','Owoade Yussuff','Phoebe Mademeidon','Ebube Agu','Ibukun Agu']},
-  '2026-04-15':{present:['Chinedu Awa','Nelson Allison','Wunmi Durosinmi-Etti','David Idoko','Demex Achinga','Nengi Goodman','Nnenna Idoko','Omodara Olanrewaju','Precious Erhabor','Temitope Erhabor','Terdoo Anom','Toki Numbere','Tomisin Numbere','Akpor Hari Agboro','Niyi Joseph','Asta Akindigh','Christiana Omelazu','Evi Idoghor','Udoo Achinga','Esther Ende','Gloria Garba','Emmanuel Williams','Fisayo A.','Millicent Rogers']},
-  '2026-04-22':{present:['Chinedu Awa','Mary Captain','Nelson Allison','Wunmi Durosinmi-Etti','Damilola Macaulay','David Idoko','Nengi Goodman','Nnenna Idoko','Omodara Olanrewaju','Temitope Erhabor','Terver Akindigh','Toki Numbere','Tomisin Numbere','Niyi Joseph','Vanessa Ebitu','Asta Akindigh','Christiana Omelazu','Evi Idoghor','Blessed Mademeidon','Chinyere Izu-Ohajinwa','Confidence Blankson','Ololade Soyebi','Gloria Garba','Millicent Rogers','Phoebe Mademeidon','Shammah Obereika','Nnoma Awa','Olaitan Akintunde']},
-  '2026-04-29':{present:['Ifeoma Igbokidi','Mary Captain','Daniel Asuquo','David Idoko','Demex Achinga','Nengi Goodman','Nnenna Idoko','Precious Erhabor','Temitope Erhabor','Terver Akindigh','Toki Numbere','Tomisin Numbere','Niyi Joseph','Asta Akindigh','Christiana Omelazu','Evi Idoghor','Esther Ende','Happiness Asuquo','Ololade Soyebi','Labake Laniyan','Nnoma Awa']}
-};
+const SEED_ATT={"2026-04-08": {"Anita Obidiegwu": "absent", "Chinedu Awa": "present", "Chinedu Obidiegwu": "absent", "Ifeoma Igbokidi": "absent", "Ksusha Anom": "absent", "Mary Captain": "absent", "Nelson Allison": "present", "Wunmi Durosinmi-Etti": "present", "Damilola Macaulay": "absent", "Daniel Asuquo": "absent", "David Idoko": "present", "Demex Achinga": "present", "Nengi Goodman": "present", "Nnenna Idoko": "present", "Omodara Olanrewaju": "present", "Precious Erhabor": "absent", "Samuel Sagbele": "present", "Temitope Erhabor": "absent", "Terdoo Anom": "present", "Terver Akindigh": "present", "Toki Numbere": "present", "Tomisin Numbere": "present", "Akpor Hari Agboro": "absent", "Amanda Zara Nwankwo": "absent", "Niyi Joseph": "present", "Vanessa Ebitu": "absent", "Asta Akindigh": "present", "Christiana Omelazu": "present", "Evi Idoghor": "present", "Udoo Achinga": "absent", "Blessed Mademeidon": "present", "Chinyere Izu-Ohajinwa": "present", "Confidence Blankson": "present", "Esther Ende": "present", "Georgina Gabriel": "absent", "Happiness Asuquo": "present", "Izu Ohajinwa": "present", "Ololade Soyebi": "absent", "Gloria Garba": "absent", "Ifeoluwa Williams": "present", "Labake Laniyan": "absent", "Laolu Macaulay": "absent", "Emmanuel Williams": "absent", "Fisayo A.": "absent", "Millicent Rogers": "absent", "Emmanuel Adeyemo": "absent", "Elizabeth Adeyemo": "absent", "Owoade Yussuff": "present", "Shammah Obereika": "absent", "Ebube Agu": "present", "Ibukun Agu": "present", "Olaitan Akintunde": "absent", "Nneoma Awa": "absent", "Phebe Mademeidon": "present"}, "2026-04-15": {"Anita Obidiegwu": "absent", "Chinedu Awa": "present", "Chinedu Obidiegwu": "absent", "Ifeoma Igbokidi": "absent", "Ksusha Anom": "absent", "Mary Captain": "absent", "Nelson Allison": "present", "Wunmi Durosinmi-Etti": "present", "Damilola Macaulay": "absent", "Daniel Asuquo": "absent", "David Idoko": "present", "Demex Achinga": "present", "Nengi Goodman": "present", "Nnenna Idoko": "present", "Omodara Olanrewaju": "present", "Precious Erhabor": "present", "Samuel Sagbele": "absent", "Temitope Erhabor": "present", "Terdoo Anom": "present", "Terver Akindigh": "absent", "Toki Numbere": "present", "Tomisin Numbere": "present", "Akpor Hari Agboro": "present", "Amanda Zara Nwankwo": "absent", "Niyi Joseph": "present", "Vanessa Ebitu": "absent", "Asta Akindigh": "present", "Christiana Omelazu": "present", "Evi Idoghor": "present", "Udoo Achinga": "present", "Blessed Mademeidon": "absent", "Chinyere Izu-Ohajinwa": "absent", "Confidence Blankson": "absent", "Esther Ende": "present", "Georgina Gabriel": "absent", "Happiness Asuquo": "absent", "Izu Ohajinwa": "absent", "Ololade Soyebi": "absent", "Gloria Garba": "present", "Ifeoluwa Williams": "absent", "Labake Laniyan": "absent", "Laolu Macaulay": "absent", "Emmanuel Williams": "present", "Fisayo A.": "present", "Millicent Rogers": "present", "Emmanuel Adeyemo": "absent", "Elizabeth Adeyemo": "absent", "Owoade Yussuff": "absent", "Shammah Obereika": "absent", "Ebube Agu": "absent", "Ibukun Agu": "absent", "Olaitan Akintunde": "absent", "Nneoma Awa": "absent", "Phebe Mademeidon": "absent"}, "2026-04-22": {"Anita Obidiegwu": "absent", "Chinedu Awa": "present", "Chinedu Obidiegwu": "absent", "Ifeoma Igbokidi": "absent", "Ksusha Anom": "absent", "Mary Captain": "present", "Nelson Allison": "present", "Wunmi Durosinmi-Etti": "present", "Damilola Macaulay": "present", "Daniel Asuquo": "absent", "David Idoko": "present", "Demex Achinga": "absent", "Nengi Goodman": "present", "Nnenna Idoko": "present", "Omodara Olanrewaju": "present", "Precious Erhabor": "absent", "Samuel Sagbele": "absent", "Temitope Erhabor": "present", "Terdoo Anom": "absent", "Terver Akindigh": "present", "Toki Numbere": "present", "Tomisin Numbere": "present", "Akpor Hari Agboro": "absent", "Amanda Zara Nwankwo": "absent", "Niyi Joseph": "present", "Vanessa Ebitu": "present", "Asta Akindigh": "present", "Christiana Omelazu": "present", "Evi Idoghor": "present", "Udoo Achinga": "absent", "Blessed Mademeidon": "present", "Chinyere Izu-Ohajinwa": "present", "Confidence Blankson": "present", "Esther Ende": "absent", "Georgina Gabriel": "absent", "Happiness Asuquo": "absent", "Izu Ohajinwa": "present", "Ololade Soyebi": "present", "Gloria Garba": "present", "Ifeoluwa Williams": "absent", "Labake Laniyan": "absent", "Laolu Macaulay": "absent", "Emmanuel Williams": "absent", "Fisayo A.": "absent", "Millicent Rogers": "present", "Emmanuel Adeyemo": "absent", "Elizabeth Adeyemo": "absent", "Owoade Yussuff": "absent", "Shammah Obereika": "present", "Ebube Agu": "absent", "Ibukun Agu": "absent", "Olaitan Akintunde": "present", "Nneoma Awa": "present", "Phebe Mademeidon": "present"}, "2026-04-29": {"Anita Obidiegwu": "absent", "Chinedu Awa": "present", "Chinedu Obidiegwu": "absent", "Ifeoma Igbokidi": "present", "Ksusha Anom": "absent", "Mary Captain": "present", "Nelson Allison": "absent", "Wunmi Durosinmi-Etti": "absent", "Damilola Macaulay": "absent", "Daniel Asuquo": "present", "David Idoko": "present", "Demex Achinga": "present", "Nengi Goodman": "present", "Nnenna Idoko": "present", "Omodara Olanrewaju": "absent", "Precious Erhabor": "present", "Samuel Sagbele": "absent", "Temitope Erhabor": "present", "Terdoo Anom": "absent", "Terver Akindigh": "present", "Toki Numbere": "present", "Tomisin Numbere": "present", "Akpor Hari Agboro": "absent", "Amanda Zara Nwankwo": "absent", "Niyi Joseph": "present", "Vanessa Ebitu": "absent", "Asta Akindigh": "present", "Christiana Omelazu": "present", "Evi Idoghor": "present", "Udoo Achinga": "absent", "Blessed Mademeidon": "absent", "Chinyere Izu-Ohajinwa": "absent", "Confidence Blankson": "absent", "Esther Ende": "present", "Georgina Gabriel": "absent", "Happiness Asuquo": "present", "Izu Ohajinwa": "absent", "Ololade Soyebi": "present", "Gloria Garba": "absent", "Ifeoluwa Williams": "absent", "Labake Laniyan": "present", "Laolu Macaulay": "absent", "Emmanuel Williams": "absent", "Fisayo A.": "absent", "Millicent Rogers": "absent", "Emmanuel Adeyemo": "absent", "Elizabeth Adeyemo": "absent", "Owoade Yussuff": "absent", "Shammah Obereika": "absent", "Ebube Agu": "absent", "Ibukun Agu": "absent", "Olaitan Akintunde": "absent", "Nneoma Awa": "present", "Phebe Mademeidon": "absent"}, "2026-05-06": {"Anita Obidiegwu": "absent", "Chinedu Awa": "present", "Chinedu Obidiegwu": "absent", "Ifeoma Igbokidi": "absent", "Ksusha Anom": "absent", "Mary Captain": "present", "Nelson Allison": "absent", "Wunmi Durosinmi-Etti": "present", "Damilola Macaulay": "present", "Daniel Asuquo": "absent", "David Idoko": "present", "Demex Achinga": "present", "Nengi Goodman": "present", "Nnenna Idoko": "present", "Omodara Olanrewaju": "present", "Precious Erhabor": "absent", "Samuel Sagbele": "present", "Temitope Erhabor": "present", "Terdoo Anom": "absent", "Terver Akindigh": "present", "Toki Numbere": "present", "Tomisin Numbere": "present", "Akpor Hari Agboro": "absent", "Amanda Zara Nwankwo": "absent", "Niyi Joseph": "present", "Vanessa Ebitu": "present", "Asta Akindigh": "present", "Christiana Omelazu": "absent", "Evi Idoghor": "absent", "Udoo Achinga": "absent", "Blessed Mademeidon": "present", "Chinyere Izu-Ohajinwa": "present", "Confidence Blankson": "absent", "Esther Ende": "absent", "Georgina Gabriel": "present", "Happiness Asuquo": "absent", "Izu Ohajinwa": "present", "Ololade Soyebi": "present", "Gloria Garba": "present", "Ifeoluwa Williams": "present", "Labake Laniyan": "absent", "Laolu Macaulay": "present", "Emmanuel Williams": "present", "Fisayo A.": "absent", "Millicent Rogers": "absent", "Emmanuel Adeyemo": "absent", "Elizabeth Adeyemo": "absent", "Owoade Yussuff": "absent", "Shammah Obereika": "absent", "Ebube Agu": "absent", "Ibukun Agu": "absent", "Olaitan Akintunde": "absent", "Nneoma Awa": "present", "Phebe Mademeidon": "present"}};
 
 let MEMBERS=MEMBERS_SEED.map(m=>({...m}));
 let attendance={};
@@ -771,6 +786,7 @@ function saveAll(){
     localStorage.setItem(LS_KEY,JSON.stringify({
       members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,phone:m.phone||'',email:m.email||''})),
       attendance,absenceReasons,birthdays,firstSession,
+      customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),
       savedAt:new Date().toISOString()
     }));
     showToast('Saved');
@@ -786,6 +802,7 @@ function loadSaved(){
     if(d.absenceReasons)Object.assign(absenceReasons,d.absenceReasons);
     if(d.birthdays)Object.assign(birthdays,d.birthdays);
     if(d.firstSession)Object.assign(firstSession,d.firstSession);
+    if(d.customReasons)d.customReasons.forEach(r=>{if(!REASONS.includes(r))REASONS.push(r);});
     return true;
   }catch(e){return false;}
 }
@@ -895,12 +912,20 @@ function applyBdayImport(){
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 function initSeedData(){
-  Object.keys(SEED_ATT).forEach(sk=>{
-    if(!attendance[sk]){
-      attendance[sk]={};
-      MEMBERS.forEach(m=>{attendance[sk][m.n]=SEED_ATT[sk].present.includes(m.n)?'present':'absent';});
-    }
+  MEMBERS_SEED.forEach(s=>{
+    const m=MEMBERS.find(x=>x.n===s.n);
+    if(!m) MEMBERS.push({n:s.n,gc:s.gc,gcOrig:s.gcOrig||s.gc,city:s.city||'Attendee',g:s.g||'Female',phone:s.phone||'',email:s.email||''});
+    else {m.gc=s.gc;m.gcOrig=s.gcOrig||s.gc;m.city=s.city;m.g=s.g;}
   });
+  Object.entries(SEED_ATT).forEach(([sk,rec])=>{
+    if(!attendance[sk]){attendance[sk]={};MEMBERS.forEach(m=>{attendance[sk][m.n]=rec[m.n]||'absent';});}
+  });
+  const _absR={"2026-04-08": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Mary Captain": "Other", "Damilola Macaulay": "Other", "Daniel Asuquo": "Other", "Precious Erhabor": "Work", "Temitope Erhabor": "Work", "Akpor Hari Agboro": "Work", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Udoo Achinga": "Other", "Georgina Gabriel": "Other", "Ololade Soyebi": "Work", "Gloria Garba": "Sick", "Laolu Macaulay": "Travel", "Emmanuel Williams": "Work", "Millicent Rogers": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Shammah Obereika": "Work"}, "2026-04-15": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Mary Captain": "Other", "Damilola Macaulay": "Other", "Daniel Asuquo": "Other", "Samuel Sagbele": "Exam", "Terver Akindigh": "Work", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Blessed Mademeidon": "Sick", "Chinyere Izu-Ohajinwa": "Other", "Confidence Blankson": "Work", "Georgina Gabriel": "Work", "Happiness Asuquo": "Other", "Izu Ohajinwa": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Work", "Phebe Mademeidon": "Other"}, "2026-04-22": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Daniel Asuquo": "Other", "Demex Achinga": "Work", "Precious Erhabor": "Other", "Samuel Sagbele": "Exam", "Terdoo Anom": "Travel", "Akpor Hari Agboro": "Exam", "Amanda Zara Nwankwo": "Other", "Udoo Achinga": "Other", "Esther Ende": "Travel", "Georgina Gabriel": "Work", "Happiness Asuquo": "Other", "Izu Ohajinwa": "Work", "Ifeoluwa Williams": "Other", "Laolu Macaulay": "Travel", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Other"}, "2026-04-29": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ksusha Anom": "Other", "Nelson Allison": "Travel", "Wunmi Durosinmi-Etti": "Other", "Damilola Macaulay": "Other", "Omodara Olanrewaju": "Other", "Samuel Sagbele": "Exam", "Terdoo Anom": "Work", "Akpor Hari Agboro": "Exam", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Udoo Achinga": "Other", "Blessed Mademeidon": "Sick", "Chinyere Izu-Ohajinwa": "Other", "Confidence Blankson": "Other", "Georgina Gabriel": "Other", "Gloria Garba": "Work", "Ifeoluwa Williams": "Other", "Emmanuel Williams": "Other", "Laolu Macaulay": "Work", "Millicent Rogers": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Other", "Shammah Obereika": "Work", "Phebe Mademeidon": "Sick"}, "2026-05-06": {"Akpor Hari Agboro": "Exam", "Chinedu Obidiegwu": "Work", "Christiana Omelazu": "Sick", "Nelson Allison": "Travel", "Precious Erhabor": "Work", "Terdoo Anom": "Travel", "Amanda Zara Nwankwo": "Other", "Anita Obidiegwu": "Other", "Millicent Rogers": "Work", "Daniel Asuquo": "Other", "Happiness Asuquo": "Other", "Ifeoma Igbokidi": "Work", "Evi Idoghor": "Other", "Esther Ende": "Sick"}};
+  Object.entries(_absR).forEach(([sk,rec])=>{if(!absenceReasons[sk])absenceReasons[sk]={...rec};});
+  const _bdays={"Terver Akindigh": "29/06", "Toki Numbere": "11/06", "Tomisin Numbere": "13/10", "Demex Achinga": "08/01", "Damilola Macaulay": "07/09", "Samuel Sagbele": "08/05", "Chinedu Obidiegwu": "29/08", "Anita Obidiegwu": "17/06", "Temitope Erhabor": "03/10", "Nengi Goodman": "12/10", "Wunmi Durosinmi-Etti": "09/09", "Christiana Omelazu": "04/11", "Daniel Asuquo": "26/07", "Ifeoma Igbokidi": "25/02", "Chinyere Izu-Ohajinwa": "10/02", "Terdoo Anom": "18/08", "Akpor Hari Agboro": "27/01", "Evi Idoghor": "04/09", "Blessed Mademeidon": "09/07", "Laolu Macaulay": "30/01", "Mary Captain": "05/08", "Chinedu Awa": "22/08", "Ksusha Anom": "24/07", "Nelson Allison": "10/08", "David Idoko": "13/01", "Nnenna Idoko": "22/05", "Omodara Olanrewaju": "24/04", "Precious Erhabor": "11/10", "Amanda Zara Nwankwo": "06/01", "Niyi Joseph": "30/03", "Vanessa Ebitu": "14/09", "Asta Akindigh": "28/04", "Udoo Achinga": "30/09", "Confidence Blankson": "14/11", "Esther Ende": "03/04", "Georgina Gabriel": "19/04", "Happiness Asuquo": "29/10", "Izu Ohajinwa": "24/03", "Ololade Soyebi": "19/04", "Gloria Garba": "27/11", "Ifeoluwa Williams": "10/06", "Millicent Rogers": "19/04", "Owoade Yussuff": "24/06", "Shammah Obereika": "10/04", "Labake Laniyan": "12/08", "Emmanuel Williams": "11/12"};
+  Object.entries(_bdays).forEach(([n,v])=>{if(!birthdays[n])birthdays[n]=v;});
+  const _fs={"Emmanuel Williams": "2026-04-15", "Labake Laniyan": "2026-04-29"};
+  Object.entries(_fs).forEach(([n,v])=>{if(!firstSession[n])firstSession[n]=v;});
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -916,7 +941,7 @@ function getActiveSessions(name){
 function calcMember(name){
   const recs=getActiveSessions(name);
   let present=0,possible=recs.length;
-  let reasons={Travel:0,Sick:0,Exam:0,Work:0,Other:0};let history=[];
+  let reasons={};REASONS.forEach(r=>reasons[r]=0);let history=[];
   recs.forEach(s=>{const st=attendance[s.key]?attendance[s.key][name]:undefined;const isP=st==='present';if(isP)present++;const r=absenceReasons[s.key]?absenceReasons[s.key][name]:null;if(!isP&&r)reasons[r]=(reasons[r]||0)+1;history.push({date:s.date,key:s.key,present:isP,reason:r,isFirst:s.key===firstSession[name]});});
   const rate=possible?Math.round((present/possible)*100):0;
   let curStreak=0;for(let i=history.length-1;i>=0;i--){if(!history[i].present)curStreak++;else break;}
@@ -974,6 +999,175 @@ function setBirthday(name,val,idx){
 }
 function clearAllBirthdays(){if(!confirm('Clear all birthday data?'))return;birthdays={};renderBirthdays();renderOverviewBirthdays();saveAll();}
 
+// ── GOOGLE CALENDAR BIRTHDAY SYNC ─────────────────────────────────────────────
+const GCAL_LS_TOKEN   = 'gidi_gcal_token';
+const GCAL_LS_EVENTIDS= 'gidi_gcal_eventids';
+const GCAL_LS_SETTINGS= 'gidi_gcal_settings';
+
+function saveGCalSettings(){
+  const cid=document.getElementById('gcal-client-id').value.trim();
+  const calId=document.getElementById('gcal-cal-id').value.trim();
+  const tz=document.getElementById('gcal-timezone').value;
+  localStorage.setItem(GCAL_LS_SETTINGS,JSON.stringify({clientId:cid,calId,tz}));
+}
+function loadGCalSettings(){
+  try{
+    const s=JSON.parse(localStorage.getItem(GCAL_LS_SETTINGS)||'{}');
+    if(s.clientId)document.getElementById('gcal-client-id').value=s.clientId;
+    if(s.calId)document.getElementById('gcal-cal-id').value=s.calId;
+    if(s.tz){const sel=document.getElementById('gcal-timezone');if(sel)sel.value=s.tz;}
+    return s;
+  }catch{return{};}
+}
+function toggleGCalSetup(){
+  const el=document.getElementById('gcalSetupArea');
+  el.style.display=el.style.display==='none'?'block':'none';
+  if(el.style.display==='block'){
+    loadGCalSettings();
+    const tok=localStorage.getItem(GCAL_LS_TOKEN);
+    if(tok){
+      gcalSetStatus('&#10003; Connected to Google. Ready to sync.','#085041');
+      document.getElementById('gcalSyncBtn').style.display='inline-flex';
+    }
+  }
+}
+function gcalSetStatus(msg,color){
+  const el=document.getElementById('gcalStatus');
+  el.innerHTML=`<span style="color:${color||'#888'}">${msg}</span>`;
+}
+
+// ── OAuth popup flow ──────────────────────────────────────────────────────────
+function gcalSignIn(){
+  const s=loadGCalSettings();
+  if(!s.clientId){gcalSetStatus('Please enter your OAuth Client ID first.','#a32d2d');return;}
+  if(!s.calId){gcalSetStatus('Please enter the Calendar ID first.','#a32d2d');return;}
+
+  const redirectUri=window.location.origin+window.location.pathname;
+  const scope='https://www.googleapis.com/auth/calendar.events';
+  const url=`https://accounts.google.com/o/oauth2/v2/auth?`+
+    `client_id=${encodeURIComponent(s.clientId)}&`+
+    `redirect_uri=${encodeURIComponent(redirectUri)}&`+
+    `response_type=token&scope=${encodeURIComponent(scope)}&`+
+    `prompt=consent`;
+
+  const popup=window.open(url,'_blank','width=500,height=600,scrollbars=yes');
+
+  // Poll for the token in the popup URL (implicit flow)
+  const poll=setInterval(()=>{
+    try{
+      if(popup.closed){clearInterval(poll);return;}
+      const hash=popup.location.hash;
+      if(hash&&hash.includes('access_token')){
+        clearInterval(poll);
+        popup.close();
+        const params=new URLSearchParams(hash.substring(1));
+        const token=params.get('access_token');
+        const expiresIn=parseInt(params.get('expires_in')||'3600');
+        localStorage.setItem(GCAL_LS_TOKEN,JSON.stringify({
+          token,expiresAt:Date.now()+expiresIn*1000
+        }));
+        gcalSetStatus('&#10003; Connected! Click "Sync all birthdays now" to create events.','#085041');
+        document.getElementById('gcalSyncBtn').style.display='inline-flex';
+      }
+    }catch(e){/* cross-origin — still loading */}
+  },500);
+}
+
+function getGCalToken(){
+  try{
+    const d=JSON.parse(localStorage.getItem(GCAL_LS_TOKEN)||'null');
+    if(!d)return null;
+    if(Date.now()>d.expiresAt){localStorage.removeItem(GCAL_LS_TOKEN);return null;}
+    return d.token;
+  }catch{return null;}
+}
+
+// ── Main sync function ────────────────────────────────────────────────────────
+async function gcalSyncBirthdays(){
+  const s=loadGCalSettings();
+  if(!s.clientId||!s.calId){gcalSetStatus('Missing Client ID or Calendar ID.','#a32d2d');return;}
+  const token=getGCalToken();
+  if(!token){gcalSetStatus('Session expired. Please reconnect.','#a32d2d');document.getElementById('gcalSyncBtn').style.display='none';return;}
+
+  const calId=encodeURIComponent(s.calId);
+  const btn=document.getElementById('gcalSyncBtn');
+  btn.disabled=true;btn.textContent='Syncing...';
+  gcalSetStatus('Starting sync...','#888');
+
+  // Load previously stored event IDs
+  let storedIds={};
+  try{storedIds=JSON.parse(localStorage.getItem(GCAL_LS_EVENTIDS)||'{}');}catch{}
+
+  // Build list: non-guest members with birthdays set
+  const toSync=MEMBERS.filter(m=>m.gc!=='Guest'&&birthdays[m.n]);
+  const newIds={};
+  let created=0,deleted=0,failed=0;
+  const MONTHS_NUM=['','01','02','03','04','05','06','07','08','09','10','11','12'];
+
+  gcalSetStatus(`Syncing ${toSync.length} birthdays...`,'#888');
+
+  for(const m of toSync){
+    const bday=birthdays[m.n];
+    const parts=bday.split('/');
+    if(parts.length<2)continue;
+    const [day,mo]=[parts[0].padStart(2,'0'),parts[1].padStart(2,'0')];
+    const year=new Date().getFullYear();
+    const dateStr=`${year}-${mo}-${day}`;
+
+    // Delete existing event for this member if any
+    const oldId=storedIds[m.n];
+    if(oldId){
+      try{
+        await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${oldId}`,{
+          method:'DELETE',
+          headers:{Authorization:`Bearer ${token}`}
+        });
+        deleted++;
+      }catch{}
+    }
+
+    // Create event timed at 09:00 on the birthday so the reminder fires at exactly 9am
+    const tz=s.tz||'Europe/London';
+    const event={
+      summary:`🎂 ${m.n}'s Birthday`,
+      description:`Gidi GC member birthday. Synced from Gidi GC Attendance Tracking.`,
+      start:{dateTime:`${dateStr}T09:00:00`,timeZone:tz},
+      end:{dateTime:`${dateStr}T09:30:00`,timeZone:tz},
+      recurrence:['RRULE:FREQ=YEARLY'],
+      transparency:'transparent',
+      reminders:{useDefault:false,overrides:[{method:'popup',minutes:0},{method:'email',minutes:0}]}
+    };
+
+    try{
+      const resp=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,{
+        method:'POST',
+        headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+        body:JSON.stringify(event)
+      });
+      if(resp.ok){
+        const data=await resp.json();
+        newIds[m.n]=data.id;
+        created++;
+      } else {
+        const err=await resp.json().catch(()=>({}));
+        console.warn('Failed for',m.n,err?.error?.message);
+        failed++;
+      }
+    }catch(e){failed++;console.warn('Error for',m.n,e);}
+  }
+
+  // Save new event IDs
+  localStorage.setItem(GCAL_LS_EVENTIDS,JSON.stringify({...storedIds,...newIds}));
+
+  btn.disabled=false;btn.textContent='📅 Sync all birthdays now';
+  if(failed===0){
+    gcalSetStatus(`&#10003; Done! ${created} birthday events synced (${deleted} updated). Members can subscribe at: Google Calendar → Other calendars → Subscribe by calendar ID.`,'#085041');
+    showToast(`${created} birthday events synced to Google Calendar`,3000);
+  } else {
+    gcalSetStatus(`Synced ${created}, failed ${failed}. Check console for details.`,'#ba7517');
+  }
+}
+
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
 function renderOverview(){
   const recs=getRecordedSessions();
@@ -1000,7 +1194,7 @@ function renderOverview(){
   `;
   dc('sessChart');dc('gcChart');dc('genChart');
   const lbl=tots.map(t=>t.date);
-  charts['sessChart']=new Chart(document.getElementById('sessChart'),{type:'bar',data:{labels:lbl,datasets:[{label:'Total (excl. guests)',data:tots.map(t=>t.total),backgroundColor:'#1D9E75',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:45,autoSkip:false}},y:{beginAtZero:true}}}});
+  charts['sessChart']=new Chart(document.getElementById('sessChart'),{type:'bar',data:{labels:lbl,datasets:[{label:'Total (incl. guests present)',data:tots.map(t=>t.total),backgroundColor:'#1D9E75',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:45,autoSkip:false}},y:{beginAtZero:true}}}});
   const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};MEMBERS.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
   charts['gcChart']=new Chart(document.getElementById('gcChart'),{type:'doughnut',data:{labels:Object.keys(gcC),datasets:[{data:Object.values(gcC),backgroundColor:['#1D9E75','#378ADD','#EF9F27','#E24B4A','#888780'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12,padding:8}}}}});
   charts['genChart']=new Chart(document.getElementById('genChart'),{type:'bar',data:{labels:lbl,datasets:[{label:'Female',data:tots.map(t=>t.female),backgroundColor:'#D4537E',borderRadius:2,stack:'s'},{label:'Male',data:tots.map(t=>t.male),backgroundColor:'#378ADD',borderRadius:2,stack:'s'}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true,ticks:{font:{size:10},maxRotation:45,autoSkip:false}},y:{stacked:true,beginAtZero:true}},plugins:{legend:{labels:{font:{size:11},boxWidth:10}}}}});
@@ -1583,6 +1777,141 @@ function confirmDeleteMember(){
 }
 
 // ── MEMBERS ───────────────────────────────────────────────────────────────────
+function populateAbsSessionPicker(){
+  const sel=document.getElementById('absSessionPicker');
+  if(!sel)return;
+  const recs=getRecordedSessions();
+  const cur=sel.value;
+  sel.innerHTML='<option value="">Select session...</option>'+[...recs].reverse().map(s=>`<option value="${s.key}"${s.key===cur?' selected':''}>${s.date}</option>`).join('');
+}
+
+function renderSessionAbsences(){
+  const sk=document.getElementById('absSessionPicker').value;
+  const area=document.getElementById('sessionAbsenceArea');
+  const rLabel=document.getElementById('reasonChartLabel');
+  if(!sk){
+    area.innerHTML='';
+    rLabel.textContent='all sessions';
+    renderReasonChart(null);
+    return;
+  }
+  const sess=SESSIONS_DEF.find(s=>s.key===sk);
+  rLabel.textContent=sess?sess.date:sk;
+  renderReasonChart(sk);
+
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const absentees=nonGuests.filter(m=>{
+    if(firstSession[m.n]&&firstSession[m.n]>sk)return false;
+    return attendance[sk]?attendance[sk][m.n]!=='present':true;
+  }).sort(byFirstName);
+
+  if(!absentees.length){
+    area.innerHTML='<div style="font-size:13px;color:#3b6d11;padding:8px 0">Everyone attended this session!</div>';
+    document.getElementById('reasonGroupsArea').innerHTML='';
+    return;
+  }
+
+  const reasonOptions=REASONS.map(r=>`<option value="${r}">${r}</option>`).join('');
+
+  area.innerHTML=`
+    <div style="font-size:12px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">${absentees.length} absent</div>
+    <div style="border:0.5px solid #e0e0d8;border-radius:8px;overflow:hidden">
+      ${absentees.map((m,i)=>{
+        const curR=absenceReasons[sk]?absenceReasons[sk][m.n]:'';
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:0.5px solid #e0e0d8;gap:8px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:13px;font-weight:500">${m.n}</div>
+            <div style="font-size:11px;color:#888;margin-top:1px">${gcBadge(m.gc)}</div>
+          </div>
+          <select onchange="updateAbsenceReason('${sk}','${m.n}',this.value)" style="font-size:12px;padding:5px 8px;border:0.5px solid #ccc;border-radius:8px;background:${curR?getReasonColor(curR)+'22':'#fff'};color:#1a1a1a;min-width:120px">
+            <option value="">Reason...</option>
+            ${REASONS.map(r=>`<option value="${r}"${curR===r?' selected':''}>${r}</option>`).join('')}
+          </select>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  renderReasonGroups(sk);
+}
+
+function updateAbsenceReason(sk,name,val){
+  if(!absenceReasons[sk])absenceReasons[sk]={};
+  if(val)absenceReasons[sk][name]=val;else delete absenceReasons[sk][name];
+  saveAll();
+  renderReasonGroups(sk);
+  renderReasonChart(sk);
+  renderAbsenteeism();
+}
+
+function renderReasonGroups(sk){
+  const area=document.getElementById('reasonGroupsArea');
+  if(!sk){area.innerHTML='';return;}
+  const reasonMap={};
+  REASONS.forEach(r=>reasonMap[r]=[]);
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  nonGuests.forEach(m=>{
+    if(firstSession[m.n]&&firstSession[m.n]>sk)return;
+    if(attendance[sk]&&attendance[sk][m.n]==='present')return;
+    const r=absenceReasons[sk]?absenceReasons[sk][m.n]:'';
+    if(r&&reasonMap[r])reasonMap[r].push(m);
+    else if(!r)(reasonMap['_none']=reasonMap['_none']||[]).push(m);
+  });
+  const filled=REASONS.filter(r=>reasonMap[r]&&reasonMap[r].length);
+  const noneList=reasonMap['_none']||[];
+  if(!filled.length&&!noneList.length){area.innerHTML='';return;}
+
+  area.innerHTML=`
+    <div style="background:#fff;border-radius:10px;border:0.5px solid #e0e0d8;padding:14px;margin-bottom:1rem">
+      <div style="font-size:11px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px">Absences by reason</div>
+      ${filled.map(r=>`
+        <div style="margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+            <span style="width:10px;height:10px;border-radius:2px;background:${getReasonColor(r)};display:inline-block"></span>
+            <span style="font-size:12px;font-weight:600;color:#1a1a1a">${r}</span>
+            <span style="font-size:11px;color:#888">(${reasonMap[r].length})</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">
+            ${reasonMap[r].sort(byFirstName).map(m=>`<span style="padding:3px 10px;border-radius:20px;font-size:12px;background:${getReasonColor(r)}22;color:${getReasonColor(r)};font-weight:500">${m.n}</span>`).join('')}
+          </div>
+        </div>`).join('')}
+      ${noneList.length?`
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#888;margin-bottom:5px">No reason given (${noneList.length})</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">${noneList.sort(byFirstName).map(m=>`<span style="padding:3px 10px;border-radius:20px;font-size:12px;background:#f5f5f3;color:#888">${m.n}</span>`).join('')}</div>
+        </div>`:''}
+    </div>
+  `;
+}
+
+function renderReasonChart(sk){
+  dc('reasonChart');
+  const totR={};REASONS.forEach(r=>totR[r]=0);
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  if(sk){
+    // Per-session
+    nonGuests.forEach(m=>{
+      if(firstSession[m.n]&&firstSession[m.n]>sk)return;
+      if(attendance[sk]&&attendance[sk][m.n]==='present')return;
+      const r=absenceReasons[sk]?absenceReasons[sk][m.n]:'';
+      if(r&&totR[r]!==undefined)totR[r]++;
+    });
+  } else {
+    // All sessions
+    Object.keys(absenceReasons).forEach(s=>{
+      nonGuests.forEach(m=>{const r=absenceReasons[s]&&absenceReasons[s][m.n];if(r&&totR[r]!==undefined)totR[r]++;});
+    });
+  }
+  const labels=Object.keys(totR).filter(k=>totR[k]>0||!sk);
+  charts['reasonChart']=new Chart(document.getElementById('reasonChart'),{
+    type:'bar',
+    data:{labels,datasets:[{label:'Count',data:labels.map(k=>totR[k]),backgroundColor:labels.map(k=>getReasonColor(k)),borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}
+  });
+  document.getElementById('reasonChart').onclick=function(e){
+    const pts=charts['reasonChart'].getElementsAtEventForMode(e,'nearest',{intersect:true},false);
+    if(pts.length){const reason=labels[pts[0].index];document.getElementById('absSortBy').value='reason-'+reason;renderAbsenteeism();}
+  };
+}
 function renderMembers(){
   const search=(document.getElementById('mSearch').value||'').toLowerCase();
   const fGC=document.getElementById('fGC').value,fCity=document.getElementById('fCity').value,fGen=document.getElementById('fGen').value,fChanged=document.getElementById('fChanged').value;
@@ -1771,13 +2100,21 @@ function saveSession(sk,label){
 
 // ── ABSENTEEISM ───────────────────────────────────────────────────────────────
 function renderAbsenteeism(){
-  const sortBy=document.getElementById('absSortBy').value,filter=document.getElementById('absFilter').value;
+  populateAbsSessionPicker();
+  renderReasonChart(document.getElementById('absSessionPicker')?.value||null);
+  // Sync sort dropdown with current REASONS
+  const sel=document.getElementById('absSortBy');
+  const existing=Array.from(sel.options).map(o=>o.value);
+  REASONS.forEach(r=>{
+    const v='reason-'+r;
+    if(!existing.includes(v)){const o=document.createElement('option');o.value=v;o.textContent='By reason: '+r;sel.appendChild(o);}
+  });
+  const sortBy=sel.value,filter=document.getElementById('absFilter').value;
   const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
   let data=nonGuests.map(m=>({...m,...calcMember(m.n)}));
   if(filter==='Core')data=data.filter(m=>m.gc==='Core');
   if(filter==='high')data=data.filter(m=>m.absRate>50);
   if(filter==='never')data=data.filter(m=>m.present===0);
-  // Sort — reason-based sorts filter to only members who have that reason logged
   if(sortBy.startsWith('reason-')){
     const reason=sortBy.replace('reason-','');
     data=data.filter(m=>m.reasons[reason]>0).sort((a,b)=>b.reasons[reason]-a.reasons[reason]||bySurname(a,b));
@@ -1787,23 +2124,13 @@ function renderAbsenteeism(){
   const all=nonGuests.map(m=>calcMember(m.n));
   const avgAbs=Math.round(all.reduce((a,b)=>a+b.absRate,0)/all.length);
   document.getElementById('abs-metrics').innerHTML=`<div class="metric"><div class="metric-label">Avg absence</div><div class="metric-val">${avgAbs}%</div><div class="metric-sub">excl. guests</div></div><div class="metric"><div class="metric-label">&gt;70% absent</div><div class="metric-val">${all.filter(d=>d.absRate>70).length}</div></div><div class="metric"><div class="metric-label">Never attended</div><div class="metric-val">${all.filter(d=>d.present===0).length}</div></div><div class="metric"><div class="metric-label">Streak &ge;2</div><div class="metric-val">${all.filter(d=>d.curStreak>=2).length}</div><div class="metric-sub">consecutive absences</div></div>`;
-  dc('absGCChart');dc('reasonChart');
+  dc('absGCChart');
   const gcGroups={Core:[],Frequent:[],Rare:[],Unresponsive:[]};
   nonGuests.forEach(m=>{const c=calcMember(m.n);if(gcGroups[m.gc])gcGroups[m.gc].push(c.absRate);});
   const gcLabels=Object.keys(gcGroups);
   charts['absGCChart']=new Chart(document.getElementById('absGCChart'),{type:'bar',data:{labels:gcLabels,datasets:[{label:'Avg absence %',data:gcLabels.map(k=>gcGroups[k].length?Math.round(gcGroups[k].reduce((a,b)=>a+b,0)/gcGroups[k].length):0),backgroundColor:['#1D9E75','#378ADD','#EF9F27','#E24B4A'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'}}}}});
-  const totR={Travel:0,Sick:0,Exam:0,Work:0,Other:0};
-  Object.keys(absenceReasons).forEach(sk=>{
-    nonGuests.forEach(m=>{const r=absenceReasons[sk]&&absenceReasons[sk][m.n];if(r&&totR[r]!==undefined)totR[r]++;});
-  });
-  charts['reasonChart']=new Chart(document.getElementById('reasonChart'),{type:'bar',data:{labels:Object.keys(totR),datasets:[{label:'Count',data:Object.values(totR),backgroundColor:Object.keys(totR).map(k=>REASON_COLORS[k]),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{afterLabel:ctx=>{const reason=Object.keys(totR)[ctx.dataIndex];return'Click sort to filter';}}},},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}});
-  // Add click handler on chart bars to sort by that reason
-  document.getElementById('reasonChart').onclick=function(e){
-    const pts=charts['reasonChart'].getElementsAtEventForMode(e,'nearest',{intersect:true},false);
-    if(pts.length){const reason=Object.keys(totR)[pts[0].index];document.getElementById('absSortBy').value='reason-'+reason;renderAbsenteeism();}
-  };
   const activeReason=sortBy.startsWith('reason-')?sortBy.replace('reason-',''):'';
-  document.getElementById('absList').innerHTML=(data.length?data:nonGuests.map(m=>({...m,...calcMember(m.n)}))).map(m=>{
+  document.getElementById('absList').innerHTML=(data.length?data:[]).map(m=>{
     const rc=m.absRate>=70?'abs-high':m.absRate>=40?'abs-med':'abs-low';
     const flag=m.curStreak>=2?`<div style="font-size:11px;color:#a32d2d;margin-top:3px">&#9888; ${m.curStreak} consecutive absences</div>`:'';
     const topR=activeReason?[[activeReason,m.reasons[activeReason]]].filter(e=>e[1]>0):Object.entries(m.reasons).sort((a,b)=>b[1]-a[1]).filter(e=>e[1]>0);
@@ -1915,9 +2242,10 @@ function openSummary(){
   const now=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
   const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
   const allCalc=nonGuests.map(m=>({...m,...calcMember(m.n)}));
-  const avg=recs.length?Math.round(recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
+  const avg=recs.length?Math.round(recs.map(s=>{let t=0;MEMBERS.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
   const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};MEMBERS.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
-  const sessTots=recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
+  // Session totals include ALL present (incl. guests); absentees counted separately from nonGuests
+  const sessTots=recs.map(s=>{let t=0;MEMBERS.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
   const bdaySoon=MEMBERS.filter(m=>{const d=daysUntil(birthdays[m.n]);return d!==null&&d<=30;}).sort((a,b)=>daysUntil(birthdays[a.n])-daysUntil(birthdays[b.n]));
 
   // ── Last session absences (excl. guests) ───────────────────────────────────
@@ -1925,11 +2253,27 @@ function openSummary(){
   const lastAbsent=lastSess?[...nonGuests].filter(m=>{
     if(firstSession[m.n]&&firstSession[m.n]>lastSess.key)return false;
     return attendance[lastSess.key]?attendance[lastSess.key][m.n]!=='present':true;
-  }).sort(byFirstName):[];
-  const lastPresent=lastSess?nonGuests.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length:0;
+  }):[];
+  const lastPresent=lastSess?MEMBERS.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length:0;
 
-  // ── Last-session absence reasons ──────────────────────────────────────────
-  const lastR={Travel:0,Sick:0,Exam:0,Work:0,Other:0};
+  // ── Build reason-grouped absent list ──────────────────────────────────────
+  // Group absentees by their logged reason; untagged go to 'none'
+  const lastAbsentGrouped={}; // reason -> [members]
+  const lastAbsentNone=[]; // no reason logged
+  if(lastSess){
+    lastAbsent.forEach(m=>{
+      const r=absenceReasons[lastSess.key]?absenceReasons[lastSess.key][m.n]:'';
+      if(r){if(!lastAbsentGrouped[r])lastAbsentGrouped[r]=[];lastAbsentGrouped[r].push(m);}
+      else lastAbsentNone.push(m);
+    });
+    // Sort each reason group alphabetically by first name
+    Object.keys(lastAbsentGrouped).forEach(r=>lastAbsentGrouped[r].sort(byFirstName));
+    lastAbsentNone.sort(byFirstName);
+  }
+  const hasReasons=Object.keys(lastAbsentGrouped).length>0;
+
+  // ── Last-session absence reason summary ───────────────────────────────────
+  const lastR={};REASONS.forEach(r=>lastR[r]=0);
   if(lastSess&&absenceReasons[lastSess.key]){
     Object.values(absenceReasons[lastSess.key]).forEach(r=>{if(r&&lastR[r]!==undefined)lastR[r]++;});
   }
@@ -1951,7 +2295,7 @@ function openSummary(){
     <div style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);color:#fff;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px">
       <div style="font-size:24px;margin-bottom:6px">&#128203;</div>
       <div style="font-size:18px;font-weight:600">Gidi GC</div>
-      <div style="font-size:13px;opacity:.7;margin-top:2px">Attendance Summary &middot; ${now}</div>
+      <div style="font-size:13px;opacity:.7;margin-top:2px">Attendance Summary &middot; As at ${lastSess?lastSess.date:'no sessions recorded'}</div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -1979,8 +2323,27 @@ function openSummary(){
         <div style="background:#f2fbf7;border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:#1D9E75">${lastPresent}</div><div style="font-size:11px;color:#085041;margin-top:2px;font-weight:600">PRESENT</div></div>
         <div style="background:#fcebeb;border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:#a32d2d">${lastAbsent.length}</div><div style="font-size:11px;color:#791f1f;margin-top:2px;font-weight:600">ABSENT</div></div>
       </div>
-      <div style="font-size:12px;color:#888;margin-bottom:10px">Absence reasons: ${lastReasonSummary}</div>
-      ${lastAbsent.length?`<div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Absent members</div>${lastAbsent.map(m=>{const streak=calcMember(m.n).curStreak;const sc=streak>=4?'#a32d2d':streak>=2?'#ba7517':'#aaa';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8"><div><div style="font-size:14px;font-weight:500">${m.n}</div><span style="font-size:11px;color:#888">${m.gc}</span></div><span style="font-size:12px;font-weight:600;color:${sc}">${streak} missed</span></div>`;}).join('')}`:'<div style="font-size:14px;color:#3b6d11;font-weight:500">Everyone attended! &#127881;</div>'}
+      ${lastAbsent.length?`
+        <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Absent members</div>
+        ${hasReasons?`
+          ${Object.entries(lastAbsentGrouped).map(([reason,members])=>`
+            <div style="margin-bottom:12px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <span style="width:10px;height:10px;border-radius:2px;background:${getReasonColor(reason)};display:inline-block;flex-shrink:0"></span>
+                <span style="font-size:12px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:.04em">${reason}</span>
+                <span style="font-size:11px;color:#888">(${members.length})</span>
+              </div>
+              ${members.map(m=>{const streak=calcMember(m.n).curStreak;const sc=streak>=4?'#a32d2d':streak>=2?'#ba7517':'#aaa';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0 7px 16px;border-bottom:0.5px solid #f0efe8"><div><div style="font-size:14px;font-weight:500">${m.n}</div><span style="font-size:11px;color:#888">${m.gc}</span></div><span style="font-size:12px;font-weight:600;color:${sc}">${streak} missed</span></div>`;}).join('')}
+            </div>`).join('')}
+          ${lastAbsentNone.length?`
+            <div style="margin-bottom:8px">
+              <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">No reason given (${lastAbsentNone.length})</div>
+              ${lastAbsentNone.map(m=>{const streak=calcMember(m.n).curStreak;const sc=streak>=4?'#a32d2d':streak>=2?'#ba7517':'#aaa';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0 7px 16px;border-bottom:0.5px solid #f0efe8"><div><div style="font-size:14px;font-weight:500">${m.n}</div><span style="font-size:11px;color:#888">${m.gc}</span></div><span style="font-size:12px;font-weight:600;color:${sc}">${streak} missed</span></div>`;}).join('')}
+            </div>`:''}
+        `:`
+          ${lastAbsentNone.map(m=>{const streak=calcMember(m.n).curStreak;const sc=streak>=4?'#a32d2d':streak>=2?'#ba7517':'#aaa';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8"><div><div style="font-size:14px;font-weight:500">${m.n}</div><span style="font-size:11px;color:#888">${m.gc}</span></div><span style="font-size:12px;font-weight:600;color:${sc}">${streak} missed</span></div>`;}).join('')}
+        `}
+      `:'<div style="font-size:14px;color:#3b6d11;font-weight:500">Everyone attended! &#127881;</div>'}
     </div>`:''}
 
     ${followUp.length?`<div style="background:#faeeda;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #ef9f27">
@@ -1993,9 +2356,20 @@ function openSummary(){
       ${streakRows.map(([streak,count])=>{const sc=Number(streak)>=4?'#a32d2d':'#ba7517';return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8"><div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${sc};display:inline-block"></span><span style="font-size:14px;font-weight:500;color:#1a1a1a">${streak} in a row</span></div><span style="font-size:18px;font-weight:700;color:${sc}">${count}</span></div>`;}).join('')}
     </div>`:''}
 
-    <div style="text-align:center;font-size:11px;color:#aaa;padding-top:8px">Gidi GC Attendance Tracking &middot; ${now}</div>
+    <div style="text-align:center;font-size:11px;color:#aaa;padding-top:8px">Gidi GC Attendance Tracking &middot; As at ${lastSess?lastSess.date:now}</div>
   `;
   document.getElementById('summaryModal').style.display='block';
+}
+function doPrint(){
+  // Copy summary content into the printArea div, then print
+  const content=document.getElementById('summaryContent').innerHTML;
+  const pa=document.getElementById('printArea');
+  pa.innerHTML=content;
+  pa.style.display='block';
+  setTimeout(()=>{
+    window.print();
+    setTimeout(()=>{pa.style.display='none';pa.innerHTML='';},1000);
+  },100);
 }
 function closeSummary(){document.getElementById('summaryModal').style.display='none';}
 function copySummaryText(){
@@ -2009,9 +2383,10 @@ function openWebSummary(){
   const now=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
   const allCalc=MEMBERS.filter(m=>m.gc!=='Guest').map(m=>({...m,...calcMember(m.n)}));
   const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
-  const avg=recs.length?Math.round(recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
+  const avg=recs.length?Math.round(recs.map(s=>{let t=0;MEMBERS.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
   const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};MEMBERS.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
-  const sessTots=recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
+  // Session totals include ALL present (incl. guests); absentees counted separately from nonGuests
+  const sessTots=recs.map(s=>{let t=0;MEMBERS.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
 
   // Birthdays
   const bdaySoon=MEMBERS.filter(m=>{const d=daysUntil(birthdays[m.n]);return d!==null&&d<=30;}).sort((a,b)=>daysUntil(birthdays[a.n])-daysUntil(birthdays[b.n]));
@@ -2054,7 +2429,7 @@ function openWebSummary(){
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Gidi GC \u2014 Summary ${now}</title>
+<title>Gidi GC \u2014 Summary As at ${lastSess?lastSess.date:now}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0efe8;color:#1a1a1a;font-size:15px;line-height:1.5;min-height:100vh}
@@ -2092,7 +2467,7 @@ footer{text-align:center;font-size:11px;color:#aaa;margin-top:8px;padding-bottom
 <div class="hero">
   <div class="hero-emoji">&#128203;</div>
   <h1>Gidi GC &mdash; Attendance</h1>
-  <p>${now}</p>
+  <p>As at ${lastSess?lastSess.date:'no sessions recorded'}</p>
 </div>
 <div class="body">
 
@@ -2101,7 +2476,7 @@ footer{text-align:center;font-size:11px;color:#aaa;margin-top:8px;padding-bottom
     <div class="stat"><div class="stat-val">${MEMBERS.length}</div><div class="stat-label">All attendees to date</div></div>
     <div class="stat"><div class="stat-val">${nonGuests.length}</div><div class="stat-label">Members &amp; attendees</div></div>
     <div class="stat"><div class="stat-val">${recs.length}</div><div class="stat-label">Sessions recorded</div></div>
-    <div class="stat"><div class="stat-val">${avg}</div><div class="stat-label">Avg attendance (excl. guests)</div></div>
+    <div class="stat"><div class="stat-val">${avg}</div><div class="stat-label">Avg attendance (incl. guests present)</div></div>
     <div class="stat"><div class="stat-val">${Math.round(allCalc.reduce((a,b)=>a+b.rate,0)/Math.max(allCalc.length,1))}%</div><div class="stat-label">Avg attendance rate</div></div>
     <div class="stat"><div class="stat-val">${followUp.length}</div><div class="stat-label">Need follow-up</div></div>
   </div>
@@ -2189,7 +2564,7 @@ footer{text-align:center;font-size:11px;color:#aaa;margin-top:8px;padding-bottom
   </div>`:''}
 
 </div>
-<footer>Gidi GC Attendance Tracking &middot; ${now}</footer>
+<footer>Gidi GC Attendance Tracking &middot; As at ${lastSess?lastSess.date:now}</footer>
 </body>
 </html>`;
 
