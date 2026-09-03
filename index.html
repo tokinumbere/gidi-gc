@@ -4,12 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gidi GC Attendance Tracking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:14px}
+body{font-family:'Kumbh Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:14px}
 .app{max-width:900px;margin:0 auto;padding:1.5rem 1rem}
-h1{font-size:20px;font-weight:500;color:#1a1a1a}
+h1{font-size:20px;font-weight:600;color:#1a1a1a;font-family:'Playfair Display',serif}
 .subtitle{font-size:13px;color:#888;margin-top:3px}
 .top-bar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:10px}
 .top-actions{display:flex;gap:8px;flex-wrap:wrap}
@@ -277,6 +280,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <button class="btn" onclick="document.getElementById('importDataFile').click()">&#8645; Import data</button>
     <input type="file" id="importDataFile" accept=".json" style="display:none" onchange="importData(this)">
     <button class="btn btn-primary" onclick="loadFromSupabase().then(ok=>{if(ok){recalcAll();showToast('Refreshed ✓',2000);}})">&#8635; Refresh</button>
+    <button class="btn btn-danger" onclick="openNewTerm()" title="Start a new term">&#127379; New Term</button>
     <button class="btn" id="lockBtn" onclick="toggleLock()" title="Lock/unlock editing" style="font-size:15px">&#128274;</button>
   </div>
 </div>
@@ -296,6 +300,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <button class="tab" data-id="trends" onclick="switchTab('trends',this)">Absence trends</button>
   <button class="tab" data-id="birthdays" onclick="switchTab('birthdays',this)">Birthdays</button>
   <button class="tab" data-id="clusters" onclick="switchTab('clusters',this)">&#127970; Clusters</button>
+  <button class="tab" data-id="archive" onclick="switchTab('archive',this)">&#128190; Archive</button>
   <button class="tab" data-id="recalc" onclick="switchTab('recalc',this)">Recalculate</button>
 </div>
 
@@ -651,8 +656,12 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <select id="cluster-week-picker" onchange="renderClusters()" style="font-size:13px;padding:7px 10px;border:0.5px solid #ccc;border-radius:8px;min-width:180px">
       <option value="">Select week for check-ins...</option>
     </select>
+    <button class="btn btn-primary btn-sm" id="analyticsToggleBtn" onclick="toggleClusterAnalytics()">&#128200; Leader analytics</button>
     <button class="btn btn-success btn-sm" onclick="openClusterModal(null)">+ Add cluster</button>
   </div>
+
+  <!-- Analytics panel (hidden by default) -->
+  <div id="clusterAnalyticsPanel" style="display:none;margin-bottom:1.5rem"></div>
 
   <!-- Cluster cards -->
   <div id="cluster-cards"></div>
@@ -796,6 +805,67 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 </div>
 </div>
 
+
+<!-- ARCHIVE -->
+<div id="tab-archive" class="panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
+    <div>
+      <p class="sec-title" style="margin-bottom:2px">Past terms</p>
+      <div style="font-size:12px;color:#888">Click any term to view it in full detail. All data is read-only.</div>
+    </div>
+  </div>
+  <div id="archiveList"></div>
+</div>
+
+<!-- ARCHIVE VIEWER MODAL -->
+<div class="member-modal" id="archiveModal" onclick="if(event.target===this)closeArchiveModal()">
+  <div class="member-modal-box" style="max-width:900px;width:95vw;max-height:90vh">
+    <div class="member-modal-header" style="position:sticky;top:0;z-index:10;background:#fafaf8">
+      <div style="font-size:15px;font-weight:500" id="archiveModalTitle">Archive</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-danger btn-sm" id="archiveDeleteBtn" onclick="deleteArchive()">&#128465; Delete</button>
+        <button class="btn btn-sm" onclick="closeArchiveModal()">&#10005; Close</button>
+      </div>
+    </div>
+    <div id="archiveContent" style="padding:20px;overflow-y:auto;max-height:80vh"></div>
+  </div>
+</div>
+
+<!-- NEW TERM MODAL -->
+<div class="member-modal" id="newTermModal" onclick="if(event.target===this)closeNewTermModal()">
+  <div class="member-modal-box" style="max-width:480px">
+    <div class="member-modal-header">
+      <div style="font-size:15px;font-weight:500">Start new term</div>
+      <button class="btn btn-sm" onclick="closeNewTermModal()">Close</button>
+    </div>
+    <div style="padding:20px">
+      <div style="background:#fcebeb;border-radius:8px;padding:10px 14px;font-size:13px;color:#791f1f;margin-bottom:16px;line-height:1.6">
+        <strong>This will archive the current term and start fresh.</strong><br>
+        Members, birthdays, clusters and assignments are kept. Attendance, check-ins and absence reasons are cleared.
+      </div>
+      <div class="form-row">
+        <label class="form-label">Term name *</label>
+        <input class="form-input" id="nt-name" type="text" placeholder="e.g. Term 1 — Apr to May 2026">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row">
+          <label class="form-label">New term start date</label>
+          <input class="form-input" id="nt-start" type="date" value="2026-09-09">
+        </div>
+        <div class="form-row">
+          <label class="form-label">New term end date</label>
+          <input class="form-input" id="nt-end" type="date" value="2026-11-18">
+        </div>
+      </div>
+      <div id="nt-error" style="display:none;background:#fcebeb;color:#791f1f;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button class="btn btn-sm" onclick="closeNewTermModal()">Cancel</button>
+        <button class="btn btn-danger" onclick="confirmNewTerm()">&#127379; Archive &amp; start new term</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MOBILE BOTTOM NAV -->
 <nav class="mob-nav" id="mobNav">
   <button class="mob-nav-btn active" data-tab="overview" onclick="switchTab('overview',document.querySelector('[data-id=overview]'));setMobNav(this)">
@@ -888,6 +958,8 @@ let clusters=[
 let clusterMembers={};
 // checkIns: {weekKey: {memberName: 'yes'|'no'|'na'}}  weekKey = Wednesday date string
 let checkIns={};
+// termArchive: [{id, name, savedAt, data:{attendance,absenceReasons,firstSession,checkIns,members,clusters,clusterMembers}}]
+let termArchive=[];
 let pendingChanges=[];
 let charts={};
 
@@ -929,7 +1001,7 @@ async function loadFromSupabase(){
 
 async function saveAll(){
   // Always save to localStorage first
-  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||''})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,savedAt:new Date().toISOString()}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||''})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,savedAt:new Date().toISOString()}));}catch(e){}
   // Then sync to Supabase
   try{
     showToast('Saving...');
@@ -964,6 +1036,7 @@ function loadSaved(){
     if(d.clusters&&d.clusters.length)clusters.splice(0,clusters.length,...d.clusters);
     if(d.clusterMembers)Object.assign(clusterMembers,d.clusterMembers);
     if(d.checkIns)Object.assign(checkIns,d.checkIns);
+    if(d.termArchive)termArchive.splice(0,termArchive.length,...d.termArchive);
     return true;
   }catch(e){return false;}
 }
@@ -977,9 +1050,12 @@ function showToast(msg,dur=2000){
 function exportData(){
   const data={
     exportedAt:new Date().toISOString(),
-    version:2,
+    version:3,
     members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||''})),
-    attendance,absenceReasons,birthdays,firstSession
+    attendance,absenceReasons,birthdays,firstSession,
+    clusters,clusterMembers,checkIns,
+    customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),
+    termArchive
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -1011,10 +1087,17 @@ function importData(input){
       Object.keys(absenceReasons).forEach(k=>delete absenceReasons[k]);
       Object.keys(birthdays).forEach(k=>delete birthdays[k]);
       Object.keys(firstSession).forEach(k=>delete firstSession[k]);
+      Object.keys(clusterMembers).forEach(k=>delete clusterMembers[k]);
+      Object.keys(checkIns).forEach(k=>delete checkIns[k]);
       if(d.attendance)Object.assign(attendance,d.attendance);
       if(d.absenceReasons)Object.assign(absenceReasons,d.absenceReasons);
       if(d.birthdays)Object.assign(birthdays,d.birthdays);
       if(d.firstSession)Object.assign(firstSession,d.firstSession);
+      if(d.clusters&&d.clusters.length)clusters.splice(0,clusters.length,...d.clusters);
+      if(d.clusterMembers)Object.assign(clusterMembers,d.clusterMembers);
+      if(d.checkIns)Object.assign(checkIns,d.checkIns);
+      if(d.customReasons)d.customReasons.forEach(r=>{if(!REASONS.includes(r))REASONS.push(r);});
+      if(d.termArchive&&d.termArchive.length)termArchive.splice(0,termArchive.length,...d.termArchive);
       recalcAll();
       // Save to Supabase so everyone sees the imported data
       showToast('Importing — syncing to server...', 5000);
@@ -2416,7 +2499,7 @@ function openWebSummary(){
 <title>Gidi GC \u2014 Summary As at ${lastSess?lastSess.date:now}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0efe8;color:#1a1a1a;font-size:15px;line-height:1.5;min-height:100vh}
+body{font-family:'Kumbh Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0efe8;color:#1a1a1a;font-size:15px;line-height:1.5;min-height:100vh}
 .hero{background:linear-gradient(135deg,#1a1a1a 0%,#2d2d2d 100%);color:#fff;padding:28px 20px 24px;text-align:center}
 .hero-emoji{font-size:36px;margin-bottom:8px}
 .hero h1{font-size:22px;font-weight:600;letter-spacing:.01em}
@@ -2631,6 +2714,7 @@ function switchTab(id,el){
   if(id==='guests')renderGuests();
   if(id==='record')renderSessionList();
   if(id==='clusters')renderClusters();
+  if(id==='archive')renderArchive();
   window.scrollTo(0,0);
 }
 
@@ -2650,8 +2734,17 @@ function getMembersInCluster(clusterId){
   return MEMBERS.filter(m=>m.gc!=='Guest'&&clusterMembers[m.n]&&clusterMembers[m.n].clusterId===clusterId);
 }
 
+function isClusterHead(name){
+  return clusters.some(c=>c.head===name);
+}
+
 function getUnassigned(){
-  return MEMBERS.filter(m=>m.gc!=='Guest'&&!clusterMembers[m.n]);
+  // Exclude guests AND cluster heads — heads are not assigned to clusters
+  return MEMBERS.filter(m=>m.gc!=='Guest'&&!isClusterHead(m.n)&&!clusterMembers[m.n]);
+}
+function getAssignable(){
+  // All non-guest, non-head members (for mass assign — includes already assigned to allow moving)
+  return MEMBERS.filter(m=>m.gc!=='Guest'&&!isClusterHead(m.n));
 }
 
 function populateClusterDropdown(selId, includeNone=true){
@@ -2705,7 +2798,7 @@ function renderClusters(){
   }
   document.getElementById('cluster-metrics').innerHTML=`
     <div class="metric"><div class="metric-label">Clusters</div><div class="metric-val">${clusters.length}</div></div>
-    <div class="metric"><div class="metric-label">Assigned members</div><div class="metric-val">${assigned}</div></div>
+    <div class="metric"><div class="metric-label">In clusters</div><div class="metric-val">${assigned}</div><div class="metric-sub">of ${MEMBERS.filter(m=>m.gc!=='Guest'&&!isClusterHead(m.n)).length} assignable</div></div>
     <div class="metric"><div class="metric-label">Unassigned</div><div class="metric-val">${unassigned}</div><div class="metric-sub">${unassigned>0?'need assigning':''}</div></div>
     ${weekKey?`<div class="metric"><div class="metric-label">Full check-ins</div><div class="metric-val">${checkedClusters}/${clusters.length}</div><div class="metric-sub">this week</div></div>`:''}
   `;
@@ -2813,6 +2906,132 @@ function renderClusters(){
   }
 }
 
+// ── CLUSTER LEADER ANALYTICS ──────────────────────────────────────────────────
+let _analyticsVisible=false;
+
+function toggleClusterAnalytics(){
+  _analyticsVisible=!_analyticsVisible;
+  const panel=document.getElementById('clusterAnalyticsPanel');
+  const btn=document.getElementById('analyticsToggleBtn');
+  if(_analyticsVisible){
+    renderClusterAnalytics();
+    panel.style.display='block';
+    btn.textContent='✕ Hide analytics';
+  } else {
+    panel.style.display='none';
+    btn.innerHTML='&#128200; Leader analytics';
+  }
+}
+
+function renderClusterAnalytics(){
+  const panel=document.getElementById('clusterAnalyticsPanel');
+  if(!panel)return;
+  const clusterRecs=getClusterSessions();
+  const allWeeks=getClusterWeeks().filter(w=>w.key<=new Date().toISOString().split('T')[0]);
+
+  const data=clusters.map(c=>{
+    const members=getMembersInCluster(c.id);
+
+    // Attendance rate (cluster term sessions only)
+    let attRate=0;
+    if(clusterRecs.length&&members.length){
+      const tot=members.reduce((s,m)=>s+clusterRecs.filter(sk=>attendance[sk.key]&&attendance[sk.key][m.n]==='present').length,0);
+      attRate=Math.round(tot/(members.length*clusterRecs.length)*100);
+    }
+
+    // Check-in rate (all weeks since cluster start)
+    const eligibleWeeks=allWeeks.filter(w=>w.key>=c.startDate);
+    let ciDone=0,ciTotal=0;
+    eligibleWeeks.forEach(w=>{
+      members.forEach(m=>{
+        if(clusterMembers[m.n]?.joinDate<=w.key){
+          ciTotal++;
+          if((checkIns[w.key]||{})[m.n]==='yes')ciDone++;
+        }
+      });
+    });
+    const ciRate=ciTotal?Math.round(ciDone/ciTotal*100):0;
+
+    // Follow-up count
+    const followUpCount=members.filter(m=>calcMember(m.n).curStreak>=2).length;
+
+    // Last week check-in completion
+    const lastWeek=allWeeks.length?allWeeks[allWeeks.length-1]:null;
+    const lastWeekEligible=lastWeek?members.filter(m=>(clusterMembers[m.n]?.joinDate||'')<=(lastWeek.key)):[];
+    const lastWeekDone=lastWeek?lastWeekEligible.filter(m=>(checkIns[lastWeek.key]||{})[m.n]==='yes').length:0;
+    const lastWeekRate=lastWeekEligible.length?Math.round(lastWeekDone/lastWeekEligible.length*100):0;
+
+    return{c,members,attRate,ciRate,ciDone,ciTotal,followUpCount,lastWeekRate,lastWeekDone,lastWeekTotal:lastWeekEligible.length};
+  }).sort((a,b)=>b.attRate-a.attRate);
+
+  const maxAtt=Math.max(...data.map(d=>d.attRate),1);
+  const maxCi=Math.max(...data.map(d=>d.ciRate),1);
+
+  panel.innerHTML=`
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden">
+      <div style="padding:12px 14px;border-bottom:0.5px solid #e0e0d8;display:flex;align-items:center;justify-content:space-between">
+        <p class="sec-title" style="margin-bottom:0">Leader performance comparison</p>
+        <div style="font-size:12px;color:#888">Sorted by attendance rate</div>
+      </div>
+
+      <!-- Leaderboard table -->
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:#fafaf8">
+              <th style="text-align:left;padding:10px 14px;border-bottom:0.5px solid #e0e0d8;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.04em">Leader / Cluster</th>
+              <th style="padding:10px 10px;border-bottom:0.5px solid #e0e0d8;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.04em;text-align:center">Members</th>
+              <th style="padding:10px 10px;border-bottom:0.5px solid #e0e0d8;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.04em;text-align:center">Attendance</th>
+              <th style="padding:10px 10px;border-bottom:0.5px solid #e0e0d8;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.04em;text-align:center">Check-in rate</th>
+              <th style="padding:10px 10px;border-bottom:0.5px solid #e0e0d8;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.04em;text-align:center">Last week</th>
+              <th style="padding:10px 10px;border-bottom:0.5px solid #e0e0d8;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.04em;text-align:center">Follow-up</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.map((d,i)=>{
+              const attColor=d.attRate>=70?'#085041':d.attRate>=50?'#ba7517':'#a32d2d';
+              const ciColor=d.ciRate>=70?'#085041':d.ciRate>=50?'#ba7517':'#a32d2d';
+              const lwColor=d.lastWeekRate>=70?'#085041':d.lastWeekRate>=50?'#ba7517':'#a32d2d';
+              const rank=i===0?'&#129351;':i===1?'&#129352;':i===2?'&#129353;':`${i+1}.`;
+              return`<tr style="border-bottom:0.5px solid #f0efe8">
+                <td style="padding:12px 14px">
+                  <div style="font-weight:600;font-size:13px">${rank} ${d.c.head}</div>
+                  <div style="font-size:11px;color:#888;margin-top:1px">${d.c.name}</div>
+                </td>
+                <td style="padding:10px;text-align:center;font-weight:500">${d.members.length}</td>
+                <td style="padding:10px;text-align:center">
+                  <div style="font-size:16px;font-weight:700;color:${attColor}">${clusterRecs.length?d.attRate+'%':'—'}</div>
+                  <div style="width:60px;height:4px;background:#f0efe8;border-radius:2px;margin:4px auto 0;overflow:hidden">
+                    <div style="height:100%;width:${clusterRecs.length?d.attRate:0}%;background:${attColor};border-radius:2px"></div>
+                  </div>
+                </td>
+                <td style="padding:10px;text-align:center">
+                  <div style="font-size:16px;font-weight:700;color:${ciColor}">${d.ciTotal?d.ciRate+'%':'—'}</div>
+                  <div style="font-size:10px;color:#aaa;margin-top:2px">${d.ciDone}/${d.ciTotal}</div>
+                </td>
+                <td style="padding:10px;text-align:center">
+                  <div style="font-size:16px;font-weight:700;color:${lwColor}">${d.lastWeekTotal?d.lastWeekRate+'%':'—'}</div>
+                  <div style="font-size:10px;color:#aaa;margin-top:2px">${d.lastWeekDone}/${d.lastWeekTotal}</div>
+                </td>
+                <td style="padding:10px;text-align:center">
+                  ${d.followUpCount?`<span style="background:#fcebeb;color:#a32d2d;border-radius:20px;padding:2px 8px;font-size:12px;font-weight:600">${d.followUpCount}</span>`:'<span style="color:#1D9E75;font-size:13px">✓</span>'}
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Legend -->
+      <div style="padding:10px 14px;border-top:0.5px solid #e0e0d8;font-size:11px;color:#888;display:flex;gap:14px;flex-wrap:wrap">
+        <span><strong>Attendance</strong> — % of cluster members present in Sept sessions</span>
+        <span><strong>Check-in rate</strong> — % of weekly check-ins completed since term start</span>
+        <span><strong>Last week</strong> — check-in completion for most recent week</span>
+        <span><strong>Follow-up</strong> — members with 2+ consecutive absences</span>
+      </div>
+    </div>
+  `;
+}
 // ── CHECK-IN TOGGLE ───────────────────────────────────────────────────────────
 function setCheckIn(weekKey,memberName,val){
   if(!checkIns[weekKey])checkIns[weekKey]={};
@@ -2823,37 +3042,61 @@ function setCheckIn(weekKey,memberName,val){
 
 // ── MASS ASSIGN MEMBERS TO CLUSTER ───────────────────────────────────────────
 function openMassAssign(clusterId,clusterName){
-  const unassigned=getUnassigned().sort(byFirstName);
-  const existing=getMembersInCluster(clusterId).sort(byFirstName);
+  const assignable=getAssignable().sort(byFirstName);
   const joinDate=new Date().toISOString().split('T')[0];
-  const html=`<div style="font-size:14px;font-weight:500;margin-bottom:10px">Assign members to ${clusterName}</div>
-    <div style="font-size:12px;color:#888;margin-bottom:10px">Select unassigned members to add to this cluster.</div>
-    ${unassigned.length===0?'<div style="color:#888;font-size:13px">No unassigned members.</div>':
-    unassigned.map(m=>`<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid #f0efe8;cursor:pointer;font-size:13px">
-      <input type="checkbox" value="${m.n}" style="width:16px;height:16px"> ${m.n} <span style="color:#888">(${m.gc})</span>
-    </label>`).join('')}
-    <div class="form-row" style="margin-top:12px">
-      <label class="form-label">Join date</label>
+  const html=`<div style="font-size:14px;font-weight:500;margin-bottom:6px">Assign members to ${clusterName}</div>
+    <div style="font-size:12px;color:#888;margin-bottom:10px">Tick to assign to this cluster. Currently assigned members are pre-ticked. Unticking removes them from this cluster.</div>
+    <div style="max-height:300px;overflow-y:auto;border:0.5px solid #e0e0d8;border-radius:8px;margin-bottom:10px">
+    ${assignable.length===0?'<div style="color:#888;font-size:13px;padding:12px">No assignable members.</div>':
+    assignable.map(m=>{
+      const inThisCluster=clusterMembers[m.n]&&clusterMembers[m.n].clusterId===clusterId;
+      const inOtherCluster=clusterMembers[m.n]&&clusterMembers[m.n].clusterId!==clusterId;
+      const otherClusterName=inOtherCluster?clusters.find(c=>c.id===clusterMembers[m.n].clusterId)?.name:'';
+      return`<label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:0.5px solid #f0efe8;cursor:pointer;font-size:13px;background:${inThisCluster?'#f2fbf7':''}">
+        <input type="checkbox" value="${m.n}" ${inThisCluster?'checked':''} style="width:16px;height:16px;flex-shrink:0">
+        <div><span style="font-weight:${inThisCluster?'600':'400'}">${m.n}</span> <span style="color:#888">(${m.gc})</span>${inOtherCluster?`<div style="font-size:11px;color:#ba7517">Currently in: ${otherClusterName}</div>`:''}${!clusterMembers[m.n]?'<div style="font-size:11px;color:#888">Unassigned</div>':''}</div>
+      </label>`;
+    }).join('')}
+    </div>
+    <div class="form-row" style="margin-top:0">
+      <label class="form-label">Join date for new assignments</label>
       <input class="form-input" id="mass-join-date" type="date" value="${joinDate}">
     </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
-      <button class="btn btn-sm" onclick="this.closest('.modal-overlay')?.remove()||document.getElementById('massAssignModal')?.remove()">Cancel</button>
-      <button class="btn btn-success btn-sm" onclick="applyMassAssign('${clusterId}')">Assign selected</button>
+      <button class="btn btn-sm" onclick="document.getElementById('massAssignModal').style.display='none'">Cancel</button>
+      <button class="btn btn-success btn-sm" onclick="applyMassAssign('${clusterId}')">Save assignments</button>
     </div>`;
-  // Use a simple overlay
   let mo=document.getElementById('massAssignModal');
   if(!mo){mo=document.createElement('div');mo.id='massAssignModal';mo.className='modal-overlay';mo.style.display='flex';document.body.appendChild(mo);}
-  mo.innerHTML=`<div class="modal-box" style="max-width:480px;max-height:80vh;overflow-y:auto"><div style="padding:20px">${html}</div></div>`;
+  mo.innerHTML=`<div class="modal-box" style="max-width:500px;max-height:85vh;overflow-y:auto"><div style="padding:20px">${html}</div></div>`;
   mo.style.display='flex';
 }
 function applyMassAssign(clusterId){
   const mo=document.getElementById('massAssignModal');
-  const checks=mo.querySelectorAll('input[type=checkbox]:checked');
   const joinDate=document.getElementById('mass-join-date').value||new Date().toISOString().split('T')[0];
-  checks.forEach(cb=>{clusterMembers[cb.value]={clusterId,joinDate};});
+  const allBoxes=mo.querySelectorAll('input[type=checkbox]');
+  let added=0,removed=0,moved=0;
+  allBoxes.forEach(cb=>{
+    const name=cb.value;
+    if(cb.checked){
+      if(clusterMembers[name]&&clusterMembers[name].clusterId===clusterId){return;} // no change
+      if(clusterMembers[name]&&clusterMembers[name].clusterId!==clusterId)moved++;
+      else added++;
+      clusterMembers[name]={clusterId,joinDate};
+    } else {
+      // Unchecked — remove from this cluster only if they were in it
+      if(clusterMembers[name]&&clusterMembers[name].clusterId===clusterId){
+        delete clusterMembers[name];removed++;
+      }
+    }
+  });
   mo.style.display='none';
   saveAll();renderClusters();
-  showToast(`${checks.length} member${checks.length===1?'':'s'} assigned`,2000);
+  const parts=[];
+  if(added)parts.push(`${added} added`);
+  if(moved)parts.push(`${moved} moved`);
+  if(removed)parts.push(`${removed} removed`);
+  showToast(parts.length?parts.join(', '):'No changes',2000);
 }
 
 // ── CLUSTER MODAL (add/edit) ──────────────────────────────────────────────────
@@ -2901,11 +3144,13 @@ function saveCluster(){
 }
 function deleteCluster(){
   if(!_editingClusterId)return;
-  if(!confirm('Delete this cluster? Members will become unassigned.'))return;
-  // Unassign members
+  const c=clusters.find(x=>x.id===_editingClusterId);if(!c)return;
+  if(!confirm(`Delete "${c.name}"?\n\nAll members will become unassigned and can be reassigned to other clusters. The cluster head (${c.head}) will also be freed up.`))return;
+  // Unassign all members in this cluster
   Object.keys(clusterMembers).forEach(n=>{if(clusterMembers[n].clusterId===_editingClusterId)delete clusterMembers[n];});
-  clusters=clusters.filter(c=>c.id!==_editingClusterId);
-  closeClusterModal();saveAll();renderClusters();showToast('Cluster deleted');
+  // Remove cluster
+  clusters=clusters.filter(x=>x.id!==_editingClusterId);
+  closeClusterModal();saveAll();renderClusters();showToast(`"${c.name}" deleted — members unassigned`);
 }
 
 // ── POPULATE CLUSTER DROPDOWN IN MEMBER MODAL ─────────────────────────────────
@@ -3025,7 +3270,7 @@ function doClusterPrint(){
   let ps=document.getElementById('_printPageStyle');
   if(!ps){ps=document.createElement('style');ps.id='_printPageStyle';document.head.appendChild(ps);}
   ps.textContent='@media print{@page{margin:3mm 3mm!important}}';
-  pa.innerHTML=`<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:10pt;color:#1a1a1a">${content}</div>`;
+  pa.innerHTML=`<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:10pt;color:#1a1a1a">${content}</div>`;
   pa.style.display='block';
   setTimeout(()=>{window.print();setTimeout(()=>{pa.style.display='none';pa.innerHTML='';pa.removeAttribute('data-mode');ps.textContent='';},1200);},150);
 }
@@ -3317,6 +3562,251 @@ function openClusterHeadReport(clusterId){
   document.getElementById('clusterSummaryContent').innerHTML = html;
   document.getElementById('clusterSummaryModal').className = 'member-modal open';
   _summaryClusterId = clusterId;
+}
+
+// ── ARCHIVE & NEW TERM ────────────────────────────────────────────────────────
+
+function renderArchive(){
+  const el=document.getElementById('archiveList');
+  if(!el)return;
+  if(!termArchive.length){
+    el.innerHTML=`<div style="text-align:center;padding:3rem;color:#888;font-size:13px">
+      <div style="font-size:32px;margin-bottom:10px">&#128190;</div>
+      No archived terms yet. When you start a new term, the current data is archived here.
+    </div>`;
+    return;
+  }
+  el.innerHTML=[...termArchive].reverse().map(t=>{
+    const d=t.data;
+    const sessions=Object.keys(d.attendance||{});
+    const members=(d.members||[]).filter(m=>m.gc!=='Guest');
+    const totalPresent=sessions.reduce((sum,sk)=>{
+      return sum+members.filter(m=>d.attendance[sk]&&d.attendance[sk][m.n]==='present').length;
+    },0);
+    const avgAtt=sessions.length&&members.length?Math.round(totalPresent/sessions.length):0;
+    return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:14px;font-weight:500;margin-bottom:4px">${t.name}</div>
+        <div style="font-size:12px;color:#888">${sessions.length} sessions &middot; ${members.length} members &middot; avg ${avgAtt} attendance &middot; saved ${new Date(t.savedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary btn-sm" onclick="openArchiveViewer('${t.id}')">&#128065; View full detail</button>
+        <button class="btn btn-sm" onclick="downloadArchive('${t.id}')">&#8659; Download</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── ARCHIVE VIEWER ─────────────────────────────────────────────────────────────
+let _viewingArchiveId=null;
+
+function openArchiveViewer(id){
+  const t=termArchive.find(x=>x.id===id);if(!t)return;
+  _viewingArchiveId=id;
+  document.getElementById('archiveModalTitle').textContent=t.name+' — Full Detail';
+  document.getElementById('archiveContent').innerHTML=buildArchiveHTML(t);
+  document.getElementById('archiveModal').className='member-modal open';
+}
+function closeArchiveModal(){document.getElementById('archiveModal').className='member-modal';_viewingArchiveId=null;}
+
+function buildArchiveHTML(t){
+  const d=t.data;
+  const members=(d.members||[]);
+  const nonGuests=members.filter(m=>m.gc!=='Guest');
+  const att=d.attendance||{};
+  const absR=d.absenceReasons||{};
+  const sessions=Object.keys(att).sort();
+  const now=new Date(t.savedAt).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+
+  // Calc member stats for archive
+  function calcAtt(name){
+    let present=0,total=0;
+    const fs=d.firstSession?d.firstSession[name]:'';
+    sessions.forEach(sk=>{
+      if(fs&&sk<fs)return;
+      total++;
+      if(att[sk]&&att[sk][name]==='present')present++;
+    });
+    const rate=total?Math.round(present/total*100):0;
+    // streak
+    let streak=0;
+    for(let i=sessions.length-1;i>=0;i--){
+      const sk=sessions[i];if(fs&&sk<fs)break;
+      if(att[sk]&&att[sk][name]==='present')break;
+      streak++;
+    }
+    return{present,total,rate,streak};
+  }
+
+  const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};
+  members.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
+  const sessTots=sessions.map(sk=>{
+    const p=members.filter(m=>att[sk]&&att[sk][m.n]==='present').length;
+    return{key:sk,date:sk,present:p};
+  });
+  const avgAtt=sessTots.length?Math.round(sessTots.reduce((s,x)=>s+x.present,0)/sessTots.length):0;
+  const followUp=nonGuests.map(m=>({...m,...calcAtt(m.n)})).filter(m=>m.streak>=2).sort((a,b)=>b.streak-a.streak);
+
+  const GBKG={Core:'#e1f5ee',Frequent:'#e6f1fb',Rare:'#faeeda',Unresponsive:'#fcebeb',Guest:'#f1efe8'};
+  const GCOL={Core:'#085041',Frequent:'#0c447c',Rare:'#633806',Unresponsive:'#791f1f',Guest:'#444'};
+
+  return`
+    <div style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);border-radius:10px;padding:18px;text-align:center;margin-bottom:16px">
+      <div style="font-size:20px;font-weight:700;color:#e8e8e8;margin-bottom:4px">${t.name}</div>
+      <div style="font-size:12px;color:#aaa">Archived ${now} &middot; Read-only</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+      ${[['Members',members.length,''],['Sessions',sessions.length,'recorded'],['Avg attendance',avgAtt,'per session']].map(([l,v,s])=>`
+        <div style="background:#f5f5f3;border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700">${v}</div>
+          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">${l}</div>
+          ${s?`<div style="font-size:10px;color:#aaa">${s}</div>`:''}
+        </div>`).join('')}
+    </div>
+
+    <!-- GC breakdown -->
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">GC status breakdown</div>
+      ${Object.entries(gcC).map(([gc,n])=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+        <span style="padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:${GBKG[gc]||'#f5f5f3'};color:${GCOL[gc]||'#888'};min-width:100px">${gc}</span>
+        <div style="flex:1;height:5px;background:#f0efe8;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(n/members.length*100)}%;background:${GCOL[gc]||'#888'};border-radius:3px"></div></div>
+        <span style="font-size:13px;font-weight:600;min-width:20px;text-align:right">${n}</span>
+      </div>`).join('')}
+    </div>
+
+    <!-- Session attendance -->
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Session attendance</div>
+      ${sessTots.map(s=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8;font-size:13px">
+        <span>${s.date}</span><span style="font-weight:600;color:#1D9E75">${s.present}</span>
+      </div>`).join('')}
+    </div>
+
+    <!-- Absenteeism -->
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Member absenteeism</div>
+      ${nonGuests.map(m=>{
+        const c=calcAtt(m.n);
+        const rc=c.rate<=25?'#a32d2d':c.rate<=50?'#ba7517':'#1D9E75';
+        const dots=sessions.map(sk=>{
+          const fs=d.firstSession?d.firstSession[m.n]:'';
+          if(fs&&sk<fs)return`<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#e0e0d8;margin:1px" title="${sk}"></span>`;
+          const st=att[sk]?att[sk][m.n]:'unknown';
+          return`<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${st==='present'?'#1D9E75':'#E24B4A'};margin:1px" title="${sk}"></span>`;
+        }).join('');
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8;gap:8px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:13px;font-weight:500">${m.n}</div>
+            <div style="margin-top:3px">${dots}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:14px;font-weight:700;color:${rc}">${c.rate}%</div>
+            <div style="font-size:11px;color:#888">${c.present}/${c.total}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${followUp.length?`
+    <div style="background:#faeeda;border:0.5px solid #ef9f27;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">⚠ Follow-up needed at end of term</div>
+      ${followUp.map(m=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(0,0,0,.08);font-size:13px">
+        <span style="font-weight:600">${m.n}</span>
+        <span style="color:${m.streak>=4?'#a32d2d':'#ba7517'};font-weight:700">${m.streak} in a row</span>
+      </div>`).join('')}
+    </div>`:''}
+
+    <div style="text-align:center;font-size:11px;color:#aaa;padding:8px 0">Gidi GC &middot; ${t.name} &middot; Archived ${now}</div>
+  `;
+}
+
+function downloadArchive(id){
+  const t=termArchive.find(x=>x.id===id);if(!t)return;
+  const blob=new Blob([JSON.stringify(t,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='GidiGC-'+t.name.replace(/[^a-z0-9]+/gi,'-')+'.json';
+  a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
+
+function deleteArchive(){
+  if(!_viewingArchiveId)return;
+  const t=termArchive.find(x=>x.id===_viewingArchiveId);if(!t)return;
+  if(!confirm(`Permanently delete "${t.name}" archive? This cannot be undone.`))return;
+  termArchive.splice(termArchive.findIndex(x=>x.id===_viewingArchiveId),1);
+  closeArchiveModal();saveAll();renderArchive();showToast('Archive deleted');
+}
+
+// ── NEW TERM ───────────────────────────────────────────────────────────────────
+function openNewTerm(){
+  if(!requireEdit())return;
+  // Pre-fill name with current term info
+  const recs=getRecordedSessions();
+  const first=recs.length?recs[0].date:'';
+  const last=recs.length?recs[recs.length-1].date:'';
+  document.getElementById('nt-name').value=first&&last?`Term — ${first} to ${last}`:'';
+  document.getElementById('nt-error').style.display='none';
+  document.getElementById('newTermModal').className='member-modal open';
+}
+function closeNewTermModal(){document.getElementById('newTermModal').className='member-modal';}
+
+async function confirmNewTerm(){
+  const name=document.getElementById('nt-name').value.trim();
+  const startDate=document.getElementById('nt-start').value;
+  const endDate=document.getElementById('nt-end').value;
+  const err=document.getElementById('nt-error');
+  if(!name){err.textContent='Please enter a term name.';err.style.display='block';return;}
+  if(!startDate||!endDate){err.textContent='Please enter start and end dates.';err.style.display='block';return;}
+
+  // 1. Archive current data
+  const archiveEntry={
+    id:'term_'+Date.now(),
+    name,
+    savedAt:new Date().toISOString(),
+    data:{
+      members:MEMBERS.map(m=>({...m})),
+      attendance:JSON.parse(JSON.stringify(attendance)),
+      absenceReasons:JSON.parse(JSON.stringify(absenceReasons)),
+      firstSession:JSON.parse(JSON.stringify(firstSession)),
+      checkIns:JSON.parse(JSON.stringify(checkIns)),
+      clusters:JSON.parse(JSON.stringify(clusters)),
+      clusterMembers:JSON.parse(JSON.stringify(clusterMembers))
+    }
+  };
+  termArchive.push(archiveEntry);
+
+  // 2. Clear live data
+  Object.keys(attendance).forEach(k=>delete attendance[k]);
+  Object.keys(absenceReasons).forEach(k=>delete absenceReasons[k]);
+  Object.keys(firstSession).forEach(k=>delete firstSession[k]);
+  Object.keys(checkIns).forEach(k=>delete checkIns[k]);
+
+  // 3. Reset GC statuses to originals
+  MEMBERS.forEach(m=>{if(m.gcOrig)m.gc=m.gcOrig;});
+
+  // 4. Build new session schedule from start to end date (Wednesdays only)
+  const newSessions=[];
+  const d=new Date(startDate+'T12:00:00');
+  const endD=new Date(endDate+'T12:00:00');
+  // Snap to Wednesday
+  while(d.getDay()!==3)d.setDate(d.getDate()+1);
+  const MONTHS_S=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  while(d<=endD){
+    const key=d.toISOString().split('T')[0];
+    const date=`${d.getDate()} ${MONTHS_S[d.getMonth()]} ${d.getFullYear()}`;
+    newSessions.push({date,key});
+    d.setDate(d.getDate()+7);
+  }
+  SESSIONS_DEF.splice(0,SESSIONS_DEF.length,...newSessions);
+
+  // 5. Save and refresh
+  closeNewTermModal();
+  await saveAll();
+  recalcAll();
+  showToast(`"${name}" archived. New term started! ✓`,3500);
+  // Switch to overview
+  switchTab('overview',document.querySelector('[data-id=overview]'));
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
