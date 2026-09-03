@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gidi GC Attendance Tracking</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:14px}
@@ -895,128 +894,80 @@ let charts={};
 // ── SUPABASE ──────────────────────────────────────────────────────────────────
 const SB_URL='https://rgmdtjfkffwoayvzqrks.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWR0amZrZmZ3b2F5dnpxcmtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NDA1NzQsImV4cCI6MjEwNDAxNjU3NH0.ZtsXCmqLCmmIsIgMsLFAqfW04RKwWZO5s0lrry04CbI';
-let sb=null;
-try{if(typeof supabase!=='undefined')sb=supabase.createClient(SB_URL,SB_KEY);}
-catch(e){console.warn('Supabase unavailable:',e);}
+const SB_H={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+
+async function sbGet(table){
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/'+table+'?select=*',{headers:SB_H});
+    if(!r.ok)return[];
+    return await r.json();
+  }catch(e){return[];}
+}
+
+async function sbPost(table,rows){
+  if(!rows||!rows.length)return;
+  try{
+    await fetch(SB_URL+'/rest/v1/'+table,{
+      method:'POST',
+      headers:{...SB_H,'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify(rows)
+    });
+  }catch(e){console.warn('sbPost error',table,e);}
+}
 
 function showSyncOverlay(msg){showToast(msg||'Syncing...',5000);}
 function hideSyncOverlay(){}
 
-// ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
 async function loadFromSupabase(){
-  if(!sb){console.warn('Supabase not initialised');return false;}
-  showSyncOverlay('Loading latest data...');
-  // Timeout after 8 seconds — fall back to local data
-  const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),8000));
   try{
-    await Promise.race([_loadFromSupabaseInner(), timeout]);
-    hideSyncOverlay();
-    return true;
+    const ctrl=new AbortController();
+    const t=setTimeout(()=>ctrl.abort(),8000);
+    await _doLoad();
+    clearTimeout(t);
+    hideSyncOverlay();return true;
   }catch(e){
-    console.error('Supabase load error:',e);
     hideSyncOverlay();
-    if(e.message==='timeout'){
-      showToast('Server took too long — showing local data. Try refreshing.',4000);
-    } else {
-      showToast('Could not load from server — showing local data',3500);
-    }
+    showToast('Could not reach server — showing local data',3000);
     return false;
   }
 }
 
-async function _loadFromSupabaseInner(){
-    // Members
-    const {data:mems}=await sb.from('members').select('*');
-    if(mems&&mems.length){
-      mems.forEach(row=>{
-        let m=MEMBERS.find(x=>x.n===row.name);
-        if(!m){m={n:row.name,gc:row.gc,gcOrig:row.gc_orig||row.gc,city:row.city||'Attendee',g:row.gender||'Female',phone:row.phone||'',email:row.email||''};MEMBERS.push(m);}
-        else{m.gc=row.gc;m.gcOrig=row.gc_orig||row.gc;if(row.city)m.city=row.city;if(row.gender)m.g=row.gender;if(row.phone)m.phone=row.phone;if(row.email)m.email=row.email;}
-      });
-    }
-
-    // Attendance
-    const {data:att}=await sb.from('attendance').select('*');
-    if(att)att.forEach(row=>{if(!attendance[row.session_key])attendance[row.session_key]={};attendance[row.session_key][row.member_name]=row.status;});
-
-    // Absence reasons
-    const {data:ar}=await sb.from('absence_reasons').select('*');
-    if(ar)ar.forEach(row=>{if(!absenceReasons[row.session_key])absenceReasons[row.session_key]={};absenceReasons[row.session_key][row.member_name]=row.reason;});
-
-    // Birthdays
-    const {data:bd}=await sb.from('birthdays').select('*');
-    if(bd)bd.forEach(row=>{birthdays[row.member_name]=row.birthday;});
-
-    // First session
-    const {data:fs}=await sb.from('first_session').select('*');
-    if(fs)fs.forEach(row=>{firstSession[row.member_name]=row.session_key;});
-
-    // Clusters
-    const {data:cl}=await sb.from('clusters').select('*');
-    if(cl&&cl.length){clusters.splice(0,clusters.length,...cl.map(r=>({id:r.id,name:r.name,head:r.head,startDate:r.start_date})));}
-
-    // Cluster members
-    const {data:cm}=await sb.from('cluster_members').select('*');
-    if(cm)cm.forEach(row=>{clusterMembers[row.member_name]={clusterId:row.cluster_id,joinDate:row.join_date};});
-
-    // Check-ins
-    const {data:ci}=await sb.from('check_ins').select('*');
-    if(ci)ci.forEach(row=>{if(!checkIns[row.week_key])checkIns[row.week_key]={};checkIns[row.week_key][row.member_name]=row.status;});
-
-    // Custom reasons
-    const {data:cr}=await sb.from('custom_reasons').select('*');
-    if(cr)cr.forEach(row=>{if(!REASONS.includes(row.reason))REASONS.push(row.reason);});
-  // end _loadFromSupabaseInner
-  }
+async function _doLoad(){
+  const [mems,att,ar,bd,fs,cl,cm,ci,cr]=await Promise.all([
+    sbGet('members'),sbGet('attendance'),sbGet('absence_reasons'),
+    sbGet('birthdays'),sbGet('first_session'),sbGet('clusters'),
+    sbGet('cluster_members'),sbGet('check_ins'),sbGet('custom_reasons')
+  ]);
+  mems.forEach(row=>{let m=MEMBERS.find(x=>x.n===row.name);if(!m){m={n:row.name,gc:row.gc,gcOrig:row.gc_orig||row.gc,city:row.city||'Attendee',g:row.gender||'Female',phone:row.phone||'',email:row.email||''};MEMBERS.push(m);}else{m.gc=row.gc;m.gcOrig=row.gc_orig||row.gc;if(row.city)m.city=row.city;if(row.gender)m.g=row.gender;if(row.phone)m.phone=row.phone;if(row.email)m.email=row.email;}});
+  att.forEach(row=>{if(!attendance[row.session_key])attendance[row.session_key]={};attendance[row.session_key][row.member_name]=row.status;});
+  ar.forEach(row=>{if(!absenceReasons[row.session_key])absenceReasons[row.session_key]={};absenceReasons[row.session_key][row.member_name]=row.reason;});
+  bd.forEach(row=>{birthdays[row.member_name]=row.birthday;});
+  fs.forEach(row=>{firstSession[row.member_name]=row.session_key;});
+  if(cl.length)clusters.splice(0,clusters.length,...cl.map(r=>({id:r.id,name:r.name,head:r.head,startDate:r.start_date})));
+  cm.forEach(row=>{clusterMembers[row.member_name]={clusterId:row.cluster_id,joinDate:row.join_date};});
+  ci.forEach(row=>{if(!checkIns[row.week_key])checkIns[row.week_key]={};checkIns[row.week_key][row.member_name]=row.status;});
+  cr.forEach(row=>{if(!REASONS.includes(row.reason))REASONS.push(row.reason);});
 }
 
-// ── SAVE TO SUPABASE (upsert everything changed) ──────────────────────────────
 async function saveAll(){
-  // Always save to localStorage first
   try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,phone:m.phone||'',email:m.email||''})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,savedAt:new Date().toISOString()}));}catch(e){}
-
-  if(!sb){showToast('Saved locally (offline mode)',2000);return;}
   showToast('Saving...');
   try{
-    // Upsert members
-    await sb.from('members').upsert(MEMBERS.map(m=>({name:m.n,gc:m.gc,gc_orig:m.gcOrig||m.gc,city:m.city||'',gender:m.g||'',phone:m.phone||'',email:m.email||'',updated_at:new Date().toISOString()})),{onConflict:'name'});
-
-    // Upsert attendance
-    const attRows=[];Object.entries(attendance).forEach(([sk,recs])=>Object.entries(recs).forEach(([mn,st])=>attRows.push({session_key:sk,member_name:mn,status:st})));
-    if(attRows.length)await sb.from('attendance').upsert(attRows,{onConflict:'session_key,member_name'});
-
-    // Upsert absence reasons
-    const arRows=[];Object.entries(absenceReasons).forEach(([sk,recs])=>Object.entries(recs).forEach(([mn,r])=>{if(r)arRows.push({session_key:sk,member_name:mn,reason:r});}));
-    if(arRows.length)await sb.from('absence_reasons').upsert(arRows,{onConflict:'session_key,member_name'});
-
-    // Upsert birthdays
-    const bdRows=Object.entries(birthdays).map(([n,b])=>({member_name:n,birthday:b}));
-    if(bdRows.length)await sb.from('birthdays').upsert(bdRows,{onConflict:'member_name'});
-
-    // Upsert first session
-    const fsRows=Object.entries(firstSession).map(([n,sk])=>({member_name:n,session_key:sk}));
-    if(fsRows.length)await sb.from('first_session').upsert(fsRows,{onConflict:'member_name'});
-
-    // Upsert clusters
-    await sb.from('clusters').upsert(clusters.map(c=>({id:c.id,name:c.name,head:c.head,start_date:c.startDate})),{onConflict:'id'});
-
-    // Upsert cluster members
-    const cmRows=Object.entries(clusterMembers).map(([mn,v])=>({member_name:mn,cluster_id:v.clusterId,join_date:v.joinDate}));
-    if(cmRows.length)await sb.from('cluster_members').upsert(cmRows,{onConflict:'member_name'});
-
-    // Upsert check-ins
-    const ciRows=[];Object.entries(checkIns).forEach(([wk,recs])=>Object.entries(recs).forEach(([mn,st])=>ciRows.push({week_key:wk,member_name:mn,status:st})));
-    if(ciRows.length)await sb.from('check_ins').upsert(ciRows,{onConflict:'week_key,member_name'});
-
-    // Upsert custom reasons
-    const customR=REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r));
-    if(customR.length)await sb.from('custom_reasons').upsert(customR.map(r=>({reason:r})),{onConflict:'reason'});
-
+    await sbPost('members',MEMBERS.map(m=>({name:m.n,gc:m.gc,gc_orig:m.gcOrig||m.gc,city:m.city||'',gender:m.g||'',phone:m.phone||'',email:m.email||'',updated_at:new Date().toISOString()})));
+    const attR=[];Object.entries(attendance).forEach(([sk,r])=>Object.entries(r).forEach(([mn,st])=>attR.push({session_key:sk,member_name:mn,status:st})));
+    await sbPost('attendance',attR);
+    const arR=[];Object.entries(absenceReasons).forEach(([sk,r])=>Object.entries(r).forEach(([mn,v])=>{if(v)arR.push({session_key:sk,member_name:mn,reason:v});}));
+    await sbPost('absence_reasons',arR);
+    await sbPost('birthdays',Object.entries(birthdays).map(([n,b])=>({member_name:n,birthday:b})));
+    await sbPost('first_session',Object.entries(firstSession).map(([n,sk])=>({member_name:n,session_key:sk})));
+    await sbPost('clusters',clusters.map(c=>({id:c.id,name:c.name,head:c.head,start_date:c.startDate})));
+    await sbPost('cluster_members',Object.entries(clusterMembers).map(([mn,v])=>({member_name:mn,cluster_id:v.clusterId,join_date:v.joinDate})));
+    const ciR=[];Object.entries(checkIns).forEach(([wk,r])=>Object.entries(r).forEach(([mn,st])=>ciR.push({week_key:wk,member_name:mn,status:st})));
+    await sbPost('check_ins',ciR);
+    const cust=REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r));
+    await sbPost('custom_reasons',cust.map(r=>({reason:r})));
     showToast('Saved ✓',2000);
-  }catch(e){
-    console.error('Supabase save error:',e);
-    showToast('Save failed — check connection',3000);
-  }
+  }catch(e){showToast('Saved locally — server sync failed',3000);}
 }
 
 function loadSaved(){
