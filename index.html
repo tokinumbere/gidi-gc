@@ -243,6 +243,7 @@ tr:hover td{background:#fafaf8}
   <button class="tab" data-id="absenteeism" onclick="switchTab('absenteeism',this)">Absenteeism</button>
   <button class="tab" data-id="trends" onclick="switchTab('trends',this)">Absence trends</button>
   <button class="tab" data-id="birthdays" onclick="switchTab('birthdays',this)">Birthdays</button>
+  <button class="tab" data-id="clusters" onclick="switchTab('clusters',this)">&#127970; Clusters</button>
   <button class="tab" data-id="recalc" onclick="switchTab('recalc',this)">Recalculate</button>
 </div>
 
@@ -412,60 +413,9 @@ tr:hover td{background:#fafaf8}
     <div style="font-size:13px;color:#888">Enter birthdays as DD/MM. Reminders appear automatically when a birthday is within 7 days.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary btn-sm" onclick="openBdayImport()">&#8659; Import birthdays</button>
-      <button class="btn btn-success btn-sm" onclick="toggleGCalSetup()">&#128197; Sync to Google Calendar</button>
       <button class="btn btn-danger btn-sm" onclick="clearAllBirthdays()">Clear all</button>
     </div>
   </div>
-
-  <!-- Google Calendar Setup Panel -->
-  <div id="gcalSetupArea" style="display:none;background:#f0f6ff;border:0.5px solid #b3cfee;border-radius:10px;padding:1rem;margin-bottom:1rem">
-    <p class="sec-title" style="margin-bottom:4px;color:#0c447c">&#128197; Sync birthdays to Google Calendar</p>
-    <div style="font-size:12px;color:#555;margin-bottom:14px;line-height:1.6">
-      Creates recurring yearly birthday events on a shared <strong>"Gidi GC Birthdays"</strong> calendar. Members subscribe once and see all birthdays. Re-syncing overwrites existing events.<br>
-      <strong>Setup (one-time):</strong> <a href="https://console.cloud.google.com/" target="_blank" style="color:#0c447c">Google Cloud Console</a> → Enable Calendar API → Create OAuth 2.0 Client ID (Web app) → Add your GitHub Pages URL as Authorised redirect URI.
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-      <div class="form-row" style="margin-bottom:0">
-        <label class="form-label">OAuth 2.0 Client ID</label>
-        <input class="form-input" id="gcal-client-id" type="text" placeholder="xxxxxxxxx.apps.googleusercontent.com" oninput="saveGCalSettings()">
-        <div style="font-size:11px;color:#888;margin-top:3px">Saved in your browser only.</div>
-      </div>
-      <div class="form-row" style="margin-bottom:0">
-        <label class="form-label">Timezone</label>
-        <select class="form-input" id="gcal-timezone" onchange="saveGCalSettings()">
-          <option value="Europe/London">London (GMT/BST)</option>
-          <option value="Africa/Lagos">Lagos (WAT)</option>
-          <option value="America/New_York">New York (ET)</option>
-          <option value="America/Chicago">Chicago (CT)</option>
-          <option value="America/Los_Angeles">Los Angeles (PT)</option>
-          <option value="Europe/Berlin">Berlin (CET)</option>
-          <option value="Asia/Dubai">Dubai (GST)</option>
-        </select>
-        <div style="font-size:11px;color:#888;margin-top:3px">Birthday events fire at 9:00am in this timezone.</div>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:12px">
-      <div class="form-row" style="margin-bottom:0">
-        <label class="form-label">Shared Calendar ID</label>
-        <input class="form-input" id="gcal-cal-id" type="text" placeholder="xxxxxxxxx@group.calendar.google.com" oninput="saveGCalSettings()">
-        <div style="font-size:11px;color:#888;margin-top:3px">From Google Calendar → Settings → Calendar ID.</div>
-      </div>
-    </div>
-    </div>
-    <div style="background:#fff;border-radius:8px;padding:10px 12px;font-size:12px;color:#444;margin-bottom:12px;line-height:1.7;border:0.5px solid #d0dff0">
-      <strong>How members subscribe (one-time):</strong><br>
-      1. You share the calendar's public link (Google Calendar → Settings → "Get shareable link")<br>
-      2. Members open the link → tap <em>"Add to Google Calendar"</em><br>
-      3. All 46 birthdays appear in their calendar. Future syncs update automatically.
-    </div>
-    <div id="gcalStatus" style="font-size:13px;color:#888;margin-bottom:10px"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
-      <button class="btn btn-sm" onclick="toggleGCalSetup()">Close</button>
-      <button class="btn btn-primary btn-sm" onclick="gcalSignIn()">&#128275; Connect Google Account</button>
-      <button class="btn btn-success btn-sm" id="gcalSyncBtn" onclick="gcalSyncBirthdays()" style="display:none">&#128197; Sync all birthdays now</button>
-    </div>
-  </div>
-
   <!-- Birthday import area -->
   <div id="bdayImportArea" style="display:none;background:#f5f5f3;border-radius:10px;padding:1rem;margin-bottom:1rem;border:0.5px solid #e0e0d8">
     <p class="sec-title" style="margin-bottom:8px">Import birthdays</p>
@@ -598,6 +548,21 @@ tr:hover td{background:#fafaf8}
         <div style="font-size:11px;color:#888;margin-top:4px">Sets the start date for absenteeism calculation. Only recorded sessions shown.</div>
       </div>
 
+      <div class="form-section">Cluster assignment</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row">
+          <label class="form-label">Cluster</label>
+          <select class="form-input" id="mf-cluster">
+            <option value="">Unassigned</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Cluster join date</label>
+          <input class="form-input" id="mf-cluster-date" type="date">
+          <div style="font-size:11px;color:#888;margin-top:3px">Check-in tracking starts from this date.</div>
+        </div>
+      </div>
+
       <div id="mf-error" style="display:none;background:#fcebeb;color:#791f1f;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px"></div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:8px">
@@ -617,6 +582,83 @@ tr:hover td{background:#fafaf8}
     </div>
   </div>
 </div>
+<!-- CLUSTERS -->
+<div id="tab-clusters" class="panel">
+
+  <!-- Guest-ready-for-cluster notification -->
+  <div id="cluster-guest-alert" style="display:none;background:#faeeda;border:0.5px solid #ef9f27;border-radius:10px;padding:12px 14px;margin-bottom:1rem">
+    <div style="font-size:12px;font-weight:600;color:#633806;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">&#9888; Guests ready for cluster assignment</div>
+    <div id="cluster-guest-list" style="font-size:13px;color:#633806"></div>
+  </div>
+
+  <!-- Overview metrics -->
+  <div class="metrics" id="cluster-metrics" style="margin-bottom:1rem"></div>
+
+  <!-- Controls -->
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+    <select id="cluster-week-picker" onchange="renderClusters()" style="font-size:13px;padding:7px 10px;border:0.5px solid #ccc;border-radius:8px;min-width:180px">
+      <option value="">Select week for check-ins...</option>
+    </select>
+    <button class="btn btn-success btn-sm" onclick="openClusterModal(null)">+ Add cluster</button>
+  </div>
+
+  <!-- Cluster cards -->
+  <div id="cluster-cards"></div>
+
+  <!-- Unassigned section -->
+  <div id="unassigned-section" style="margin-top:1.5rem"></div>
+
+</div>
+
+<!-- CLUSTER MODAL (add/edit cluster) -->
+<div class="member-modal" id="clusterModal" onclick="handleClusterModalBg(event)">
+  <div class="member-modal-box" style="max-width:480px">
+    <div class="member-modal-header">
+      <div style="font-size:15px;font-weight:500" id="clusterModalTitle">Add cluster</div>
+      <button class="btn btn-sm" onclick="closeClusterModal()">Close</button>
+    </div>
+    <div style="padding:20px">
+      <div class="form-row">
+        <label class="form-label">Cluster name *</label>
+        <input class="form-input" id="cm-name" type="text" placeholder="e.g. Chinedu's Cluster">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Cluster head *</label>
+        <select class="form-input" id="cm-head">
+          <option value="">Select head...</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Start date</label>
+        <input class="form-input" id="cm-start" type="date" value="2026-09-09">
+      </div>
+      <div id="cm-error" style="display:none;background:#fcebeb;color:#791f1f;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+        <button class="btn btn-danger btn-sm" id="cm-delete-btn" onclick="deleteCluster()" style="display:none">Delete cluster</button>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <button class="btn btn-sm" onclick="closeClusterModal()">Cancel</button>
+          <button class="btn btn-success" onclick="saveCluster()">Save cluster</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CLUSTER SUMMARY MODAL -->
+<div class="member-modal" id="clusterSummaryModal" onclick="if(event.target===this)closeClusterSummary()">
+  <div class="member-modal-box" style="max-width:520px">
+    <div class="member-modal-header">
+      <div style="font-size:15px;font-weight:500" id="clusterSummaryTitle">Cluster summary</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-warn btn-sm" onclick="doClusterPrint()">&#128247; Mobile PDF</button>
+        <button class="btn btn-purple btn-sm" onclick="openClusterWebSummary()">&#127760; Web page</button>
+        <button class="btn btn-sm" onclick="closeClusterSummary()">Close</button>
+      </div>
+    </div>
+    <div id="clusterSummaryContent" style="padding:20px;max-height:75vh;overflow-y:auto"></div>
+  </div>
+</div>
+
 <!-- IMPORT ATTENDANCE MODAL -->
 <div class="member-modal" id="importModal" onclick="handleImportBgClick(event)">
   <div class="member-modal-box" style="max-width:580px">
@@ -728,6 +770,7 @@ tr:hover td{background:#fafaf8}
     <button class="btn" onclick="switchTab('guests',document.querySelector('[data-id=guests]'));closeMobMore()" style="justify-content:center;padding:10px">&#128100; Guests</button>
     <button class="btn" onclick="switchTab('birthdays',document.querySelector('[data-id=birthdays]'));closeMobMore()" style="justify-content:center;padding:10px">&#127874; Birthdays</button>
     <button class="btn" onclick="switchTab('recalc',document.querySelector('[data-id=recalc]'));closeMobMore()" style="justify-content:center;padding:10px">&#10227; Recalculate</button>
+    <button class="btn" onclick="switchTab('clusters',document.querySelector('[data-id=clusters]'));closeMobMore()" style="justify-content:center;padding:10px">&#127970; Clusters</button>
     <button class="btn btn-success" onclick="openSummary();closeMobMore()" style="justify-content:center;padding:10px">&#9113; Print</button>
     <button class="btn btn-purple" onclick="openWebSummary();closeMobMore()" style="justify-content:center;padding:10px">&#127760; Web</button>
   </div>
@@ -777,6 +820,22 @@ let attendance={};
 let absenceReasons={};
 let birthdays={};
 let firstSession={};  // name -> session key of first attendance
+
+// ── CLUSTER DATA ──────────────────────────────────────────────────────────────
+let clusters=[
+  {id:'c1',name:"Chinedu's Cluster",head:'Chinedu Obidiegwu',startDate:'2026-09-09'},
+  {id:'c2',name:"Dami's Cluster",head:'Damilola Macaulay',startDate:'2026-09-09'},
+  {id:'c3',name:"Christiana's Cluster",head:'Christiana Omelazu',startDate:'2026-09-09'},
+  {id:'c4',name:"Terdoo's Cluster",head:'Terdoo Anom',startDate:'2026-09-09'},
+  {id:'c5',name:"Tomisin's Cluster",head:'Tomisin Numbere',startDate:'2026-09-09'},
+  {id:'c6',name:"Evi's Cluster",head:'Evi Idoghor',startDate:'2026-09-09'},
+  {id:'c7',name:"Ifeoma's Cluster",head:'Ifeoma Igbokidi',startDate:'2026-09-09'},
+  {id:'c8',name:"Chinyere's Cluster",head:'Chinyere Izu-Ohajinwa',startDate:'2026-09-09'}
+];
+// clusterMembers: {memberName: {clusterId, joinDate:'YYYY-MM-DD'}}
+let clusterMembers={};
+// checkIns: {weekKey: {memberName: 'yes'|'no'|'na'}}  weekKey = Wednesday date string
+let checkIns={};
 let pendingChanges=[];
 let charts={};
 
@@ -787,6 +846,7 @@ function saveAll(){
       members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,phone:m.phone||'',email:m.email||''})),
       attendance,absenceReasons,birthdays,firstSession,
       customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),
+      clusters,clusterMembers,checkIns,
       savedAt:new Date().toISOString()
     }));
     showToast('Saved');
@@ -803,6 +863,9 @@ function loadSaved(){
     if(d.birthdays)Object.assign(birthdays,d.birthdays);
     if(d.firstSession)Object.assign(firstSession,d.firstSession);
     if(d.customReasons)d.customReasons.forEach(r=>{if(!REASONS.includes(r))REASONS.push(r);});
+    if(d.clusters)clusters.splice(0,clusters.length,...d.clusters);
+    if(d.clusterMembers)Object.assign(clusterMembers,d.clusterMembers);
+    if(d.checkIns)Object.assign(checkIns,d.checkIns);
     return true;
   }catch(e){return false;}
 }
@@ -912,20 +975,11 @@ function applyBdayImport(){
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 function initSeedData(){
-  MEMBERS_SEED.forEach(s=>{
-    const m=MEMBERS.find(x=>x.n===s.n);
-    if(!m) MEMBERS.push({n:s.n,gc:s.gc,gcOrig:s.gcOrig||s.gc,city:s.city||'Attendee',g:s.g||'Female',phone:s.phone||'',email:s.email||''});
-    else {m.gc=s.gc;m.gcOrig=s.gcOrig||s.gc;m.city=s.city;m.g=s.g;}
-  });
-  Object.entries(SEED_ATT).forEach(([sk,rec])=>{
-    if(!attendance[sk]){attendance[sk]={};MEMBERS.forEach(m=>{attendance[sk][m.n]=rec[m.n]||'absent';});}
-  });
-  const _absR={"2026-04-08": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Mary Captain": "Other", "Damilola Macaulay": "Other", "Daniel Asuquo": "Other", "Precious Erhabor": "Work", "Temitope Erhabor": "Work", "Akpor Hari Agboro": "Work", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Udoo Achinga": "Other", "Georgina Gabriel": "Other", "Ololade Soyebi": "Work", "Gloria Garba": "Sick", "Laolu Macaulay": "Travel", "Emmanuel Williams": "Work", "Millicent Rogers": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Shammah Obereika": "Work"}, "2026-04-15": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Mary Captain": "Other", "Damilola Macaulay": "Other", "Daniel Asuquo": "Other", "Samuel Sagbele": "Exam", "Terver Akindigh": "Work", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Blessed Mademeidon": "Sick", "Chinyere Izu-Ohajinwa": "Other", "Confidence Blankson": "Work", "Georgina Gabriel": "Work", "Happiness Asuquo": "Other", "Izu Ohajinwa": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Work", "Phebe Mademeidon": "Other"}, "2026-04-22": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Daniel Asuquo": "Other", "Demex Achinga": "Work", "Precious Erhabor": "Other", "Samuel Sagbele": "Exam", "Terdoo Anom": "Travel", "Akpor Hari Agboro": "Exam", "Amanda Zara Nwankwo": "Other", "Udoo Achinga": "Other", "Esther Ende": "Travel", "Georgina Gabriel": "Work", "Happiness Asuquo": "Other", "Izu Ohajinwa": "Work", "Ifeoluwa Williams": "Other", "Laolu Macaulay": "Travel", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Other"}, "2026-04-29": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ksusha Anom": "Other", "Nelson Allison": "Travel", "Wunmi Durosinmi-Etti": "Other", "Damilola Macaulay": "Other", "Omodara Olanrewaju": "Other", "Samuel Sagbele": "Exam", "Terdoo Anom": "Work", "Akpor Hari Agboro": "Exam", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Udoo Achinga": "Other", "Blessed Mademeidon": "Sick", "Chinyere Izu-Ohajinwa": "Other", "Confidence Blankson": "Other", "Georgina Gabriel": "Other", "Gloria Garba": "Work", "Ifeoluwa Williams": "Other", "Emmanuel Williams": "Other", "Laolu Macaulay": "Work", "Millicent Rogers": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Other", "Shammah Obereika": "Work", "Phebe Mademeidon": "Sick"}, "2026-05-06": {"Akpor Hari Agboro": "Exam", "Chinedu Obidiegwu": "Work", "Christiana Omelazu": "Sick", "Nelson Allison": "Travel", "Precious Erhabor": "Work", "Terdoo Anom": "Travel", "Amanda Zara Nwankwo": "Other", "Anita Obidiegwu": "Other", "Millicent Rogers": "Work", "Daniel Asuquo": "Other", "Happiness Asuquo": "Other", "Ifeoma Igbokidi": "Work", "Evi Idoghor": "Other", "Esther Ende": "Sick"}};
-  Object.entries(_absR).forEach(([sk,rec])=>{if(!absenceReasons[sk])absenceReasons[sk]={...rec};});
-  const _bdays={"Terver Akindigh": "29/06", "Toki Numbere": "11/06", "Tomisin Numbere": "13/10", "Demex Achinga": "08/01", "Damilola Macaulay": "07/09", "Samuel Sagbele": "08/05", "Chinedu Obidiegwu": "29/08", "Anita Obidiegwu": "17/06", "Temitope Erhabor": "03/10", "Nengi Goodman": "12/10", "Wunmi Durosinmi-Etti": "09/09", "Christiana Omelazu": "04/11", "Daniel Asuquo": "26/07", "Ifeoma Igbokidi": "25/02", "Chinyere Izu-Ohajinwa": "10/02", "Terdoo Anom": "18/08", "Akpor Hari Agboro": "27/01", "Evi Idoghor": "04/09", "Blessed Mademeidon": "09/07", "Laolu Macaulay": "30/01", "Mary Captain": "05/08", "Chinedu Awa": "22/08", "Ksusha Anom": "24/07", "Nelson Allison": "10/08", "David Idoko": "13/01", "Nnenna Idoko": "22/05", "Omodara Olanrewaju": "24/04", "Precious Erhabor": "11/10", "Amanda Zara Nwankwo": "06/01", "Niyi Joseph": "30/03", "Vanessa Ebitu": "14/09", "Asta Akindigh": "28/04", "Udoo Achinga": "30/09", "Confidence Blankson": "14/11", "Esther Ende": "03/04", "Georgina Gabriel": "19/04", "Happiness Asuquo": "29/10", "Izu Ohajinwa": "24/03", "Ololade Soyebi": "19/04", "Gloria Garba": "27/11", "Ifeoluwa Williams": "10/06", "Millicent Rogers": "19/04", "Owoade Yussuff": "24/06", "Shammah Obereika": "10/04", "Labake Laniyan": "12/08", "Emmanuel Williams": "11/12"};
-  Object.entries(_bdays).forEach(([n,v])=>{if(!birthdays[n])birthdays[n]=v;});
-  const _fs={"Emmanuel Williams": "2026-04-15", "Labake Laniyan": "2026-04-29"};
-  Object.entries(_fs).forEach(([n,v])=>{if(!firstSession[n])firstSession[n]=v;});
+  MEMBERS_SEED.forEach(s=>{const m=MEMBERS.find(x=>x.n===s.n);if(!m)MEMBERS.push({n:s.n,gc:s.gc,gcOrig:s.gcOrig||s.gc,city:s.city||'Attendee',g:s.g||'Female',phone:s.phone||'',email:s.email||''});else{m.gc=s.gc;m.gcOrig=s.gcOrig||s.gc;m.city=s.city;m.g=s.g;}});
+  Object.entries(SEED_ATT).forEach(([sk,rec])=>{if(!attendance[sk]){attendance[sk]={};MEMBERS.forEach(m=>{attendance[sk][m.n]=rec[m.n]||'absent';});}});
+  const _absR={"2026-04-08": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Mary Captain": "Other", "Damilola Macaulay": "Other", "Daniel Asuquo": "Other", "Precious Erhabor": "Work", "Temitope Erhabor": "Work", "Akpor Hari Agboro": "Work", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Udoo Achinga": "Other", "Georgina Gabriel": "Other", "Ololade Soyebi": "Work", "Gloria Garba": "Sick", "Laolu Macaulay": "Travel", "Emmanuel Williams": "Work", "Millicent Rogers": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Shammah Obereika": "Work"}, "2026-04-15": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Mary Captain": "Other", "Damilola Macaulay": "Other", "Daniel Asuquo": "Other", "Samuel Sagbele": "Exam", "Terver Akindigh": "Work", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Blessed Mademeidon": "Sick", "Chinyere Izu-Ohajinwa": "Other", "Confidence Blankson": "Work", "Georgina Gabriel": "Work", "Happiness Asuquo": "Other", "Izu Ohajinwa": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Work", "Phebe Mademeidon": "Other"}, "2026-04-22": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Daniel Asuquo": "Other", "Demex Achinga": "Work", "Precious Erhabor": "Other", "Samuel Sagbele": "Exam", "Terdoo Anom": "Travel", "Akpor Hari Agboro": "Exam", "Amanda Zara Nwankwo": "Other", "Udoo Achinga": "Other", "Esther Ende": "Travel", "Georgina Gabriel": "Work", "Happiness Asuquo": "Other", "Izu Ohajinwa": "Work", "Ifeoluwa Williams": "Other", "Laolu Macaulay": "Travel", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Other"}, "2026-04-29": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ksusha Anom": "Other", "Nelson Allison": "Travel", "Wunmi Durosinmi-Etti": "Other", "Damilola Macaulay": "Other", "Omodara Olanrewaju": "Other", "Samuel Sagbele": "Exam", "Terdoo Anom": "Work", "Akpor Hari Agboro": "Exam", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Udoo Achinga": "Other", "Blessed Mademeidon": "Sick", "Chinyere Izu-Ohajinwa": "Other", "Confidence Blankson": "Other", "Georgina Gabriel": "Other", "Gloria Garba": "Work", "Ifeoluwa Williams": "Other", "Emmanuel Williams": "Other", "Laolu Macaulay": "Work", "Millicent Rogers": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Other", "Shammah Obereika": "Work", "Phebe Mademeidon": "Sick"}, "2026-05-06": {"Akpor Hari Agboro": "Exam", "Chinedu Obidiegwu": "Work", "Christiana Omelazu": "Sick", "Nelson Allison": "Travel", "Precious Erhabor": "Work", "Terdoo Anom": "Travel", "Amanda Zara Nwankwo": "Other", "Anita Obidiegwu": "Other", "Millicent Rogers": "Work", "Daniel Asuquo": "Other", "Happiness Asuquo": "Other", "Ifeoma Igbokidi": "Work", "Evi Idoghor": "Other", "Esther Ende": "Sick"}};Object.entries(_absR).forEach(([sk,rec])=>{if(!absenceReasons[sk])absenceReasons[sk]={...rec};});
+  const _bdays={"Terver Akindigh": "29/06", "Toki Numbere": "11/06", "Tomisin Numbere": "13/10", "Demex Achinga": "08/01", "Damilola Macaulay": "07/09", "Samuel Sagbele": "08/05", "Chinedu Obidiegwu": "29/08", "Anita Obidiegwu": "17/06", "Temitope Erhabor": "03/10", "Nengi Goodman": "12/10", "Wunmi Durosinmi-Etti": "09/09", "Christiana Omelazu": "04/11", "Daniel Asuquo": "26/07", "Ifeoma Igbokidi": "25/02", "Chinyere Izu-Ohajinwa": "10/02", "Terdoo Anom": "18/08", "Akpor Hari Agboro": "27/01", "Evi Idoghor": "04/09", "Blessed Mademeidon": "09/07", "Laolu Macaulay": "30/01", "Mary Captain": "05/08", "Chinedu Awa": "22/08", "Ksusha Anom": "24/07", "Nelson Allison": "10/08", "David Idoko": "13/01", "Nnenna Idoko": "22/05", "Omodara Olanrewaju": "24/04", "Precious Erhabor": "11/10", "Amanda Zara Nwankwo": "06/01", "Niyi Joseph": "30/03", "Vanessa Ebitu": "14/09", "Asta Akindigh": "28/04", "Udoo Achinga": "30/09", "Confidence Blankson": "14/11", "Esther Ende": "03/04", "Georgina Gabriel": "19/04", "Happiness Asuquo": "29/10", "Izu Ohajinwa": "24/03", "Ololade Soyebi": "19/04", "Gloria Garba": "27/11", "Ifeoluwa Williams": "10/06", "Millicent Rogers": "19/04", "Owoade Yussuff": "24/06", "Shammah Obereika": "10/04", "Labake Laniyan": "12/08", "Emmanuel Williams": "11/12"};Object.entries(_bdays).forEach(([n,v])=>{if(!birthdays[n])birthdays[n]=v;});
+  const _fs={"Emmanuel Williams": "2026-04-15", "Labake Laniyan": "2026-04-29"};Object.entries(_fs).forEach(([n,v])=>{if(!firstSession[n])firstSession[n]=v;});
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -999,175 +1053,6 @@ function setBirthday(name,val,idx){
 }
 function clearAllBirthdays(){if(!confirm('Clear all birthday data?'))return;birthdays={};renderBirthdays();renderOverviewBirthdays();saveAll();}
 
-// ── GOOGLE CALENDAR BIRTHDAY SYNC ─────────────────────────────────────────────
-const GCAL_LS_TOKEN   = 'gidi_gcal_token';
-const GCAL_LS_EVENTIDS= 'gidi_gcal_eventids';
-const GCAL_LS_SETTINGS= 'gidi_gcal_settings';
-
-function saveGCalSettings(){
-  const cid=document.getElementById('gcal-client-id').value.trim();
-  const calId=document.getElementById('gcal-cal-id').value.trim();
-  const tz=document.getElementById('gcal-timezone').value;
-  localStorage.setItem(GCAL_LS_SETTINGS,JSON.stringify({clientId:cid,calId,tz}));
-}
-function loadGCalSettings(){
-  try{
-    const s=JSON.parse(localStorage.getItem(GCAL_LS_SETTINGS)||'{}');
-    if(s.clientId)document.getElementById('gcal-client-id').value=s.clientId;
-    if(s.calId)document.getElementById('gcal-cal-id').value=s.calId;
-    if(s.tz){const sel=document.getElementById('gcal-timezone');if(sel)sel.value=s.tz;}
-    return s;
-  }catch{return{};}
-}
-function toggleGCalSetup(){
-  const el=document.getElementById('gcalSetupArea');
-  el.style.display=el.style.display==='none'?'block':'none';
-  if(el.style.display==='block'){
-    loadGCalSettings();
-    const tok=localStorage.getItem(GCAL_LS_TOKEN);
-    if(tok){
-      gcalSetStatus('&#10003; Connected to Google. Ready to sync.','#085041');
-      document.getElementById('gcalSyncBtn').style.display='inline-flex';
-    }
-  }
-}
-function gcalSetStatus(msg,color){
-  const el=document.getElementById('gcalStatus');
-  el.innerHTML=`<span style="color:${color||'#888'}">${msg}</span>`;
-}
-
-// ── OAuth popup flow ──────────────────────────────────────────────────────────
-function gcalSignIn(){
-  const s=loadGCalSettings();
-  if(!s.clientId){gcalSetStatus('Please enter your OAuth Client ID first.','#a32d2d');return;}
-  if(!s.calId){gcalSetStatus('Please enter the Calendar ID first.','#a32d2d');return;}
-
-  const redirectUri=window.location.origin+window.location.pathname;
-  const scope='https://www.googleapis.com/auth/calendar.events';
-  const url=`https://accounts.google.com/o/oauth2/v2/auth?`+
-    `client_id=${encodeURIComponent(s.clientId)}&`+
-    `redirect_uri=${encodeURIComponent(redirectUri)}&`+
-    `response_type=token&scope=${encodeURIComponent(scope)}&`+
-    `prompt=consent`;
-
-  const popup=window.open(url,'_blank','width=500,height=600,scrollbars=yes');
-
-  // Poll for the token in the popup URL (implicit flow)
-  const poll=setInterval(()=>{
-    try{
-      if(popup.closed){clearInterval(poll);return;}
-      const hash=popup.location.hash;
-      if(hash&&hash.includes('access_token')){
-        clearInterval(poll);
-        popup.close();
-        const params=new URLSearchParams(hash.substring(1));
-        const token=params.get('access_token');
-        const expiresIn=parseInt(params.get('expires_in')||'3600');
-        localStorage.setItem(GCAL_LS_TOKEN,JSON.stringify({
-          token,expiresAt:Date.now()+expiresIn*1000
-        }));
-        gcalSetStatus('&#10003; Connected! Click "Sync all birthdays now" to create events.','#085041');
-        document.getElementById('gcalSyncBtn').style.display='inline-flex';
-      }
-    }catch(e){/* cross-origin — still loading */}
-  },500);
-}
-
-function getGCalToken(){
-  try{
-    const d=JSON.parse(localStorage.getItem(GCAL_LS_TOKEN)||'null');
-    if(!d)return null;
-    if(Date.now()>d.expiresAt){localStorage.removeItem(GCAL_LS_TOKEN);return null;}
-    return d.token;
-  }catch{return null;}
-}
-
-// ── Main sync function ────────────────────────────────────────────────────────
-async function gcalSyncBirthdays(){
-  const s=loadGCalSettings();
-  if(!s.clientId||!s.calId){gcalSetStatus('Missing Client ID or Calendar ID.','#a32d2d');return;}
-  const token=getGCalToken();
-  if(!token){gcalSetStatus('Session expired. Please reconnect.','#a32d2d');document.getElementById('gcalSyncBtn').style.display='none';return;}
-
-  const calId=encodeURIComponent(s.calId);
-  const btn=document.getElementById('gcalSyncBtn');
-  btn.disabled=true;btn.textContent='Syncing...';
-  gcalSetStatus('Starting sync...','#888');
-
-  // Load previously stored event IDs
-  let storedIds={};
-  try{storedIds=JSON.parse(localStorage.getItem(GCAL_LS_EVENTIDS)||'{}');}catch{}
-
-  // Build list: non-guest members with birthdays set
-  const toSync=MEMBERS.filter(m=>m.gc!=='Guest'&&birthdays[m.n]);
-  const newIds={};
-  let created=0,deleted=0,failed=0;
-  const MONTHS_NUM=['','01','02','03','04','05','06','07','08','09','10','11','12'];
-
-  gcalSetStatus(`Syncing ${toSync.length} birthdays...`,'#888');
-
-  for(const m of toSync){
-    const bday=birthdays[m.n];
-    const parts=bday.split('/');
-    if(parts.length<2)continue;
-    const [day,mo]=[parts[0].padStart(2,'0'),parts[1].padStart(2,'0')];
-    const year=new Date().getFullYear();
-    const dateStr=`${year}-${mo}-${day}`;
-
-    // Delete existing event for this member if any
-    const oldId=storedIds[m.n];
-    if(oldId){
-      try{
-        await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${oldId}`,{
-          method:'DELETE',
-          headers:{Authorization:`Bearer ${token}`}
-        });
-        deleted++;
-      }catch{}
-    }
-
-    // Create event timed at 09:00 on the birthday so the reminder fires at exactly 9am
-    const tz=s.tz||'Europe/London';
-    const event={
-      summary:`🎂 ${m.n}'s Birthday`,
-      description:`Gidi GC member birthday. Synced from Gidi GC Attendance Tracking.`,
-      start:{dateTime:`${dateStr}T09:00:00`,timeZone:tz},
-      end:{dateTime:`${dateStr}T09:30:00`,timeZone:tz},
-      recurrence:['RRULE:FREQ=YEARLY'],
-      transparency:'transparent',
-      reminders:{useDefault:false,overrides:[{method:'popup',minutes:0},{method:'email',minutes:0}]}
-    };
-
-    try{
-      const resp=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,{
-        method:'POST',
-        headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-        body:JSON.stringify(event)
-      });
-      if(resp.ok){
-        const data=await resp.json();
-        newIds[m.n]=data.id;
-        created++;
-      } else {
-        const err=await resp.json().catch(()=>({}));
-        console.warn('Failed for',m.n,err?.error?.message);
-        failed++;
-      }
-    }catch(e){failed++;console.warn('Error for',m.n,e);}
-  }
-
-  // Save new event IDs
-  localStorage.setItem(GCAL_LS_EVENTIDS,JSON.stringify({...storedIds,...newIds}));
-
-  btn.disabled=false;btn.textContent='📅 Sync all birthdays now';
-  if(failed===0){
-    gcalSetStatus(`&#10003; Done! ${created} birthday events synced (${deleted} updated). Members can subscribe at: Google Calendar → Other calendars → Subscribe by calendar ID.`,'#085041');
-    showToast(`${created} birthday events synced to Google Calendar`,3000);
-  } else {
-    gcalSetStatus(`Synced ${created}, failed ${failed}. Check console for details.`,'#ba7517');
-  }
-}
-
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
 function renderOverview(){
   const recs=getRecordedSessions();
@@ -1194,7 +1079,7 @@ function renderOverview(){
   `;
   dc('sessChart');dc('gcChart');dc('genChart');
   const lbl=tots.map(t=>t.date);
-  charts['sessChart']=new Chart(document.getElementById('sessChart'),{type:'bar',data:{labels:lbl,datasets:[{label:'Total (incl. guests present)',data:tots.map(t=>t.total),backgroundColor:'#1D9E75',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:45,autoSkip:false}},y:{beginAtZero:true}}}});
+  charts['sessChart']=new Chart(document.getElementById('sessChart'),{type:'bar',data:{labels:lbl,datasets:[{label:'Total (excl. guests)',data:tots.map(t=>t.total),backgroundColor:'#1D9E75',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:45,autoSkip:false}},y:{beginAtZero:true}}}});
   const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};MEMBERS.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
   charts['gcChart']=new Chart(document.getElementById('gcChart'),{type:'doughnut',data:{labels:Object.keys(gcC),datasets:[{data:Object.values(gcC),backgroundColor:['#1D9E75','#378ADD','#EF9F27','#E24B4A','#888780'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12,padding:8}}}}});
   charts['genChart']=new Chart(document.getElementById('genChart'),{type:'bar',data:{labels:lbl,datasets:[{label:'Female',data:tots.map(t=>t.female),backgroundColor:'#D4537E',borderRadius:2,stack:'s'},{label:'Male',data:tots.map(t=>t.male),backgroundColor:'#378ADD',borderRadius:2,stack:'s'}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true,ticks:{font:{size:10},maxRotation:45,autoSkip:false}},y:{stacked:true,beginAtZero:true}},plugins:{legend:{labels:{font:{size:11},boxWidth:10}}}}});
@@ -2242,10 +2127,9 @@ function openSummary(){
   const now=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
   const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
   const allCalc=nonGuests.map(m=>({...m,...calcMember(m.n)}));
-  const avg=recs.length?Math.round(recs.map(s=>{let t=0;MEMBERS.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
+  const avg=recs.length?Math.round(recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
   const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};MEMBERS.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
-  // Session totals include ALL present (incl. guests); absentees counted separately from nonGuests
-  const sessTots=recs.map(s=>{let t=0;MEMBERS.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
+  const sessTots=recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
   const bdaySoon=MEMBERS.filter(m=>{const d=daysUntil(birthdays[m.n]);return d!==null&&d<=30;}).sort((a,b)=>daysUntil(birthdays[a.n])-daysUntil(birthdays[b.n]));
 
   // ── Last session absences (excl. guests) ───────────────────────────────────
@@ -2383,10 +2267,9 @@ function openWebSummary(){
   const now=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
   const allCalc=MEMBERS.filter(m=>m.gc!=='Guest').map(m=>({...m,...calcMember(m.n)}));
   const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
-  const avg=recs.length?Math.round(recs.map(s=>{let t=0;MEMBERS.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
+  const avg=recs.length?Math.round(recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
   const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};MEMBERS.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
-  // Session totals include ALL present (incl. guests); absentees counted separately from nonGuests
-  const sessTots=recs.map(s=>{let t=0;MEMBERS.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
+  const sessTots=recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
 
   // Birthdays
   const bdaySoon=MEMBERS.filter(m=>{const d=daysUntil(birthdays[m.n]);return d!==null&&d<=30;}).sort((a,b)=>daysUntil(birthdays[a.n])-daysUntil(birthdays[b.n]));
@@ -2476,7 +2359,7 @@ footer{text-align:center;font-size:11px;color:#aaa;margin-top:8px;padding-bottom
     <div class="stat"><div class="stat-val">${MEMBERS.length}</div><div class="stat-label">All attendees to date</div></div>
     <div class="stat"><div class="stat-val">${nonGuests.length}</div><div class="stat-label">Members &amp; attendees</div></div>
     <div class="stat"><div class="stat-val">${recs.length}</div><div class="stat-label">Sessions recorded</div></div>
-    <div class="stat"><div class="stat-val">${avg}</div><div class="stat-label">Avg attendance (incl. guests present)</div></div>
+    <div class="stat"><div class="stat-val">${avg}</div><div class="stat-label">Avg attendance (excl. guests)</div></div>
     <div class="stat"><div class="stat-val">${Math.round(allCalc.reduce((a,b)=>a+b.rate,0)/Math.max(allCalc.length,1))}%</div><div class="stat-label">Avg attendance rate</div></div>
     <div class="stat"><div class="stat-val">${followUp.length}</div><div class="stat-label">Need follow-up</div></div>
   </div>
@@ -2585,7 +2468,7 @@ footer{text-align:center;font-size:11px;color:#aaa;margin-top:8px;padding-bottom
 
 // ── MASTER ────────────────────────────────────────────────────────────────────
 function recalcAll(){
-  renderOverview();renderMembers();renderGuests();renderAbsenteeism();populateTrendSelect();renderOverviewBirthdays();renderOverviewAbsent();renderLast3Sessions();
+  renderOverview();renderMembers();renderGuests();renderAbsenteeism();populateTrendSelect();renderOverviewBirthdays();renderOverviewAbsent();renderLast3Sessions();renderClusterGuestAlert();
   const recs=getRecordedSessions();
   document.getElementById('mainNotice').textContent=`${recs.length} session${recs.length===1?'':'s'} recorded of ${SESSIONS_DEF.length} planned. Data saves automatically to this browser. Members marked \u2746 have updated statuses.`;
 }
@@ -2618,8 +2501,446 @@ function switchTab(id,el){
   if(id==='birthdays')renderBirthdays();
   if(id==='guests')renderGuests();
   if(id==='record')renderSessionList();
+  if(id==='clusters')renderClusters();
   window.scrollTo(0,0);
 }
+
+// ── CLUSTERS ──────────────────────────────────────────────────────────────────
+
+function getClusterSessions(){
+  // Sessions from Sept onwards (cluster term)
+  return getRecordedSessions().filter(s=>s.key>='2026-09-09');
+}
+
+function getClusterWeeks(){
+  // All Wednesday sessions from Sept onward (recorded or planned)
+  return SESSIONS_DEF.filter(s=>s.key>='2026-09-09');
+}
+
+function getMembersInCluster(clusterId){
+  return MEMBERS.filter(m=>m.gc!=='Guest'&&clusterMembers[m.n]&&clusterMembers[m.n].clusterId===clusterId);
+}
+
+function getUnassigned(){
+  return MEMBERS.filter(m=>m.gc!=='Guest'&&!clusterMembers[m.n]);
+}
+
+function populateClusterDropdown(selId, includeNone=true){
+  const sel=document.getElementById(selId);
+  if(!sel)return;
+  sel.innerHTML=(includeNone?'<option value="">Unassigned</option>':'')+clusters.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+function populateClusterWeekPicker(){
+  const sel=document.getElementById('cluster-week-picker');
+  if(!sel)return;
+  const weeks=getClusterWeeks();
+  const cur=sel.value;
+  sel.innerHTML='<option value="">Select week for check-ins...</option>'+[...weeks].reverse().map(s=>`<option value="${s.key}"${s.key===cur?' selected':''}>${s.date}</option>`).join('');
+}
+
+// ── RENDER CLUSTER GUEST ALERT ─────────────────────────────────────────────────
+function renderClusterGuestAlert(){
+  const el=document.getElementById('cluster-guest-alert');
+  const list=document.getElementById('cluster-guest-list');
+  if(!el||!list)return;
+  const recs=getRecordedSessions();
+  const ready=MEMBERS.filter(m=>{
+    if(m.gc!=='Guest')return false;
+    const sessions=recs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present');
+    return sessions.length>=3&&!clusterMembers[m.n];
+  });
+  if(!ready.length){el.style.display='none';return;}
+  el.style.display='block';
+  list.innerHTML=ready.map(m=>`<span style="display:inline-flex;align-items:center;gap:6px;margin:3px 6px 3px 0"><strong>${m.n}</strong> (${recs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present').length} sessions) <button class="btn btn-sm" style="padding:2px 8px;font-size:11px" onclick="openMemberModal('${m.n}')">Assign</button></span>`).join('');
+}
+
+// ── RENDER CLUSTERS TAB ────────────────────────────────────────────────────────
+function renderClusters(){
+  populateClusterWeekPicker();
+  renderClusterGuestAlert();
+  const recs=getRecordedSessions();
+  const clusterRecs=getClusterSessions();
+  const weekKey=document.getElementById('cluster-week-picker')?.value||'';
+
+  // Metrics
+  const assigned=MEMBERS.filter(m=>m.gc!=='Guest'&&clusterMembers[m.n]).length;
+  const unassigned=getUnassigned().length;
+  let checkedClusters=0;
+  if(weekKey){
+    clusters.forEach(c=>{
+      const members=getMembersInCluster(c.id).filter(m=>clusterMembers[m.n].joinDate<=weekKey);
+      const done=members.filter(m=>(checkIns[weekKey]||{})[m.n]==='yes').length;
+      if(members.length>0&&done===members.length)checkedClusters++;
+    });
+  }
+  document.getElementById('cluster-metrics').innerHTML=`
+    <div class="metric"><div class="metric-label">Clusters</div><div class="metric-val">${clusters.length}</div></div>
+    <div class="metric"><div class="metric-label">Assigned members</div><div class="metric-val">${assigned}</div></div>
+    <div class="metric"><div class="metric-label">Unassigned</div><div class="metric-val">${unassigned}</div><div class="metric-sub">${unassigned>0?'need assigning':''}</div></div>
+    ${weekKey?`<div class="metric"><div class="metric-label">Full check-ins</div><div class="metric-val">${checkedClusters}/${clusters.length}</div><div class="metric-sub">this week</div></div>`:''}
+  `;
+
+  // Cluster cards
+  document.getElementById('cluster-cards').innerHTML=clusters.map(c=>{
+    const members=getMembersInCluster(c.id).sort(byFirstName);
+    const totalSess=clusterRecs.length;
+
+    // Attendance dots for all cluster-term sessions
+    const memberRows=members.map(m=>{
+      const joinDate=clusterMembers[m.n]?.joinDate||'2026-09-09';
+      const dots=recs.map(s=>{
+        if(s.key<joinDate)return`<div class="dot" style="background:#e0e0d8" title="${s.date} (before join)"></div>`;
+        const st=attendance[s.key]?attendance[s.key][m.n]:'unknown';
+        return`<div class="dot ${st==='present'?'dot-y':'dot-n'}" title="${s.date}"></div>`;
+      }).join('');
+      const c2=calcMember(m.n);
+      const streak=c2.curStreak;
+      const followup=streak>=2?`<span style="font-size:10px;background:#fcebeb;color:#791f1f;border-radius:4px;padding:1px 5px;margin-left:4px">Follow up</span>`:'';
+
+      // Check-in for selected week
+      let ciHtml='';
+      if(weekKey&&clusterMembers[m.n]?.joinDate<=weekKey){
+        const ciVal=(checkIns[weekKey]||{})[m.n]||'';
+        const mEsc=m.n.replace(/'/g,"\\'");
+        ciHtml=`<div style="display:flex;gap:4px;flex-shrink:0">
+          <button onclick="setCheckIn('${weekKey}','${mEsc}','yes')" style="border:none;background:${ciVal==='yes'?'#1D9E75':'#f0f0ea'};color:${ciVal==='yes'?'#fff':'#888'};border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;font-family:inherit" title="Checked in">✓</button>
+          <button onclick="setCheckIn('${weekKey}','${mEsc}','no')" style="border:none;background:${ciVal==='no'?'#E24B4A':'#f0f0ea'};color:${ciVal==='no'?'#fff':'#888'};border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;font-family:inherit" title="Not checked in">✗</button>
+          <button onclick="setCheckIn('${weekKey}','${mEsc}','na')" style="border:none;background:${ciVal==='na'?'#888':'#f0f0ea'};color:${ciVal==='na'?'#fff':'#888'};border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;font-family:inherit" title="N/A">–</button>
+        </div>`;
+      }
+
+      return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:0.5px solid #f0efe8;gap:8px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:500;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${m.n}${followup}</div>
+          <div style="display:flex;gap:2px;margin-top:4px">${dots}</div>
+        </div>
+        ${ciHtml}
+      </div>`;
+    }).join('');
+
+    // Check-in summary for this week
+    let ciSummary='';
+    if(weekKey){
+      const eligible=members.filter(m=>clusterMembers[m.n]?.joinDate<=weekKey);
+      const done=eligible.filter(m=>(checkIns[weekKey]||{})[m.n]==='yes').length;
+      const notDone=eligible.filter(m=>(checkIns[weekKey]||{})[m.n]==='no').length;
+      const na=eligible.filter(m=>(checkIns[weekKey]||{})[m.n]==='na').length;
+      const unlogged=eligible.length-done-notDone-na;
+      ciSummary=`<div style="display:flex;gap:8px;font-size:12px;padding:8px 12px;background:#fafaf8;flex-wrap:wrap">
+        <span style="color:#1D9E75;font-weight:500">✓ ${done} checked in</span>
+        ${notDone?`<span style="color:#E24B4A;font-weight:500">✗ ${notDone} not done</span>`:''}
+        ${na?`<span style="color:#888">– ${na} N/A</span>`:''}
+        ${unlogged?`<span style="color:#ba7517">${unlogged} unlogged</span>`:''}
+      </div>`;
+    }
+
+    // Attendance rate for cluster term
+    let clusterRate=0;
+    if(clusterRecs.length&&members.length){
+      const totalPresent=members.reduce((sum,m)=>sum+clusterRecs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present').length,0);
+      clusterRate=Math.round(totalPresent/(members.length*clusterRecs.length)*100);
+    }
+    const followUpCount=members.filter(m=>calcMember(m.n).curStreak>=2).length;
+    const cEsc=c.name.replace(/'/g,"\\'");
+    const headEsc=c.head.replace(/'/g,"\\'");
+
+    return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:0.5px solid #e0e0d8;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:14px;font-weight:500">${c.name}</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">Head: <strong>${c.head}</strong> &middot; ${members.length} members &middot; ${clusterRecs.length?clusterRate+'% attendance':'Sept not started'}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          ${followUpCount?`<span style="font-size:11px;background:#fcebeb;color:#791f1f;border-radius:20px;padding:3px 9px;font-weight:500">⚠ ${followUpCount} follow-up</span>`:''}
+          <button class="btn btn-sm" onclick="openClusterSummary('${c.id}')">&#128203; Summary</button>
+          <button class="btn btn-sm" onclick="openClusterModal('${c.id}')">&#9998; Edit</button>
+        </div>
+      </div>
+      ${ciSummary}
+      ${memberRows||`<div style="padding:12px 14px;font-size:13px;color:#888">No members assigned yet. Edit members to assign them to this cluster.</div>`}
+      <div style="padding:8px 12px;border-top:0.5px solid #f0efe8">
+        <button class="btn btn-sm" style="font-size:11px" onclick="openMassAssign('${c.id}','${cEsc}')">+ Assign members</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Unassigned section
+  const unassignedMembers=getUnassigned().sort(byFirstName);
+  const uSec=document.getElementById('unassigned-section');
+  if(unassignedMembers.length){
+    uSec.innerHTML=`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden">
+      <div style="padding:12px 14px;border-bottom:0.5px solid #e0e0d8;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:14px;font-weight:500;color:#ba7517">Unassigned (${unassignedMembers.length})</div>
+      </div>
+      ${unassignedMembers.map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:0.5px solid #f0efe8;font-size:13px">
+        <div><span style="font-weight:500">${m.n}</span> <span style="color:#888">${m.gc}</span></div>
+        <button class="btn btn-sm" style="font-size:11px" onclick="openMemberModal('${m.n.replace(/'/g,"\\'")}')">Assign cluster</button>
+      </div>`).join('')}
+    </div>`;
+  } else {
+    uSec.innerHTML=`<div style="font-size:13px;color:#3b6d11;text-align:center;padding:1rem">All members are assigned to clusters ✓</div>`;
+  }
+}
+
+// ── CHECK-IN TOGGLE ───────────────────────────────────────────────────────────
+function setCheckIn(weekKey,memberName,val){
+  if(!checkIns[weekKey])checkIns[weekKey]={};
+  checkIns[weekKey][memberName]=val;
+  saveAll();
+  renderClusters();
+}
+
+// ── MASS ASSIGN MEMBERS TO CLUSTER ───────────────────────────────────────────
+function openMassAssign(clusterId,clusterName){
+  const unassigned=getUnassigned().sort(byFirstName);
+  const existing=getMembersInCluster(clusterId).sort(byFirstName);
+  const joinDate=new Date().toISOString().split('T')[0];
+  const html=`<div style="font-size:14px;font-weight:500;margin-bottom:10px">Assign members to ${clusterName}</div>
+    <div style="font-size:12px;color:#888;margin-bottom:10px">Select unassigned members to add to this cluster.</div>
+    ${unassigned.length===0?'<div style="color:#888;font-size:13px">No unassigned members.</div>':
+    unassigned.map(m=>`<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid #f0efe8;cursor:pointer;font-size:13px">
+      <input type="checkbox" value="${m.n}" style="width:16px;height:16px"> ${m.n} <span style="color:#888">(${m.gc})</span>
+    </label>`).join('')}
+    <div class="form-row" style="margin-top:12px">
+      <label class="form-label">Join date</label>
+      <input class="form-input" id="mass-join-date" type="date" value="${joinDate}">
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+      <button class="btn btn-sm" onclick="this.closest('.modal-overlay')?.remove()||document.getElementById('massAssignModal')?.remove()">Cancel</button>
+      <button class="btn btn-success btn-sm" onclick="applyMassAssign('${clusterId}')">Assign selected</button>
+    </div>`;
+  // Use a simple overlay
+  let mo=document.getElementById('massAssignModal');
+  if(!mo){mo=document.createElement('div');mo.id='massAssignModal';mo.className='modal-overlay';mo.style.display='flex';document.body.appendChild(mo);}
+  mo.innerHTML=`<div class="modal-box" style="max-width:480px;max-height:80vh;overflow-y:auto"><div style="padding:20px">${html}</div></div>`;
+  mo.style.display='flex';
+}
+function applyMassAssign(clusterId){
+  const mo=document.getElementById('massAssignModal');
+  const checks=mo.querySelectorAll('input[type=checkbox]:checked');
+  const joinDate=document.getElementById('mass-join-date').value||new Date().toISOString().split('T')[0];
+  checks.forEach(cb=>{clusterMembers[cb.value]={clusterId,joinDate};});
+  mo.style.display='none';
+  saveAll();renderClusters();
+  showToast(`${checks.length} member${checks.length===1?'':'s'} assigned`,2000);
+}
+
+// ── CLUSTER MODAL (add/edit) ──────────────────────────────────────────────────
+let _editingClusterId=null;
+function openClusterModal(id){
+  _editingClusterId=id;
+  const title=document.getElementById('clusterModalTitle');
+  const delBtn=document.getElementById('cm-delete-btn');
+  const err=document.getElementById('cm-error');
+  err.style.display='none';
+  // Populate head dropdown with non-guest members
+  const headSel=document.getElementById('cm-head');
+  headSel.innerHTML='<option value="">Select head...</option>'+[...MEMBERS].filter(m=>m.gc!=='Guest').sort(byFirstName).map(m=>`<option value="${m.n}">${m.n}</option>`).join('');
+  if(id){
+    const c=clusters.find(x=>x.id===id);if(!c)return;
+    title.textContent='Edit cluster';delBtn.style.display='inline-flex';
+    document.getElementById('cm-name').value=c.name;
+    document.getElementById('cm-head').value=c.head;
+    document.getElementById('cm-start').value=c.startDate;
+  } else {
+    title.textContent='Add cluster';delBtn.style.display='none';
+    document.getElementById('cm-name').value='';
+    document.getElementById('cm-head').value='';
+    document.getElementById('cm-start').value='2026-09-09';
+  }
+  document.getElementById('clusterModal').className='member-modal open';
+}
+function closeClusterModal(){document.getElementById('clusterModal').className='member-modal';}
+function handleClusterModalBg(e){if(e.target===document.getElementById('clusterModal'))closeClusterModal();}
+function saveCluster(){
+  const name=document.getElementById('cm-name').value.trim();
+  const head=document.getElementById('cm-head').value;
+  const startDate=document.getElementById('cm-start').value;
+  const err=document.getElementById('cm-error');
+  if(!name){err.textContent='Name required.';err.style.display='block';return;}
+  if(!head){err.textContent='Please select a head.';err.style.display='block';return;}
+  if(_editingClusterId){
+    const c=clusters.find(x=>x.id===_editingClusterId);
+    if(c){c.name=name;c.head=head;c.startDate=startDate||'2026-09-09';}
+  } else {
+    const id='c'+Date.now();
+    clusters.push({id,name,head,startDate:startDate||'2026-09-09'});
+  }
+  closeClusterModal();saveAll();renderClusters();showToast('Cluster saved');
+}
+function deleteCluster(){
+  if(!_editingClusterId)return;
+  if(!confirm('Delete this cluster? Members will become unassigned.'))return;
+  // Unassign members
+  Object.keys(clusterMembers).forEach(n=>{if(clusterMembers[n].clusterId===_editingClusterId)delete clusterMembers[n];});
+  clusters=clusters.filter(c=>c.id!==_editingClusterId);
+  closeClusterModal();saveAll();renderClusters();showToast('Cluster deleted');
+}
+
+// ── POPULATE CLUSTER DROPDOWN IN MEMBER MODAL ─────────────────────────────────
+function populateMemberClusterDropdown(memberName){
+  const sel=document.getElementById('mf-cluster');
+  if(!sel)return;
+  sel.innerHTML='<option value="">Unassigned</option>'+clusters.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  const existing=clusterMembers[memberName];
+  if(existing){
+    sel.value=existing.clusterId;
+    document.getElementById('mf-cluster-date').value=existing.joinDate||'';
+  } else {
+    sel.value='';
+    document.getElementById('mf-cluster-date').value='';
+  }
+}
+
+// ── CLUSTER SUMMARY ───────────────────────────────────────────────────────────
+let _summaryClusterId=null;
+function openClusterSummary(clusterId){
+  _summaryClusterId=clusterId;
+  const c=clusters.find(x=>x.id===clusterId);if(!c)return;
+  document.getElementById('clusterSummaryTitle').textContent=c.name+' — Summary';
+  document.getElementById('clusterSummaryContent').innerHTML=buildClusterSummaryHTML(clusterId);
+  document.getElementById('clusterSummaryModal').className='member-modal open';
+}
+function closeClusterSummary(){document.getElementById('clusterSummaryModal').className='member-modal';}
+
+function buildClusterSummaryHTML(clusterId){
+  const c=clusters.find(x=>x.id===clusterId);if(!c)return '';
+  const members=getMembersInCluster(clusterId).sort(byFirstName);
+  const recs=getRecordedSessions();
+  const clusterRecs=getClusterSessions();
+  const now=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  const lastSess=recs.length?recs[recs.length-1]:null;
+
+  // Attendance rate
+  let rate=0;
+  if(clusterRecs.length&&members.length){
+    const tot=members.reduce((s,m)=>s+clusterRecs.filter(r=>attendance[r.key]&&attendance[r.key][m.n]==='present').length,0);
+    rate=Math.round(tot/(members.length*clusterRecs.length)*100);
+  }
+
+  // Follow-up
+  const followUp=members.filter(m=>calcMember(m.n).curStreak>=2).sort((a,b)=>calcMember(b.n).curStreak-calcMember(a.n).curStreak);
+
+  // Last session absent
+  const lastAbsent=lastSess?members.filter(m=>{
+    if(clusterMembers[m.n]?.joinDate>lastSess.key)return false;
+    return attendance[lastSess.key]?attendance[lastSess.key][m.n]!=='present':true;
+  }).sort(byFirstName):[];
+  const lastPresent=lastSess?members.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length:0;
+
+  // Check-in history (last 4 weeks)
+  const recentWeeks=getClusterWeeks().filter(w=>w.key<=new Date().toISOString().split('T')[0]).slice(-4).reverse();
+
+  return`
+    <div style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);color:#e8e8e8;border-radius:10px;padding:16px;text-align:center;margin-bottom:12px">
+      <div style="font-size:18px;font-weight:700;margin-bottom:4px">${c.name}</div>
+      <div style="font-size:12px;opacity:.7">Head: ${c.head} &middot; As at ${lastSess?lastSess.date:now}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+      <div style="background:#f5f5f3;border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700">${members.length}</div><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Members</div></div>
+      <div style="background:#f2fbf7;border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:#1D9E75">${clusterRecs.length?rate+'%':'—'}</div><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Attendance</div></div>
+      <div style="background:${followUp.length?'#fcebeb':'#f5f5f3'};border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:${followUp.length?'#a32d2d':'#1a1a1a'}">${followUp.length}</div><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Follow-up</div></div>
+    </div>
+
+    ${lastSess?`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Last session — ${lastSess.date}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:${lastAbsent.length?'10px':'0'}">
+        <div style="background:#f2fbf7;border-radius:6px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:700;color:#1D9E75">${lastPresent}</div><div style="font-size:10px;color:#085041;font-weight:600">PRESENT</div></div>
+        <div style="background:#fcebeb;border-radius:6px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:700;color:#a32d2d">${lastAbsent.length}</div><div style="font-size:10px;color:#791f1f;font-weight:600">ABSENT</div></div>
+      </div>
+      ${lastAbsent.map(m=>{const str=calcMember(m.n).curStreak;return`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid #f0efe8;font-size:13px"><span style="font-weight:500">${m.n}</span><span style="color:${str>=4?'#a32d2d':str>=2?'#ba7517':'#aaa'};font-weight:500">${str} missed</span></div>`;}).join('')}
+    </div>`:''}
+
+    ${followUp.length?`<div style="background:#faeeda;border:0.5px solid #ef9f27;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:10px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">⚠ Follow-up needed</div>
+      ${followUp.map(m=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid rgba(0,0,0,.08);font-size:13px"><span style="font-weight:600">${m.n}</span><span style="color:${calcMember(m.n).curStreak>=4?'#a32d2d':'#ba7517'};font-weight:700">${calcMember(m.n).curStreak} in a row</span></div>`).join('')}
+    </div>`:''}
+
+    ${recentWeeks.length?`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Check-in history (last ${recentWeeks.length} weeks)</div>
+      ${members.map(m=>{
+        const dots=recentWeeks.map(w=>{
+          if(clusterMembers[m.n]?.joinDate>w.key)return`<span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:#e0e0d8;font-size:9px;line-height:18px;text-align:center;color:#aaa" title="${w.date}">—</span>`;
+          const v=(checkIns[w.key]||{})[m.n]||'';
+          const bg=v==='yes'?'#1D9E75':v==='no'?'#E24B4A':v==='na'?'#888':'#f0f0ea';
+          const lbl=v==='yes'?'✓':v==='no'?'✗':v==='na'?'–':'?';
+          return`<span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:${bg};color:${v?'#fff':'#bbb'};font-size:9px;line-height:18px;text-align:center" title="${w.date}">${lbl}</span>`;
+        }).join('');
+        return`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid #f0efe8;font-size:12px"><span>${m.n}</span><div style="display:flex;gap:3px">${dots}</div></div>`;
+      }).join('')}
+    </div>`:''}
+
+    <div style="font-size:13px;font-weight:500;margin-bottom:8px;color:#1a1a1a">All members</div>
+    ${members.map(m=>{
+      const dots=recs.map(s=>{
+        if(clusterMembers[m.n]?.joinDate>s.key)return`<div class="dot" style="background:#e0e0d8"></div>`;
+        const st=attendance[s.key]?attendance[s.key][m.n]:'unknown';
+        return`<div class="dot ${st==='present'?'dot-y':'dot-n'}"></div>`;
+      }).join('');
+      return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8;font-size:12px">
+        <span style="font-weight:500">${m.n}</span>
+        <div style="display:flex;gap:2px">${dots}</div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function doClusterPrint(){
+  const content=document.getElementById('clusterSummaryContent').innerHTML;
+  const pa=document.getElementById('printArea');
+  if(!pa){alert('Print area not found.');return;}
+  pa.setAttribute('data-mode','mobile');
+  let ps=document.getElementById('_printPageStyle');
+  if(!ps){ps=document.createElement('style');ps.id='_printPageStyle';document.head.appendChild(ps);}
+  ps.textContent='@media print{@page{margin:3mm 3mm!important}}';
+  pa.innerHTML=`<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:10pt;color:#1a1a1a">${content}</div>`;
+  pa.style.display='block';
+  setTimeout(()=>{window.print();setTimeout(()=>{pa.style.display='none';pa.innerHTML='';pa.removeAttribute('data-mode');ps.textContent='';},1200);},150);
+}
+
+function openClusterWebSummary(){
+  const c=clusters.find(x=>x.id===_summaryClusterId);if(!c)return;
+  const content=document.getElementById('clusterSummaryContent').innerHTML;
+  const html=`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>${c.name} Summary</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0efe8;color:#1a1a1a;font-size:15px}.body{padding:14px;max-width:480px;margin:0 auto}.dot{width:12px;height:12px;border-radius:3px;display:inline-block}.dot-y{background:#1D9E75}.dot-n{background:#E24B4A}</style>
+  </head><body><div class="body">${content}</div></body></html>`;
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const win=window.open(url,'_blank');
+  if(!win){const a=document.createElement('a');a.href=url;a.download=c.name.replace(/\s+/g,'-')+'-summary.html';a.click();}
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+
+// ── HOOK MEMBER MODAL SAVE TO PERSIST CLUSTER ─────────────────────────────────
+// Patch openMemberModal and saveMember to include cluster field
+const _origOpenMemberModal=openMemberModal;
+openMemberModal=function(name,defaultGc){
+  _origOpenMemberModal(name,defaultGc);
+  // Populate cluster dropdown after modal opens
+  setTimeout(()=>populateMemberClusterDropdown(name||''),50);
+};
+
+const _origSaveMember=saveMember;
+saveMember=function(){
+  // Read cluster fields before calling original
+  const clusterSel=document.getElementById('mf-cluster');
+  const clusterDateEl=document.getElementById('mf-cluster-date');
+  const selectedCluster=clusterSel?clusterSel.value:'';
+  const clusterDate=clusterDateEl?clusterDateEl.value:'';
+  const memberName=document.getElementById('mf-name').value.trim();
+  _origSaveMember();
+  // After save, persist cluster assignment
+  if(memberName){
+    if(selectedCluster){
+      clusterMembers[memberName]={clusterId:selectedCluster,joinDate:clusterDate||new Date().toISOString().split('T')[0]};
+    } else {
+      delete clusterMembers[memberName];
+    }
+    saveAll();
+  }
+};
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 initSeedData();
