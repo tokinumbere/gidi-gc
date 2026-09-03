@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gidi GC Attendance Tracking</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:14px}
@@ -206,11 +207,62 @@ tr:hover td{background:#fafaf8}
   span[style*="background"]{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   #printArea>div:first-child{border:none!important;background:linear-gradient(135deg,#1a1a1a,#2d2d2d)!important;color:#fff!important;text-align:center!important;border-radius:12px!important}
 }
+
+/* View-only mode — hide all edit controls */
+body.view-only .btn-success:not(#lockBtn):not(.view-allow),
+body.view-only .btn-warn,
+body.view-only .btn-danger,
+body.view-only button[onclick*="openMemberModal"],
+body.view-only button[onclick*="saveMember"],
+body.view-only button[onclick*="saveSession"],
+body.view-only button[onclick*="deleteSession"],
+body.view-only button[onclick*="loadRecordSession"],
+body.view-only button[onclick*="markAll"],
+body.view-only button[onclick*="toggleMember"],
+body.view-only button[onclick*="setCheckIn"],
+body.view-only button[onclick*="openClusterModal"],
+body.view-only button[onclick*="applyRecalc"],
+body.view-only button[onclick*="openBdayImport"],
+body.view-only button[onclick*="clearAllBirthdays"],
+body.view-only button[onclick*="openImportModal"],
+body.view-only button[onclick*="addReasonCategory"],
+body.view-only button[onclick*="openMassAssign"],
+body.view-only button[onclick*="importData"],
+body.view-only #importDataFile,
+body.view-only .toggle-btn,
+body.view-only .reason-sel,
+body.view-only input[type=date]:not(.view-allow),
+body.view-only select#absSessionPicker { pointer-events:none; opacity:0.4; }
+body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
+
 </style>
 </head>
 <body>
 <div class="save-toast" id="saveToast"></div>
 <div id="printArea" style="display:none;padding:14px"></div>
+
+
+<!-- PIN MODAL -->
+<div id="pinModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:28px 24px;width:320px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+    <div style="font-size:28px;margin-bottom:10px">&#128274;</div>
+    <div style="font-size:16px;font-weight:600;margin-bottom:6px">Edit mode</div>
+    <div style="font-size:13px;color:#888;margin-bottom:18px">Enter the PIN to enable editing</div>
+    <input id="pinInput" type="password" maxlength="10" placeholder="PIN"
+      style="width:100%;padding:10px 14px;font-size:18px;text-align:center;border:1.5px solid #ccc;border-radius:8px;font-family:inherit;letter-spacing:.2em;margin-bottom:14px"
+      onkeydown="if(event.key==='Enter')checkPin()">
+    <div id="pinError" style="font-size:12px;color:#a32d2d;margin-bottom:10px;display:none">Incorrect PIN. Try again.</div>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="btn btn-sm" onclick="closePinModal()">Cancel</button>
+      <button class="btn btn-success" onclick="checkPin()">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<!-- VIEW-ONLY BANNER -->
+<div id="viewOnlyBanner" style="display:none;background:#e6f1fb;border-bottom:1px solid #b3cfee;padding:8px 16px;font-size:13px;color:#0c447c;text-align:center;position:sticky;top:0;z-index:400">
+  &#128274; View-only mode &mdash; <button onclick="openPinModal()" style="background:none;border:none;color:#0c447c;font-weight:600;cursor:pointer;font-family:inherit;font-size:13px;text-decoration:underline">Enter PIN to edit</button>
+</div>
 
 <div class="app">
 <div class="top-bar">
@@ -225,7 +277,8 @@ tr:hover td{background:#fafaf8}
     <button class="btn btn-primary" onclick="exportData()">&#8645; Export data</button>
     <button class="btn" onclick="document.getElementById('importDataFile').click()">&#8645; Import data</button>
     <input type="file" id="importDataFile" accept=".json" style="display:none" onchange="importData(this)">
-    <button class="btn btn-primary" onclick="recalcAll()">&#8635; Refresh</button>
+    <button class="btn btn-primary" onclick="loadFromSupabase().then(ok=>{if(ok){recalcAll();showToast('Refreshed ✓',2000);}})">&#8635; Refresh</button>
+    <button class="btn" id="lockBtn" onclick="toggleLock()" title="Lock/unlock editing" style="font-size:15px">&#128274;</button>
   </div>
 </div>
 
@@ -839,23 +892,134 @@ let checkIns={};
 let pendingChanges=[];
 let charts={};
 
-// ── PERSISTENCE ───────────────────────────────────────────────────────────────
-function saveAll(){
-  try{
-    localStorage.setItem(LS_KEY,JSON.stringify({
-      members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,phone:m.phone||'',email:m.email||''})),
-      attendance,absenceReasons,birthdays,firstSession,
-      customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),
-      clusters,clusterMembers,checkIns,
-      savedAt:new Date().toISOString()
-    }));
-    showToast('Saved');
-  }catch(e){showToast('Save failed (storage full?)');}
+// ── SUPABASE ──────────────────────────────────────────────────────────────────
+const SB_URL='https://rgmdtjfkffwoayvzqrks.supabase.co';
+const SB_KEY='sb_publishable_lv0DQNcv8AJCnMmVYkujxw_rKeX0Qsz';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+// Show a loading overlay while syncing
+function showSyncOverlay(msg){
+  let el=document.getElementById('syncOverlay');
+  if(!el){
+    el=document.createElement('div');
+    el.id='syncOverlay';
+    el.style.cssText='position:fixed;inset:0;background:rgba(255,255,255,.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-size:15px;color:#1a1a1a';
+    el.innerHTML='<div style="font-size:28px">⏳</div><div id="syncMsg">Loading...</div>';
+    document.body.appendChild(el);
+  }
+  document.getElementById('syncMsg').textContent=msg||'Loading...';
+  el.style.display='flex';
 }
-function loadSaved(){
+function hideSyncOverlay(){const el=document.getElementById('syncOverlay');if(el)el.style.display='none';}
+
+// ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
+async function loadFromSupabase(){
+  showSyncOverlay('Loading latest data...');
   try{
-    const raw=localStorage.getItem(LS_KEY);
-    if(!raw)return false;
+    // Members
+    const {data:mems}=await sb.from('members').select('*');
+    if(mems&&mems.length){
+      mems.forEach(row=>{
+        let m=MEMBERS.find(x=>x.n===row.name);
+        if(!m){m={n:row.name,gc:row.gc,gcOrig:row.gc_orig||row.gc,city:row.city||'Attendee',g:row.gender||'Female',phone:row.phone||'',email:row.email||''};MEMBERS.push(m);}
+        else{m.gc=row.gc;m.gcOrig=row.gc_orig||row.gc;if(row.city)m.city=row.city;if(row.gender)m.g=row.gender;if(row.phone)m.phone=row.phone;if(row.email)m.email=row.email;}
+      });
+    }
+
+    // Attendance
+    const {data:att}=await sb.from('attendance').select('*');
+    if(att)att.forEach(row=>{if(!attendance[row.session_key])attendance[row.session_key]={};attendance[row.session_key][row.member_name]=row.status;});
+
+    // Absence reasons
+    const {data:ar}=await sb.from('absence_reasons').select('*');
+    if(ar)ar.forEach(row=>{if(!absenceReasons[row.session_key])absenceReasons[row.session_key]={};absenceReasons[row.session_key][row.member_name]=row.reason;});
+
+    // Birthdays
+    const {data:bd}=await sb.from('birthdays').select('*');
+    if(bd)bd.forEach(row=>{birthdays[row.member_name]=row.birthday;});
+
+    // First session
+    const {data:fs}=await sb.from('first_session').select('*');
+    if(fs)fs.forEach(row=>{firstSession[row.member_name]=row.session_key;});
+
+    // Clusters
+    const {data:cl}=await sb.from('clusters').select('*');
+    if(cl&&cl.length){clusters.splice(0,clusters.length,...cl.map(r=>({id:r.id,name:r.name,head:r.head,startDate:r.start_date})));}
+
+    // Cluster members
+    const {data:cm}=await sb.from('cluster_members').select('*');
+    if(cm)cm.forEach(row=>{clusterMembers[row.member_name]={clusterId:row.cluster_id,joinDate:row.join_date};});
+
+    // Check-ins
+    const {data:ci}=await sb.from('check_ins').select('*');
+    if(ci)ci.forEach(row=>{if(!checkIns[row.week_key])checkIns[row.week_key]={};checkIns[row.week_key][row.member_name]=row.status;});
+
+    // Custom reasons
+    const {data:cr}=await sb.from('custom_reasons').select('*');
+    if(cr)cr.forEach(row=>{if(!REASONS.includes(row.reason))REASONS.push(row.reason);});
+
+    hideSyncOverlay();
+    return true;
+  }catch(e){
+    console.error('Supabase load error:',e);
+    hideSyncOverlay();
+    showToast('Could not load from server — showing local data',3500);
+    return false;
+  }
+}
+
+// ── SAVE TO SUPABASE (upsert everything changed) ──────────────────────────────
+async function saveAll(){
+  // Always keep localStorage as a fast local backup
+  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,phone:m.phone||'',email:m.email||''})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,savedAt:new Date().toISOString()}));}catch(e){}
+
+  showToast('Saving...');
+  try{
+    // Upsert members
+    await sb.from('members').upsert(MEMBERS.map(m=>({name:m.n,gc:m.gc,gc_orig:m.gcOrig||m.gc,city:m.city||'',gender:m.g||'',phone:m.phone||'',email:m.email||'',updated_at:new Date().toISOString()})),{onConflict:'name'});
+
+    // Upsert attendance
+    const attRows=[];Object.entries(attendance).forEach(([sk,recs])=>Object.entries(recs).forEach(([mn,st])=>attRows.push({session_key:sk,member_name:mn,status:st})));
+    if(attRows.length)await sb.from('attendance').upsert(attRows,{onConflict:'session_key,member_name'});
+
+    // Upsert absence reasons
+    const arRows=[];Object.entries(absenceReasons).forEach(([sk,recs])=>Object.entries(recs).forEach(([mn,r])=>{if(r)arRows.push({session_key:sk,member_name:mn,reason:r});}));
+    if(arRows.length)await sb.from('absence_reasons').upsert(arRows,{onConflict:'session_key,member_name'});
+
+    // Upsert birthdays
+    const bdRows=Object.entries(birthdays).map(([n,b])=>({member_name:n,birthday:b}));
+    if(bdRows.length)await sb.from('birthdays').upsert(bdRows,{onConflict:'member_name'});
+
+    // Upsert first session
+    const fsRows=Object.entries(firstSession).map(([n,sk])=>({member_name:n,session_key:sk}));
+    if(fsRows.length)await sb.from('first_session').upsert(fsRows,{onConflict:'member_name'});
+
+    // Upsert clusters
+    await sb.from('clusters').upsert(clusters.map(c=>({id:c.id,name:c.name,head:c.head,start_date:c.startDate})),{onConflict:'id'});
+
+    // Upsert cluster members
+    const cmRows=Object.entries(clusterMembers).map(([mn,v])=>({member_name:mn,cluster_id:v.clusterId,join_date:v.joinDate}));
+    if(cmRows.length)await sb.from('cluster_members').upsert(cmRows,{onConflict:'member_name'});
+
+    // Upsert check-ins
+    const ciRows=[];Object.entries(checkIns).forEach(([wk,recs])=>Object.entries(recs).forEach(([mn,st])=>ciRows.push({week_key:wk,member_name:mn,status:st})));
+    if(ciRows.length)await sb.from('check_ins').upsert(ciRows,{onConflict:'week_key,member_name'});
+
+    // Upsert custom reasons
+    const customR=REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r));
+    if(customR.length)await sb.from('custom_reasons').upsert(customR.map(r=>({reason:r})),{onConflict:'reason'});
+
+    showToast('Saved ✓',2000);
+  }catch(e){
+    console.error('Supabase save error:',e);
+    showToast('Save failed — check connection',3000);
+  }
+}
+
+function loadSaved(){
+  // Fallback: load from localStorage if available (used before Supabase loads)
+  try{
+    const raw=localStorage.getItem(LS_KEY);if(!raw)return false;
     const d=JSON.parse(raw);
     if(d.members)d.members.forEach(s=>{const m=MEMBERS.find(x=>x.n===s.n);if(m){m.gc=s.gc;m.gcOrig=s.gcOrig;if(s.phone!==undefined)m.phone=s.phone;if(s.email!==undefined)m.email=s.email;}});
     if(d.attendance)Object.assign(attendance,d.attendance);
@@ -863,7 +1027,7 @@ function loadSaved(){
     if(d.birthdays)Object.assign(birthdays,d.birthdays);
     if(d.firstSession)Object.assign(firstSession,d.firstSession);
     if(d.customReasons)d.customReasons.forEach(r=>{if(!REASONS.includes(r))REASONS.push(r);});
-    if(d.clusters)clusters.splice(0,clusters.length,...d.clusters);
+    if(d.clusters&&d.clusters.length)clusters.splice(0,clusters.length,...d.clusters);
     if(d.clusterMembers)Object.assign(clusterMembers,d.clusterMembers);
     if(d.checkIns)Object.assign(checkIns,d.checkIns);
     return true;
@@ -897,12 +1061,12 @@ function importData(input){
   const file=input.files[0];
   if(!file)return;
   const reader=new FileReader();
-  reader.onload=e=>{
+  reader.onload=async e=>{
     try{
       const d=JSON.parse(e.target.result);
       if(!d.attendance&&!d.members){showToast('Invalid data file',3000);return;}
-      if(!confirm(`Import data from ${new Date(d.exportedAt||0).toLocaleDateString()}?\n\nThis will REPLACE your current data. Make sure you've exported a backup first.`)){input.value='';return;}
-      // Restore members — add any that don't exist
+      if(!confirm(`Import data from ${new Date(d.exportedAt||0).toLocaleDateString()}?\n\nThis will REPLACE your current data and sync to the server so everyone sees it. Make sure you've exported a backup first.`)){input.value='';return;}
+      // Restore members
       if(d.members)d.members.forEach(s=>{
         let m=MEMBERS.find(x=>x.n===s.n);
         if(!m){MEMBERS.push({n:s.n,gc:s.gc,gcOrig:s.gcOrig||s.gc,city:s.city||'Attendee',g:s.g||'Female',phone:s.phone||'',email:s.email||''});}
@@ -917,8 +1081,11 @@ function importData(input){
       if(d.absenceReasons)Object.assign(absenceReasons,d.absenceReasons);
       if(d.birthdays)Object.assign(birthdays,d.birthdays);
       if(d.firstSession)Object.assign(firstSession,d.firstSession);
-      saveAll();recalcAll();
-      showToast('Data imported successfully',3000);
+      recalcAll();
+      // Save to Supabase so everyone sees the imported data
+      showToast('Importing — syncing to server...', 5000);
+      await saveAll();
+      showToast('Data imported and synced ✓ Everyone will see the latest data.',4000);
     }catch(err){showToast('Could not read file — is it a valid export?',3500);}
     input.value='';
   };
@@ -2344,6 +2511,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sess-count{font-size:13px;color:#1D9E75;font-weight:600}
 .streak-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;flex-shrink:0}
 footer{text-align:center;font-size:11px;color:#aaa;margin-top:8px;padding-bottom:20px}
+
+/* View-only mode — hide all edit controls */
+body.view-only .btn-success:not(#lockBtn):not(.view-allow),
+body.view-only .btn-warn,
+body.view-only .btn-danger,
+body.view-only button[onclick*="openMemberModal"],
+body.view-only button[onclick*="saveMember"],
+body.view-only button[onclick*="saveSession"],
+body.view-only button[onclick*="deleteSession"],
+body.view-only button[onclick*="loadRecordSession"],
+body.view-only button[onclick*="markAll"],
+body.view-only button[onclick*="toggleMember"],
+body.view-only button[onclick*="setCheckIn"],
+body.view-only button[onclick*="openClusterModal"],
+body.view-only button[onclick*="applyRecalc"],
+body.view-only button[onclick*="openBdayImport"],
+body.view-only button[onclick*="clearAllBirthdays"],
+body.view-only button[onclick*="openImportModal"],
+body.view-only button[onclick*="addReasonCategory"],
+body.view-only button[onclick*="openMassAssign"],
+body.view-only button[onclick*="importData"],
+body.view-only #importDataFile,
+body.view-only .toggle-btn,
+body.view-only .reason-sel,
+body.view-only input[type=date]:not(.view-allow),
+body.view-only select#absSessionPicker { pointer-events:none; opacity:0.4; }
+body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
+
 </style>
 </head>
 <body>
@@ -2654,6 +2849,7 @@ function renderClusters(){
         <div style="display:flex;gap:6px;flex-shrink:0">
           ${followUpCount?`<span style="font-size:11px;background:#fcebeb;color:#791f1f;border-radius:20px;padding:3px 9px;font-weight:500">⚠ ${followUpCount} follow-up</span>`:''}
           <button class="btn btn-sm" onclick="openClusterSummary('${c.id}')">&#128203; Summary</button>
+          <button class="btn btn-primary btn-sm" onclick="openClusterHeadReport('${c.id}')">&#128100; Leader report</button>
           <button class="btn btn-sm" onclick="openClusterModal('${c.id}')">&#9998; Edit</button>
         </div>
       </div>
@@ -2942,11 +3138,264 @@ saveMember=function(){
   }
 };
 
+// ── PIN / VIEW-ONLY MODE ──────────────────────────────────────────────────────
+const CORRECT_PIN = 'GIDI';
+const PIN_SESSION_KEY = 'gidi_edit_unlocked';
+
+function isEditMode(){
+  return sessionStorage.getItem(PIN_SESSION_KEY) === '1';
+}
+
+function applyMode(){
+  const edit = isEditMode();
+  document.body.classList.toggle('view-only', !edit);
+  const banner = document.getElementById('viewOnlyBanner');
+  const lockBtn = document.getElementById('lockBtn');
+  if(banner) banner.style.display = edit ? 'none' : 'block';
+  if(lockBtn) lockBtn.textContent = edit ? '🔓' : '🔒';
+  if(lockBtn) lockBtn.title = edit ? 'Lock editing' : 'Unlock editing';
+}
+
+function openPinModal(){
+  document.getElementById('pinModal').style.display = 'flex';
+  document.getElementById('pinInput').value = '';
+  document.getElementById('pinError').style.display = 'none';
+  setTimeout(() => document.getElementById('pinInput').focus(), 100);
+}
+
+function closePinModal(){
+  document.getElementById('pinModal').style.display = 'none';
+}
+
+function checkPin(){
+  const val = document.getElementById('pinInput').value.trim().toUpperCase();
+  if(val === CORRECT_PIN){
+    sessionStorage.setItem(PIN_SESSION_KEY, '1');
+    closePinModal();
+    applyMode();
+    showToast('Edit mode unlocked 🔓', 2000);
+  } else {
+    document.getElementById('pinError').style.display = 'block';
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinInput').focus();
+  }
+}
+
+function toggleLock(){
+  if(isEditMode()){
+    if(confirm('Lock editing? You\'ll need the PIN to edit again.')){
+      sessionStorage.removeItem(PIN_SESSION_KEY);
+      applyMode();
+      showToast('Editing locked 🔒', 2000);
+    }
+  } else {
+    openPinModal();
+  }
+}
+
+// Guard edit actions — called by sensitive functions
+function requireEdit(){
+  if(!isEditMode()){
+    openPinModal();
+    return false;
+  }
+  return true;
+}
+
+// ── CLUSTER HEAD REPORT ───────────────────────────────────────────────────────
+function openClusterHeadReport(clusterId){
+  const c = clusters.find(x => x.id === clusterId); if(!c) return;
+  const members = getMembersInCluster(clusterId).sort(byFirstName);
+  const recs = getRecordedSessions();
+  const lastSess = recs.length ? recs[recs.length - 1] : null;
+  const now = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+
+  // This week — most recent Wednesday on or before today
+  const today = new Date().toISOString().split('T')[0];
+  const weeks = getClusterWeeks().filter(w => w.key <= today);
+  const thisWeek = weeks.length ? weeks[weeks.length - 1] : null;
+
+  // Last session absent/present for this cluster
+  const lastAbsent = lastSess ? members.filter(m => {
+    if(clusterMembers[m.n]?.joinDate > lastSess.key) return false;
+    return attendance[lastSess.key] ? attendance[lastSess.key][m.n] !== 'present' : true;
+  }).sort(byFirstName) : [];
+  const lastPresent = lastSess ? members.filter(m =>
+    attendance[lastSess.key] && attendance[lastSess.key][m.n] === 'present'
+  ).length : 0;
+
+  // Absent grouped by reason
+  const reasonGroups = {};
+  const noReason = [];
+  if(lastSess){
+    lastAbsent.forEach(m => {
+      const r = absenceReasons[lastSess.key] ? absenceReasons[lastSess.key][m.n] : '';
+      if(r){ if(!reasonGroups[r]) reasonGroups[r]=[]; reasonGroups[r].push(m); }
+      else noReason.push(m);
+    });
+  }
+
+  // Follow-up (streak >= 2)
+  const followUp = members.filter(m => calcMember(m.n).curStreak >= 2)
+    .sort((a,b) => calcMember(b.n).curStreak - calcMember(a.n).curStreak);
+
+  // Check-ins this week
+  const weekCheckins = thisWeek ? (checkIns[thisWeek.key] || {}) : {};
+  const eligible = thisWeek ? members.filter(m => (clusterMembers[m.n]?.joinDate||'') <= thisWeek.key) : [];
+  const ciDone = eligible.filter(m => weekCheckins[m.n] === 'yes');
+  const ciNotDone = eligible.filter(m => weekCheckins[m.n] === 'no');
+  const ciNa = eligible.filter(m => weekCheckins[m.n] === 'na');
+  const ciUnlogged = eligible.filter(m => !weekCheckins[m.n]);
+
+  const GCOL = {Core:'#085041',Frequent:'#0c447c',Rare:'#633806',Unresponsive:'#791f1f',Guest:'#444'};
+  const GBKG = {Core:'#e1f5ee',Frequent:'#e6f1fb',Rare:'#faeeda',Unresponsive:'#fcebeb',Guest:'#f1efe8'};
+
+  const nameRow = (m, right, rightColor) => {
+    const streak = calcMember(m.n).curStreak;
+    const flag = streak >= 2 ? `<span style="font-size:10px;background:#fcebeb;color:#791f1f;border-radius:4px;padding:1px 5px;margin-left:4px">Follow up</span>` : '';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid #f0f0ea;gap:8px">
+      <div>
+        <div style="font-size:14px;font-weight:500;display:flex;align-items:center;flex-wrap:wrap;gap:3px">${m.n}${flag}</div>
+        <span style="font-size:11px;font-weight:500;background:${GBKG[m.gc]||'#f5f5f3'};color:${GCOL[m.gc]||'#888'};border-radius:20px;padding:1px 7px">${m.gc}</span>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:${rightColor||'#888'};flex-shrink:0;text-align:right">${right}</div>
+    </div>`;
+  };
+
+  const html = `
+    <!-- HEADER -->
+    <div style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);border-radius:10px;padding:18px;text-align:center;margin-bottom:12px">
+      <div style="font-size:20px;font-weight:700;color:#e8e8e8;margin-bottom:4px">${c.name}</div>
+      <div style="font-size:13px;color:#aaa">Leader: ${c.head} &middot; As at ${lastSess ? lastSess.date : now}</div>
+    </div>
+
+    <!-- KEY NUMBERS -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+      <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700">${members.length}</div>
+        <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Members</div>
+      </div>
+      <div style="background:#f2fbf7;border:0.5px solid #b8e6d4;border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:#1D9E75">${lastPresent}</div>
+        <div style="font-size:10px;color:#085041;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Last session</div>
+      </div>
+      <div style="background:${followUp.length?'#fcebeb':'#f5f5f3'};border:0.5px solid ${followUp.length?'#f5c6c6':'#e0e0d8'};border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:${followUp.length?'#a32d2d':'#1a1a1a'}">${followUp.length}</div>
+        <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Follow up</div>
+      </div>
+    </div>
+
+    ${followUp.length ? `
+    <!-- FOLLOW-UP — most important, shown first -->
+    <div style="background:#faeeda;border:0.5px solid #ef9f27;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">⚠ Who to reach out to this week</div>
+      ${followUp.map(m => {
+        const str = calcMember(m.n).curStreak;
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid rgba(0,0,0,.08);gap:8px">
+          <div>
+            <div style="font-size:14px;font-weight:600;color:#1a1a1a">${m.n}</div>
+            <span style="font-size:11px;background:${GBKG[m.gc]||'#f5f5f3'};color:${GCOL[m.gc]||'#888'};border-radius:20px;padding:1px 7px;font-weight:500">${m.gc}</span>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:14px;font-weight:700;color:${str>=4?'#a32d2d':'#ba7517'}">${str} missed in a row</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>` : '<div style="background:#e1f5ee;border-radius:10px;padding:12px;margin-bottom:12px;text-align:center;font-size:13px;color:#085041;font-weight:500">✓ No follow-ups needed this week</div>'}
+
+    ${thisWeek ? `
+    <!-- CHECK-INS THIS WEEK -->
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Check-ins — week of ${thisWeek.date}</div>
+      <div style="display:flex;gap:8px;font-size:12px;margin-bottom:10px;flex-wrap:wrap">
+        <span style="color:#1D9E75;font-weight:600">✓ ${ciDone.length} done</span>
+        ${ciNotDone.length ? `<span style="color:#E24B4A;font-weight:600">✗ ${ciNotDone.length} not done</span>` : ''}
+        ${ciNa.length ? `<span style="color:#888">– ${ciNa.length} N/A</span>` : ''}
+        ${ciUnlogged.length ? `<span style="color:#ba7517">${ciUnlogged.length} unlogged</span>` : ''}
+      </div>
+      ${ciNotDone.length ? `<div style="margin-bottom:8px"><div style="font-size:11px;font-weight:700;color:#E24B4A;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Not checked in</div>${ciNotDone.map(m=>nameRow(m,'✗ Not done','#E24B4A')).join('')}</div>` : ''}
+      ${ciUnlogged.length ? `<div><div style="font-size:11px;font-weight:700;color:#ba7517;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Unlogged</div>${ciUnlogged.map(m=>nameRow(m,'?','#ba7517')).join('')}</div>` : ''}
+      ${ciDone.length && !ciNotDone.length && !ciUnlogged.length ? `<div style="font-size:13px;color:#085041;font-weight:500">All members checked in ✓</div>` : ''}
+    </div>` : ''}
+
+    ${lastSess ? `
+    <!-- LAST SESSION ABSENCES -->
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Last session — ${lastSess.date}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:${lastAbsent.length?'12px':'0'}">
+        <div style="background:#f2fbf7;border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:#1D9E75">${lastPresent}</div>
+          <div style="font-size:10px;color:#085041;font-weight:600;text-transform:uppercase;margin-top:3px">Present</div>
+        </div>
+        <div style="background:#fcebeb;border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:#a32d2d">${lastAbsent.length}</div>
+          <div style="font-size:10px;color:#791f1f;font-weight:600;text-transform:uppercase;margin-top:3px">Absent</div>
+        </div>
+      </div>
+      ${lastAbsent.length ? `
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Absent members</div>
+        ${Object.entries(reasonGroups).map(([reason,mems]) => `
+          <div style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;display:flex;align-items:center;gap:6px">
+              <span style="width:8px;height:8px;border-radius:2px;background:${reason==='Travel'?'#378ADD':reason==='Sick'?'#E24B4A':reason==='Exam'?'#EF9F27':reason==='Work'?'#7F77DD':'#888780'};display:inline-block"></span>
+              ${reason} (${mems.length})
+            </div>
+            ${mems.map(m => nameRow(m, calcMember(m.n).curStreak+' missed', calcMember(m.n).curStreak>=4?'#a32d2d':calcMember(m.n).curStreak>=2?'#ba7517':'#aaa')).join('')}
+          </div>`).join('')}
+        ${noReason.length ? `
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">No reason given (${noReason.length})</div>
+            ${noReason.map(m => nameRow(m, calcMember(m.n).curStreak+' missed', calcMember(m.n).curStreak>=2?'#ba7517':'#aaa')).join('')}
+          </div>` : ''}
+      ` : '<div style="font-size:13px;color:#085041;font-weight:500">Everyone attended ✓</div>'}
+    </div>` : ''}
+
+    <!-- FULL MEMBER RECORD -->
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:14px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">All members — session record</div>
+      ${members.map(m => {
+        const dots = recs.map(s => {
+          const joinDate = clusterMembers[m.n]?.joinDate || '2026-09-09';
+          if(s.key < joinDate) return `<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#e8e8e8;margin:1px" title="${s.date}"></span>`;
+          const st = attendance[s.key] ? attendance[s.key][m.n] : 'unknown';
+          return `<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${st==='present'?'#1D9E75':'#E24B4A'};margin:1px" title="${s.date}"></span>`;
+        }).join('');
+        const c2 = calcMember(m.n);
+        const streak = c2.curStreak;
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid #f0f0ea;gap:8px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:13px;font-weight:500">${m.n}</div>
+            <div style="margin-top:3px">${dots}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:12px;color:${streak>=4?'#a32d2d':streak>=2?'#ba7517':'#888'};font-weight:${streak>=2?'600':'400'}">${streak>0?streak+' missed in a row':'—'}</div>
+            <div style="font-size:11px;color:#888">${c2.rate}% rate</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div style="text-align:center;font-size:11px;color:#aaa;padding:12px 0">Gidi GC Attendance Tracking &middot; ${c.name} &middot; ${lastSess ? lastSess.date : now}</div>
+  `;
+
+  // Open in the cluster summary modal
+  document.getElementById('clusterSummaryTitle').textContent = c.name + ' — Leader Report';
+  document.getElementById('clusterSummaryContent').innerHTML = html;
+  document.getElementById('clusterSummaryModal').className = 'member-modal open';
+  _summaryClusterId = clusterId;
+}
+
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 initSeedData();
-const restored=loadSaved();
+// Load localStorage instantly for fast first render
+const restoredLocal=loadSaved();
 recalcAll();
-if(restored)showToast('Restored from last session',2500);
+applyMode();
+if(restoredLocal)showToast('Loading latest data from server...',1500);
+// Then fetch latest from Supabase and re-render
+loadFromSupabase().then(ok=>{
+  if(ok){recalcAll();showToast('Up to date ✓',2000);}
+});
 </script>
 </body>
 </html>
