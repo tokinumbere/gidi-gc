@@ -915,7 +915,25 @@ function hideSyncOverlay(){const el=document.getElementById('syncOverlay');if(el
 // ── LOAD FROM SUPABASE ────────────────────────────────────────────────────────
 async function loadFromSupabase(){
   showSyncOverlay('Loading latest data...');
+  // Timeout after 8 seconds — fall back to local data
+  const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),8000));
   try{
+    await Promise.race([_loadFromSupabaseInner(), timeout]);
+    hideSyncOverlay();
+    return true;
+  }catch(e){
+    console.error('Supabase load error:',e);
+    hideSyncOverlay();
+    if(e.message==='timeout'){
+      showToast('Server took too long — showing local data. Try refreshing.',4000);
+    } else {
+      showToast('Could not load from server — showing local data',3500);
+    }
+    return false;
+  }
+}
+
+async function _loadFromSupabaseInner(){
     // Members
     const {data:mems}=await sb.from('members').select('*');
     if(mems&&mems.length){
@@ -957,14 +975,7 @@ async function loadFromSupabase(){
     // Custom reasons
     const {data:cr}=await sb.from('custom_reasons').select('*');
     if(cr)cr.forEach(row=>{if(!REASONS.includes(row.reason))REASONS.push(row.reason);});
-
-    hideSyncOverlay();
-    return true;
-  }catch(e){
-    console.error('Supabase load error:',e);
-    hideSyncOverlay();
-    showToast('Could not load from server — showing local data',3500);
-    return false;
+  // end _loadFromSupabaseInner
   }
 }
 
@@ -3387,15 +3398,15 @@ function openClusterHeadReport(clusterId){
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 initSeedData();
-// Load localStorage instantly for fast first render
-const restoredLocal=loadSaved();
+loadSaved(); // instant local render
 recalcAll();
 applyMode();
-if(restoredLocal)showToast('Loading latest data from server...',1500);
-// Then fetch latest from Supabase and re-render
-loadFromSupabase().then(ok=>{
-  if(ok){recalcAll();showToast('Up to date ✓',2000);}
-});
+// Then fetch from Supabase in background — doesn't block the UI
+setTimeout(()=>{
+  loadFromSupabase().then(ok=>{
+    if(ok){recalcAll();showToast('Up to date ✓',2000);}
+  });
+},100);
 </script>
 </body>
 </html>
