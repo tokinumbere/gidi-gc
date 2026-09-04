@@ -245,11 +245,11 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 
 
 <!-- PIN MODAL -->
-<div id="pinModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center">
+<div id="pinModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:14px;padding:28px 24px;width:320px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.18)">
     <div style="font-size:28px;margin-bottom:10px">&#128274;</div>
-    <div style="font-size:16px;font-weight:600;margin-bottom:6px">Edit mode</div>
-    <div style="font-size:13px;color:#888;margin-bottom:18px">Enter the PIN to enable editing</div>
+    <div class="pin-title" style="font-size:16px;font-weight:600;margin-bottom:6px">Edit mode</div>
+    <div class="pin-subtitle" style="font-size:13px;color:#888;margin-bottom:18px">Enter the PIN to enable editing</div>
     <input id="pinInput" type="password" maxlength="10" placeholder="PIN"
       style="width:100%;padding:10px 14px;font-size:18px;text-align:center;border:1.5px solid #ccc;border-radius:8px;font-family:inherit;letter-spacing:.2em;margin-bottom:14px"
       onkeydown="if(event.key==='Enter')checkPin()">
@@ -657,6 +657,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
       <option value="">Select week for check-ins...</option>
     </select>
     <button class="btn btn-primary btn-sm" id="analyticsToggleBtn" onclick="toggleClusterAnalytics()">&#128200; Leader analytics</button>
+    <button class="btn btn-sm" onclick="generateMagicLinks()">&#128279; Leader links</button>
     <button class="btn btn-success btn-sm" onclick="openClusterModal(null)">+ Add cluster</button>
   </div>
 
@@ -2697,13 +2698,72 @@ function toggleMobMore(){
 }
 function closeMobMore(){document.getElementById('mobMore').style.display='none';}
 
+const CLUSTER_PIN='1234';
+const CLUSTER_SESSION_KEY='gidi_cluster_unlocked';
+
+function isClusterUnlocked(){
+  return sessionStorage.getItem(CLUSTER_SESSION_KEY)==='1'||isEditMode();
+}
+
+function unlockClusters(pin){
+  if(pin===CLUSTER_PIN||pin===CORRECT_PIN){
+    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
+    return true;
+  }
+  return false;
+}
+
+function openClusterPinModal(onSuccess){
+  // Show PIN modal but with cluster context
+  const m=document.getElementById('pinModal');
+  document.querySelector('#pinModal .pin-title').textContent='Clusters access';
+  document.querySelector('#pinModal .pin-subtitle').textContent='Enter the Clusters PIN to view cluster data';
+  m.style.display='flex';
+  document.getElementById('pinInput').value='';
+  document.getElementById('pinError').style.display='none';
+  // Store callback
+  m._onSuccess=onSuccess;
+  setTimeout(()=>document.getElementById('pinInput').focus(),100);
+}
+
+function checkPin(){
+  const raw=document.getElementById('pinInput').value.trim();
+  const upper=raw.toUpperCase();
+  const m=document.getElementById('pinModal');
+
+  // Edit PIN (GIDI) — case-insensitive
+  if(upper===CORRECT_PIN){
+    sessionStorage.setItem(PIN_SESSION_KEY,'1');
+    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
+    closePinModal();applyMode();
+    showToast('Edit mode unlocked 🔓',2000);
+    if(m._onSuccess){m._onSuccess();m._onSuccess=null;}
+    return;
+  }
+  // Cluster PIN (1234) — exact match
+  if(raw===CLUSTER_PIN){
+    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
+    closePinModal();
+    showToast('Clusters unlocked ✓',2000);
+    if(m._onSuccess){m._onSuccess();m._onSuccess=null;}
+    return;
+  }
+  // Wrong
+  document.getElementById('pinError').style.display='block';
+  document.getElementById('pinInput').value='';
+  document.getElementById('pinInput').focus();
+}
+
 function switchTab(id,el){
+  // Clusters tab requires PIN unless unlocked or arriving via magic link
+  if(id==='clusters'&&!isClusterUnlocked()){
+    openClusterPinModal(()=>switchTab('clusters',el));
+    return;
+  }
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   if(el)el.classList.add('active');
-  // Sync mobile bottom nav
-  const mainTabs=['overview','members','record','absenteeism'];
   document.querySelectorAll('.mob-nav-btn').forEach(b=>{
     b.classList.remove('active');
     if(b.dataset.tab===id)b.classList.add('active');
@@ -2718,7 +2778,59 @@ function switchTab(id,el){
   window.scrollTo(0,0);
 }
 
-// ── CLUSTERS ──────────────────────────────────────────────────────────────────
+// ── MAGIC LINK — ?cluster=cX ─────────────────────────────────────────────────
+function checkMagicLink(){
+  const params=new URLSearchParams(window.location.search);
+  const clusterId=params.get('cluster');
+  if(!clusterId)return;
+  // Unlock clusters silently
+  sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
+  // Switch to clusters tab and scroll to the right cluster after render
+  setTimeout(()=>{
+    switchTab('clusters',document.querySelector('[data-id=clusters]'));
+    // Scroll to the cluster card
+    setTimeout(()=>{
+      const card=document.querySelector(`[data-cluster-id="${clusterId}"]`);
+      if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
+      // Open the leader report directly
+      openClusterHeadReport(clusterId);
+    },400);
+  },800);
+}
+
+// Generate magic links for all cluster heads
+function generateMagicLinks(){
+  const base=window.location.origin+window.location.pathname;
+  const html=clusters.map(c=>{
+    const url=`${base}?cluster=${c.id}`;
+    return`<div style="padding:10px 0;border-bottom:0.5px solid #f0efe8">
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px">${c.head} — ${c.name}</div>
+      <div style="font-size:12px;color:#555;word-break:break-all;margin-bottom:6px">${url}</div>
+      <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${url}').then(()=>showToast('Copied!',1500))">Copy link</button>
+    </div>`;
+  }).join('');
+  // Show in a simple modal
+  let mo=document.getElementById('magicLinkModal');
+  if(!mo){
+    mo=document.createElement('div');
+    mo.id='magicLinkModal';
+    mo.className='modal-overlay';
+    mo.onclick=e=>{if(e.target===mo)mo.style.display='none';};
+    mo.innerHTML=`<div class="modal-box" style="max-width:520px;max-height:80vh;overflow-y:auto">
+      <div class="modal-header">
+        <div style="font-size:15px;font-weight:500">Cluster leader links</div>
+        <button class="btn btn-sm" onclick="document.getElementById('magicLinkModal').style.display='none'">Close</button>
+      </div>
+      <div style="padding:16px">
+        <div style="font-size:13px;color:#888;margin-bottom:12px">Send each leader their personal link. Opening it takes them straight to their cluster report — no PIN needed.</div>
+        <div id="magicLinkList"></div>
+      </div>
+    </div>`;
+    document.body.appendChild(mo);
+  }
+  document.getElementById('magicLinkList').innerHTML=html;
+  mo.style.display='flex';
+}
 
 function getClusterSessions(){
   // Sessions from Sept onwards (cluster term)
@@ -2867,7 +2979,7 @@ function renderClusters(){
     const cEsc=c.name.replace(/'/g,"\\'");
     const headEsc=c.head.replace(/'/g,"\\'");
 
-    return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden;margin-bottom:1rem">
+    return`<div data-cluster-id="${c.id}" style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden;margin-bottom:1rem">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:0.5px solid #e0e0d8;flex-wrap:wrap;gap:8px">
         <div>
           <div style="font-size:14px;font-weight:500">${c.name}</div>
@@ -3336,10 +3448,14 @@ function applyMode(){
 }
 
 function openPinModal(){
-  document.getElementById('pinModal').style.display = 'flex';
-  document.getElementById('pinInput').value = '';
-  document.getElementById('pinError').style.display = 'none';
-  setTimeout(() => document.getElementById('pinInput').focus(), 100);
+  const m=document.getElementById('pinModal');
+  document.querySelector('#pinModal .pin-title').textContent='Edit mode';
+  document.querySelector('#pinModal .pin-subtitle').textContent='Enter the PIN to enable editing';
+  m.style.display='flex';
+  m._onSuccess=null;
+  document.getElementById('pinInput').value='';
+  document.getElementById('pinError').style.display='none';
+  setTimeout(()=>document.getElementById('pinInput').focus(),100);
 }
 
 function closePinModal(){
@@ -3821,6 +3937,8 @@ setTimeout(async()=>{
     if(ok){recalcAll();showToast('Up to date ✓',2000);}
   }catch(e){console.error('Boot sync error:',e);}
 },500);
+// Check for magic link (cluster leader direct access)
+setTimeout(checkMagicLink,1200);
 </script>
 </body>
 </html>
