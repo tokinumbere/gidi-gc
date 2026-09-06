@@ -7,7 +7,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="data:application/json,{%22name%22:%22Gidi%20GC%20Attendance%22,%22short_name%22:%22Gidi%20GC%22,%22start_url%22:%22/%22,%22display%22:%22standalone%22,%22background_color%22:%22%23f5f5f3%22,%22theme_color%22:%221a1a1a%22,%22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%20100%20100%27%3E%3Crect%20width=%27100%27%20height=%27100%27%20rx=%2720%27%20fill=%27%231a1a1a%27/%3E%3Ctext%20y=%27.9em%27%20font-size=%2780%27%20x=%2750%27%20text-anchor=%27middle%27%3E📋%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22192x192%22,%22type%22:%22image/svg+xml%22}]}">
+<meta name="theme-color" content="#1a1a1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gidi GC">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Kumbh Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:14px}
@@ -281,6 +287,8 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <button class="btn" onclick="document.getElementById('importDataFile').click()">&#8645; Import data</button>
     <input type="file" id="importDataFile" accept=".json" style="display:none" onchange="importData(this)">
     <button class="btn btn-primary" onclick="loadFromSupabase().then(ok=>{if(ok){recalcAll();showToast('Refreshed ✓',2000);}})">&#8635; Refresh</button>
+    <button class="btn btn-warn" onclick="openSessionDebrief()" title="Post-session pastoral debrief">&#128203; Debrief</button>
+    <button class="btn" onclick="sendWeeklySummary()" title="Email weekly summary to yourself">&#128140; Email summary</button>
     <button class="btn btn-danger" onclick="openNewTerm()" title="Start a new term">&#127379; New Term</button>
     <button class="btn" id="lockBtn" onclick="toggleLock()" title="Lock/unlock editing" style="font-size:15px">&#128274;</button>
   </div>
@@ -382,6 +390,8 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
       <button class="btn btn-success btn-sm" onclick="openMemberModal(null,'Guest')">+ Add guest</button>
     </div>
   </div>
+  <!-- Guest conversion funnel -->
+  <div id="guestFunnel" style="margin-bottom:1rem"></div>
   <div class="table-wrap">
     <table>
       <colgroup><col style="width:155px"><col style="width:85px"><col style="width:65px"><col style="width:100px"><col style="width:55px"><col style="width:36px"></colgroup>
@@ -650,6 +660,12 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <div id="cluster-guest-list" style="font-size:13px;color:#633806"></div>
   </div>
 
+  <!-- Pending submissions badge -->
+  <div id="pendingBadgeBar" style="display:none;background:#e6f1fb;border:0.5px solid #b3cfee;border-radius:10px;padding:10px 14px;margin-bottom:1rem;align-items:center;justify-content:space-between">
+    <div style="font-size:13px;color:#0c447c;font-weight:500">&#128229; <span id="pendingCount">0</span> pending cluster submissions awaiting review</div>
+    <button class="btn btn-primary btn-sm" onclick="openPendingModal()">Review</button>
+  </div>
+
   <!-- Overview metrics -->
   <div class="metrics" id="cluster-metrics" style="margin-bottom:1rem"></div>
 
@@ -720,6 +736,95 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
       </div>
     </div>
     <div id="clusterSummaryContent" style="padding:20px;max-height:75vh;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- SESSION DEBRIEF MODAL -->
+<div class="member-modal" id="debriefModal" onclick="if(event.target===this)closeDebrief()">
+  <div class="member-modal-box" style="max-width:600px;width:95vw;max-height:92vh">
+    <div class="member-modal-header" style="position:sticky;top:0;z-index:10;background:#fafaf8">
+      <div>
+        <div style="font-size:15px;font-weight:500">Session debrief</div>
+        <div id="debriefSubtitle" style="font-size:12px;color:#888;margin-top:2px"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="debriefProgress" style="font-size:12px;color:#888"></span>
+        <button class="btn btn-success btn-sm" onclick="saveDebriefAndClose()">Save &amp; close</button>
+        <button class="btn btn-sm" onclick="closeDebrief()">Close</button>
+      </div>
+    </div>
+    <div id="debriefContent" style="padding:16px;overflow-y:auto;max-height:80vh"></div>
+  </div>
+</div>
+
+<!-- MEMBER PROFILE MODAL -->
+<div class="member-modal" id="profileModal" onclick="if(event.target===this)closeProfile()">
+  <div class="member-modal-box" style="max-width:560px;width:95vw;max-height:92vh">
+    <div class="member-modal-header" style="position:sticky;top:0;z-index:10;background:#fafaf8">
+      <div style="font-size:15px;font-weight:500" id="profileName">Member profile</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" id="profileEditBtn" onclick="openMemberModalFromProfile()">&#9998; Edit</button>
+        <button class="btn btn-sm" onclick="closeProfile()">Close</button>
+      </div>
+    </div>
+    <div id="profileContent" style="padding:16px;overflow-y:auto;max-height:82vh"></div>
+  </div>
+</div>
+
+<!-- GUEST CONVERSION MODAL -->
+<div class="member-modal" id="guestConvertModal" onclick="if(event.target===this)closeGuestConvert()">
+  <div class="member-modal-box" style="max-width:400px">
+    <div class="member-modal-header">
+      <div style="font-size:15px;font-weight:500">Convert guest</div>
+      <button class="btn btn-sm" onclick="closeGuestConvert()">Close</button>
+    </div>
+    <div style="padding:20px">
+      <div style="font-size:13px;color:#888;margin-bottom:14px" id="convertGuestName"></div>
+      <div class="form-row">
+        <label class="form-label">New GC status</label>
+        <select class="form-input" id="convertGcStatus">
+          <option value="Frequent">Frequent</option>
+          <option value="Rare">Rare</option>
+          <option value="Core">Core</option>
+          <option value="Unresponsive">Unresponsive</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Assign to cluster</label>
+        <select class="form-input" id="convertCluster">
+          <option value="">No cluster yet</option>
+        </select>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+        <button class="btn btn-sm" onclick="closeGuestConvert()">Cancel</button>
+        <button class="btn btn-success" onclick="confirmGuestConvert()">Convert member</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CLUSTER HEAD SUBMISSION MODAL (via magic link) -->
+<div class="member-modal" id="clusterSubmitModal" onclick="if(event.target===this)closeClusterSubmit()">
+  <div class="member-modal-box" style="max-width:560px;width:95vw;max-height:92vh">
+    <div class="member-modal-header" style="position:sticky;top:0;z-index:10;background:#fafaf8">
+      <div>
+        <div style="font-size:15px;font-weight:500" id="clusterSubmitTitle">Weekly check-in</div>
+        <div style="font-size:12px;color:#888;margin-top:2px" id="clusterSubmitSubtitle"></div>
+      </div>
+      <button class="btn btn-sm" onclick="closeClusterSubmit()">Close</button>
+    </div>
+    <div id="clusterSubmitContent" style="padding:16px;overflow-y:auto;max-height:80vh"></div>
+  </div>
+</div>
+
+<!-- PENDING SUBMISSIONS MODAL -->
+<div class="member-modal" id="pendingModal" onclick="if(event.target===this)closePendingModal()">
+  <div class="member-modal-box" style="max-width:560px;width:95vw;max-height:92vh">
+    <div class="member-modal-header">
+      <div style="font-size:15px;font-weight:500">Pending cluster submissions</div>
+      <button class="btn btn-sm" onclick="closePendingModal()">Close</button>
+    </div>
+    <div id="pendingContent" style="padding:16px;overflow-y:auto;max-height:82vh"></div>
   </div>
 </div>
 
@@ -999,6 +1104,7 @@ const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov',
 const LS_KEY='att_dash_2026_v1';
 
 const MEMBERS_SEED=[{"n": "Anita Obidiegwu", "gc": "Unresponsive", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Chinedu Awa", "gc": "Core", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Chinedu Obidiegwu", "gc": "Unresponsive", "gcOrig": "Core", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Ifeoma Igbokidi", "gc": "Unresponsive", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Ksusha Anom", "gc": "Unresponsive", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Mary Captain", "gc": "Frequent", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Nelson Allison", "gc": "Frequent", "gcOrig": "Core", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Wunmi Durosinmi-Etti", "gc": "Core", "gcOrig": "Core", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Damilola Macaulay", "gc": "Rare", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Daniel Asuquo", "gc": "Unresponsive", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "David Idoko", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Demex Achinga", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Nengi Goodman", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Nnenna Idoko", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Omodara Olanrewaju", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Precious Erhabor", "gc": "Rare", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Samuel Sagbele", "gc": "Rare", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Temitope Erhabor", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Terdoo Anom", "gc": "Rare", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Terver Akindigh", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Toki Numbere", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Tomisin Numbere", "gc": "Core", "gcOrig": "Core", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Akpor Hari Agboro", "gc": "Unresponsive", "gcOrig": "Frequent", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Amanda Zara Nwankwo", "gc": "Unresponsive", "gcOrig": "Frequent", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Niyi Joseph", "gc": "Core", "gcOrig": "Frequent", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Vanessa Ebitu", "gc": "Rare", "gcOrig": "Frequent", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Asta Akindigh", "gc": "Core", "gcOrig": "Frequent", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Christiana Omelazu", "gc": "Core", "gcOrig": "Frequent", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Evi Idoghor", "gc": "Core", "gcOrig": "Frequent", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Udoo Achinga", "gc": "Guest", "gcOrig": "Frequent", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Blessed Mademeidon", "gc": "Frequent", "gcOrig": "Frequent", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Chinyere Izu-Ohajinwa", "gc": "Frequent", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Confidence Blankson", "gc": "Rare", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Esther Ende", "gc": "Frequent", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Georgina Gabriel", "gc": "Unresponsive", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Happiness Asuquo", "gc": "Rare", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Izu Ohajinwa", "gc": "Frequent", "gcOrig": "Rare", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Ololade Soyebi", "gc": "Frequent", "gcOrig": "Rare", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Gloria Garba", "gc": "Frequent", "gcOrig": "Rare", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Ifeoluwa Williams", "gc": "Rare", "gcOrig": "Rare", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Labake Laniyan", "gc": "Frequent", "gcOrig": "Rare", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Laolu Macaulay", "gc": "Unresponsive", "gcOrig": "Unresponsive", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Emmanuel Williams", "gc": "Frequent", "gcOrig": "Unresponsive", "city": "Attendee", "g": "Male", "phone": "", "email": ""}, {"n": "Fisayo A.", "gc": "Guest", "gcOrig": "Unresponsive", "city": "Non-Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Millicent Rogers", "gc": "Rare", "gcOrig": "Unresponsive", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Emmanuel Adeyemo", "gc": "Guest", "gcOrig": "Unresponsive", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Elizabeth Adeyemo", "gc": "Guest", "gcOrig": "Unresponsive", "city": "Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Owoade Yussuff", "gc": "Guest", "gcOrig": "Unresponsive", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Phoebe Mademeidon", "gc": "Guest", "gcOrig": "Guest", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Shammah Obereika", "gc": "Unresponsive", "gcOrig": "Guest", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Ebube Agu", "gc": "Guest", "gcOrig": "Guest", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Ibukun Agu", "gc": "Guest", "gcOrig": "Guest", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Nnoma Awa", "gc": "Guest", "gcOrig": "Guest", "city": "Non-Attendee", "g": "Female", "phone": "", "email": ""}, {"n": "Olaitan Akintunde", "gc": "Guest", "gcOrig": "Guest", "city": "Member", "g": "Male", "phone": "", "email": ""}, {"n": "Phebe Mademeidon", "gc": "Frequent", "gcOrig": "Guest", "city": "Member", "g": "Female", "phone": "", "email": ""}, {"n": "Nneoma Awa", "gc": "Guest", "gcOrig": "Guest", "city": "Non-Attendee", "g": "Female", "phone": "", "email": ""}];
+const PHONES={"Anita Obidiegwu": {"phone": "09063669628", "wa": "2349063669628"}, "Chinedu Awa": {"phone": "09064411463", "wa": "2349064411463"}, "Chinedu Obidiegwu": {"phone": "08056756438", "wa": "2348056756438"}, "Damilola Macaulay": {"phone": "08034010450", "wa": "2348034010450"}, "Daniel Asuquo": {"phone": "09095126878", "wa": "2349095126878"}, "David Idoko": {"phone": "08069213434", "wa": "2348069213434"}, "Demex Achinga": {"phone": "07060880225", "wa": "2347060880225"}, "Ifeoma Igbokidi": {"phone": "08135641366", "wa": "2348135641366"}, "Ksusha Anom": {"phone": "09053606729", "wa": "2349053606729"}, "Mary Captain": {"phone": "07045910778", "wa": "2347045910778"}, "Nelson Allison": {"phone": "08064913113", "wa": "2348064913113"}, "Nengi Goodman": {"phone": "08163138141", "wa": "2348163138141"}, "Nnenna Idoko": {"phone": "08168632614", "wa": "2348168632614"}, "Omodara Olanrewaju": {"phone": "08160332262", "wa": "2348160332262"}, "Precious Erhabor": {"phone": "08143771234", "wa": "2348143771234"}, "Samuel Sagbele": {"phone": "07065317145", "wa": "2347065317145"}, "Temitope Erhabor": {"phone": "08060358249", "wa": "2348060358249"}, "Terdoo Anom": {"phone": "08166252510", "wa": "2348166252510"}, "Terver Akindigh": {"phone": "08067922329", "wa": "2348067922329"}, "Toki Numbere": {"phone": "08063527924", "wa": "2348063527924"}, "Tomisin Numbere": {"phone": "08134753771", "wa": "2348134753771"}, "Wunmi Durosinmi-Etti": {"phone": "08179338821", "wa": "2348179338821"}, "Akpor Hari Agboro": {"phone": "07051433147", "wa": "2347051433147"}, "Amanda Zara Nwankwo": {"phone": "09073049789", "wa": "2349073049789"}, "Asta Akindigh": {"phone": "07068220473", "wa": "2347068220473"}, "Blessed Mademeidon": {"phone": "08156948826", "wa": "2348156948826"}, "Christiana Omelazu": {"phone": "08087403119", "wa": "2348087403119"}, "Evi Idoghor": {"phone": "08127265411", "wa": "2348127265411"}, "Niyi Joseph": {"phone": "07061598400", "wa": "2347061598400"}, "Phebe Mademeidon": {"phone": "08158873089", "wa": "2348158873089"}, "Udoo Achinga": {"phone": "08148437892", "wa": "2348148437892"}, "Vanessa Ebitu": {"phone": "447312267609", "wa": "447312267609"}, "Chinyere Izu-Ohajinwa": {"phone": "07036406453", "wa": "2347036406453"}, "Confidence Blankson": {"phone": "08133223543", "wa": "2348133223543"}, "Esther Ende": {"phone": "07041855575", "wa": "2347041855575"}, "Georgina Gabriel": {"phone": "08143159425", "wa": "2348143159425"}, "Gloria Garba": {"phone": "08167473739", "wa": "2348167473739"}, "Happiness Asuquo": {"phone": "", "wa": ""}, "Ifeoluwa Williams": {"phone": "08170293978", "wa": "2348170293978"}, "Izu Ohajinwa": {"phone": "08039563838", "wa": "2348039563838"}, "Labake Laniyan": {"phone": "07069480882", "wa": "2347069480882"}, "Ololade Soyebi": {"phone": "09030884465", "wa": "2349030884465"}, "Becky Adeniyi": {"phone": "07037702153", "wa": "2347037702153"}, "Elizabeth Adeyemo": {"phone": "08063861678", "wa": "2348063861678"}, "Emmanuel Adeyemo": {"phone": "09039087940", "wa": "2349039087940"}, "Emmanuel Williams": {"phone": "07037520422", "wa": "2347037520422"}, "Toyin Dodo": {"phone": "08069363322", "wa": "2348069363322"}, "Laolu Macaulay": {"phone": "08051220528", "wa": "2348051220528"}, "Millicent Rogers": {"phone": "09110127465", "wa": "2349110127465"}, "Ogheneruno Ogheneruru": {"phone": "09164935619", "wa": "2349164935619"}, "Owoade Yussuff": {"phone": "09032045191", "wa": "2349032045191"}, "Shammah Obereika": {"phone": "09096780561", "wa": "2349096780561"}, "Stella Solomon": {"phone": "09069023230", "wa": "2349069023230"}, "Tola Oso": {"phone": "07037104668", "wa": "2347037104668"}, "Tuke Morgan": {"phone": "08080309020", "wa": "2348080309020"}, "Olivia Agunyego": {"phone": "08103274533", "wa": "2348103274533"}, "Obinna Aniagolu": {"phone": "08161518018", "wa": "2348161518018"}, "Lakin Goodluck": {"phone": "08032000224", "wa": "2348032000224"}, "Oghosa Erhahon": {"phone": "09083002479", "wa": "2349083002479"}, "David Nwobikie": {"phone": "09167017107", "wa": "2349167017107"}, "Doowuese Gwabo": {"phone": "08024423901", "wa": "2348024423901"}, "Ebube Agu": {"phone": "08126842276", "wa": "2348126842276"}, "Ibukun Agu": {"phone": "08092760688", "wa": "2348092760688"}, "Yamai Ayuba": {"phone": "7075838975", "wa": "17075838975"}};
 
 const SEED_ATT={"2026-04-08": {"Anita Obidiegwu": "absent", "Chinedu Awa": "present", "Chinedu Obidiegwu": "absent", "Ifeoma Igbokidi": "absent", "Ksusha Anom": "absent", "Mary Captain": "absent", "Nelson Allison": "present", "Wunmi Durosinmi-Etti": "present", "Damilola Macaulay": "absent", "Daniel Asuquo": "absent", "David Idoko": "present", "Demex Achinga": "present", "Nengi Goodman": "present", "Nnenna Idoko": "present", "Omodara Olanrewaju": "present", "Precious Erhabor": "absent", "Samuel Sagbele": "present", "Temitope Erhabor": "absent", "Terdoo Anom": "present", "Terver Akindigh": "present", "Toki Numbere": "present", "Tomisin Numbere": "present", "Akpor Hari Agboro": "absent", "Amanda Zara Nwankwo": "absent", "Niyi Joseph": "present", "Vanessa Ebitu": "absent", "Asta Akindigh": "present", "Christiana Omelazu": "present", "Evi Idoghor": "present", "Udoo Achinga": "absent", "Blessed Mademeidon": "present", "Chinyere Izu-Ohajinwa": "present", "Confidence Blankson": "present", "Esther Ende": "present", "Georgina Gabriel": "absent", "Happiness Asuquo": "present", "Izu Ohajinwa": "present", "Ololade Soyebi": "absent", "Gloria Garba": "absent", "Ifeoluwa Williams": "present", "Labake Laniyan": "absent", "Laolu Macaulay": "absent", "Emmanuel Williams": "absent", "Fisayo A.": "absent", "Millicent Rogers": "absent", "Emmanuel Adeyemo": "absent", "Elizabeth Adeyemo": "absent", "Owoade Yussuff": "present", "Shammah Obereika": "absent", "Ebube Agu": "present", "Ibukun Agu": "present", "Olaitan Akintunde": "absent", "Nneoma Awa": "absent", "Phebe Mademeidon": "present"}, "2026-04-15": {"Anita Obidiegwu": "absent", "Chinedu Awa": "present", "Chinedu Obidiegwu": "absent", "Ifeoma Igbokidi": "absent", "Ksusha Anom": "absent", "Mary Captain": "absent", "Nelson Allison": "present", "Wunmi Durosinmi-Etti": "present", "Damilola Macaulay": "absent", "Daniel Asuquo": "absent", "David Idoko": "present", "Demex Achinga": "present", "Nengi Goodman": "present", "Nnenna Idoko": "present", "Omodara Olanrewaju": "present", "Precious Erhabor": "present", "Samuel Sagbele": "absent", "Temitope Erhabor": "present", "Terdoo Anom": "present", "Terver Akindigh": "absent", "Toki Numbere": "present", "Tomisin Numbere": "present", "Akpor Hari Agboro": "present", "Amanda Zara Nwankwo": "absent", "Niyi Joseph": "present", "Vanessa Ebitu": "absent", "Asta Akindigh": "present", "Christiana Omelazu": "present", "Evi Idoghor": "present", "Udoo Achinga": "present", "Blessed Mademeidon": "absent", "Chinyere Izu-Ohajinwa": "absent", "Confidence Blankson": "absent", "Esther Ende": "present", "Georgina Gabriel": "absent", "Happiness Asuquo": "absent", "Izu Ohajinwa": "absent", "Ololade Soyebi": "absent", "Gloria Garba": "present", "Ifeoluwa Williams": "absent", "Labake Laniyan": "absent", "Laolu Macaulay": "absent", "Emmanuel Williams": "present", "Fisayo A.": "present", "Millicent Rogers": "present", "Emmanuel Adeyemo": "absent", "Elizabeth Adeyemo": "absent", "Owoade Yussuff": "absent", "Shammah Obereika": "absent", "Ebube Agu": "absent", "Ibukun Agu": "absent", "Olaitan Akintunde": "absent", "Nneoma Awa": "absent", "Phebe Mademeidon": "absent"}, "2026-04-22": {"Anita Obidiegwu": "absent", "Chinedu Awa": "present", "Chinedu Obidiegwu": "absent", "Ifeoma Igbokidi": "absent", "Ksusha Anom": "absent", "Mary Captain": "present", "Nelson Allison": "present", "Wunmi Durosinmi-Etti": "present", "Damilola Macaulay": "present", "Daniel Asuquo": "absent", "David Idoko": "present", "Demex Achinga": "absent", "Nengi Goodman": "present", "Nnenna Idoko": "present", "Omodara Olanrewaju": "present", "Precious Erhabor": "absent", "Samuel Sagbele": "absent", "Temitope Erhabor": "present", "Terdoo Anom": "absent", "Terver Akindigh": "present", "Toki Numbere": "present", "Tomisin Numbere": "present", "Akpor Hari Agboro": "absent", "Amanda Zara Nwankwo": "absent", "Niyi Joseph": "present", "Vanessa Ebitu": "present", "Asta Akindigh": "present", "Christiana Omelazu": "present", "Evi Idoghor": "present", "Udoo Achinga": "absent", "Blessed Mademeidon": "present", "Chinyere Izu-Ohajinwa": "present", "Confidence Blankson": "present", "Esther Ende": "absent", "Georgina Gabriel": "absent", "Happiness Asuquo": "absent", "Izu Ohajinwa": "present", "Ololade Soyebi": "present", "Gloria Garba": "present", "Ifeoluwa Williams": "absent", "Labake Laniyan": "absent", "Laolu Macaulay": "absent", "Emmanuel Williams": "absent", "Fisayo A.": "absent", "Millicent Rogers": "present", "Emmanuel Adeyemo": "absent", "Elizabeth Adeyemo": "absent", "Owoade Yussuff": "absent", "Shammah Obereika": "present", "Ebube Agu": "absent", "Ibukun Agu": "absent", "Olaitan Akintunde": "present", "Nneoma Awa": "present", "Phebe Mademeidon": "present"}, "2026-04-29": {"Anita Obidiegwu": "absent", "Chinedu Awa": "present", "Chinedu Obidiegwu": "absent", "Ifeoma Igbokidi": "present", "Ksusha Anom": "absent", "Mary Captain": "present", "Nelson Allison": "absent", "Wunmi Durosinmi-Etti": "absent", "Damilola Macaulay": "absent", "Daniel Asuquo": "present", "David Idoko": "present", "Demex Achinga": "present", "Nengi Goodman": "present", "Nnenna Idoko": "present", "Omodara Olanrewaju": "absent", "Precious Erhabor": "present", "Samuel Sagbele": "absent", "Temitope Erhabor": "present", "Terdoo Anom": "absent", "Terver Akindigh": "present", "Toki Numbere": "present", "Tomisin Numbere": "present", "Akpor Hari Agboro": "absent", "Amanda Zara Nwankwo": "absent", "Niyi Joseph": "present", "Vanessa Ebitu": "absent", "Asta Akindigh": "present", "Christiana Omelazu": "present", "Evi Idoghor": "present", "Udoo Achinga": "absent", "Blessed Mademeidon": "absent", "Chinyere Izu-Ohajinwa": "absent", "Confidence Blankson": "absent", "Esther Ende": "present", "Georgina Gabriel": "absent", "Happiness Asuquo": "present", "Izu Ohajinwa": "absent", "Ololade Soyebi": "present", "Gloria Garba": "absent", "Ifeoluwa Williams": "absent", "Labake Laniyan": "present", "Laolu Macaulay": "absent", "Emmanuel Williams": "absent", "Fisayo A.": "absent", "Millicent Rogers": "absent", "Emmanuel Adeyemo": "absent", "Elizabeth Adeyemo": "absent", "Owoade Yussuff": "absent", "Shammah Obereika": "absent", "Ebube Agu": "absent", "Ibukun Agu": "absent", "Olaitan Akintunde": "absent", "Nneoma Awa": "present", "Phebe Mademeidon": "absent"}, "2026-05-06": {"Anita Obidiegwu": "absent", "Chinedu Awa": "present", "Chinedu Obidiegwu": "absent", "Ifeoma Igbokidi": "absent", "Ksusha Anom": "absent", "Mary Captain": "present", "Nelson Allison": "absent", "Wunmi Durosinmi-Etti": "present", "Damilola Macaulay": "present", "Daniel Asuquo": "absent", "David Idoko": "present", "Demex Achinga": "present", "Nengi Goodman": "present", "Nnenna Idoko": "present", "Omodara Olanrewaju": "present", "Precious Erhabor": "absent", "Samuel Sagbele": "present", "Temitope Erhabor": "present", "Terdoo Anom": "absent", "Terver Akindigh": "present", "Toki Numbere": "present", "Tomisin Numbere": "present", "Akpor Hari Agboro": "absent", "Amanda Zara Nwankwo": "absent", "Niyi Joseph": "present", "Vanessa Ebitu": "present", "Asta Akindigh": "present", "Christiana Omelazu": "absent", "Evi Idoghor": "absent", "Udoo Achinga": "absent", "Blessed Mademeidon": "present", "Chinyere Izu-Ohajinwa": "present", "Confidence Blankson": "absent", "Esther Ende": "absent", "Georgina Gabriel": "present", "Happiness Asuquo": "absent", "Izu Ohajinwa": "present", "Ololade Soyebi": "present", "Gloria Garba": "present", "Ifeoluwa Williams": "present", "Labake Laniyan": "absent", "Laolu Macaulay": "present", "Emmanuel Williams": "present", "Fisayo A.": "absent", "Millicent Rogers": "absent", "Emmanuel Adeyemo": "absent", "Elizabeth Adeyemo": "absent", "Owoade Yussuff": "absent", "Shammah Obereika": "absent", "Ebube Agu": "absent", "Ibukun Agu": "absent", "Olaitan Akintunde": "absent", "Nneoma Awa": "present", "Phebe Mademeidon": "present"}};
 
@@ -1031,6 +1137,10 @@ let wellbeing={};
 let careNotes={};
 // prayerRequests: [{id, memberId, request, anonymous, clusterId, date, status:'active'|'answered'|'archived'}]
 let prayerRequests=[];
+// memberAbout: {memberName: 'about text'}
+let memberAbout={};
+// pendingClusterSubmissions: [{id, clusterId, clusterName, submittedBy, weekKey, data:{memberName:{checkedIn,wellbeing,note,prayerRequest}}, submittedAt}]
+let pendingClusterSubmissions=[];
 let pendingChanges=[];
 let charts={};
 
@@ -1038,6 +1148,8 @@ let charts={};
 const SB_URL='https://rgmdtjfkffwoayvzqrks.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWR0amZrZmZ3b2F5dnpxcmtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NDA1NzQsImV4cCI6MjEwNDAxNjU3NH0.ZtsXCmqLCmmIsIgMsLFAqfW04RKwWZO5s0lrry04CbI';
 const SBH={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+// EmailJS
+try{if(typeof emailjs!=='undefined')emailjs.init('WjJ7gdKeiDBZD9nCp');}catch(e){console.warn('EmailJS not loaded');}
 
 async function sbGet(table){
   try{const r=await fetch(SB_URL+'/rest/v1/'+table+'?select=*',{headers:SBH});return r.ok?await r.json():[];}
@@ -1072,7 +1184,7 @@ async function loadFromSupabase(){
 
 async function saveAll(){
   // Always save to localStorage first
-  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||''})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,wellbeing,careNotes,prayerRequests,savedAt:new Date().toISOString()}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||''})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,wellbeing,careNotes,prayerRequests,memberAbout,pendingClusterSubmissions,savedAt:new Date().toISOString()}));}catch(e){}
   // Then sync to Supabase
   try{
     showToast('Saving...');
@@ -1089,6 +1201,15 @@ async function saveAll(){
     await sbPost('check_ins',ciR);
     const cust=REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r));
     if(cust.length)await sbPost('custom_reasons',cust.map(r=>({reason:r})));
+    // Wellbeing
+    const wbR=[];Object.entries(wellbeing).forEach(([wk,r])=>Object.entries(r).forEach(([mn,v])=>wbR.push({week_key:wk,member_name:mn,status:v})));
+    if(wbR.length)await sbPost('wellbeing',wbR);
+    // Care notes
+    const cnR=[];Object.entries(careNotes).forEach(([wk,r])=>Object.entries(r).forEach(([mn,v])=>{if(v)cnR.push({week_key:wk,member_name:mn,note:v});}));
+    if(cnR.length)await sbPost('care_notes',cnR);
+    // Prayer requests
+    if(prayerRequests.length)await sbPost('prayer_requests',prayerRequests.map(p=>({id:p.id,member_id:p.memberId||'',cluster_name:p.clusterName||'',request:p.request,anonymous:p.anonymous,date:p.date,status:p.status})));
+    if(pendingClusterSubmissions.length)await sbPost('pending_submissions',pendingClusterSubmissions.map(s=>({id:s.id,cluster_id:s.clusterId,cluster_name:s.clusterName,submitted_by:s.submittedBy,week_key:s.weekKey,data:JSON.stringify(s.data),submitted_at:s.submittedAt})));
     showToast('Saved \u2713',2000);
   }catch(e){showToast('Saved locally \u2014 sync failed',3000);}
 }
@@ -1236,6 +1357,11 @@ function applyBdayImport(){
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 function initSeedData(){
+  // Seed phone numbers
+  Object.entries(PHONES).forEach(([n,p])=>{
+    const m=MEMBERS.find(x=>x.n===n||x.n.trim()===n.trim());
+    if(m&&p.phone&&!m.phone){m.phone=p.phone;m.wa=p.wa;}
+  });
   MEMBERS_SEED.forEach(s=>{const m=MEMBERS.find(x=>x.n===s.n);if(!m)MEMBERS.push({n:s.n,gc:s.gc,gcOrig:s.gcOrig||s.gc,city:s.city||'Attendee',g:s.g||'Female',phone:s.phone||'',email:s.email||''});else{m.gc=s.gc;m.gcOrig=s.gcOrig||s.gc;m.city=s.city;m.g=s.g;}});
   Object.entries(SEED_ATT).forEach(([sk,rec])=>{if(!attendance[sk]){attendance[sk]={};MEMBERS.forEach(m=>{attendance[sk][m.n]=rec[m.n]||'absent';});}});
   const _absR={"2026-04-08": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Mary Captain": "Other", "Damilola Macaulay": "Other", "Daniel Asuquo": "Other", "Precious Erhabor": "Work", "Temitope Erhabor": "Work", "Akpor Hari Agboro": "Work", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Udoo Achinga": "Other", "Georgina Gabriel": "Other", "Ololade Soyebi": "Work", "Gloria Garba": "Sick", "Laolu Macaulay": "Travel", "Emmanuel Williams": "Work", "Millicent Rogers": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Shammah Obereika": "Work"}, "2026-04-15": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Mary Captain": "Other", "Damilola Macaulay": "Other", "Daniel Asuquo": "Other", "Samuel Sagbele": "Exam", "Terver Akindigh": "Work", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Blessed Mademeidon": "Sick", "Chinyere Izu-Ohajinwa": "Other", "Confidence Blankson": "Work", "Georgina Gabriel": "Work", "Happiness Asuquo": "Other", "Izu Ohajinwa": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Work", "Phebe Mademeidon": "Other"}, "2026-04-22": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ifeoma Igbokidi": "Work", "Ksusha Anom": "Travel", "Daniel Asuquo": "Other", "Demex Achinga": "Work", "Precious Erhabor": "Other", "Samuel Sagbele": "Exam", "Terdoo Anom": "Travel", "Akpor Hari Agboro": "Exam", "Amanda Zara Nwankwo": "Other", "Udoo Achinga": "Other", "Esther Ende": "Travel", "Georgina Gabriel": "Work", "Happiness Asuquo": "Other", "Izu Ohajinwa": "Work", "Ifeoluwa Williams": "Other", "Laolu Macaulay": "Travel", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Other"}, "2026-04-29": {"Anita Obidiegwu": "Travel", "Chinedu Obidiegwu": "Travel", "Ksusha Anom": "Other", "Nelson Allison": "Travel", "Wunmi Durosinmi-Etti": "Other", "Damilola Macaulay": "Other", "Omodara Olanrewaju": "Other", "Samuel Sagbele": "Exam", "Terdoo Anom": "Work", "Akpor Hari Agboro": "Exam", "Amanda Zara Nwankwo": "Other", "Vanessa Ebitu": "Other", "Udoo Achinga": "Other", "Blessed Mademeidon": "Sick", "Chinyere Izu-Ohajinwa": "Other", "Confidence Blankson": "Other", "Georgina Gabriel": "Other", "Gloria Garba": "Work", "Ifeoluwa Williams": "Other", "Emmanuel Williams": "Other", "Laolu Macaulay": "Work", "Millicent Rogers": "Work", "Emmanuel Adeyemo": "Other", "Elizabeth Adeyemo": "Other", "Owoade Yussuff": "Other", "Shammah Obereika": "Work", "Phebe Mademeidon": "Sick"}, "2026-05-06": {"Akpor Hari Agboro": "Exam", "Chinedu Obidiegwu": "Work", "Christiana Omelazu": "Sick", "Nelson Allison": "Travel", "Precious Erhabor": "Work", "Terdoo Anom": "Travel", "Amanda Zara Nwankwo": "Other", "Anita Obidiegwu": "Other", "Millicent Rogers": "Work", "Daniel Asuquo": "Other", "Happiness Asuquo": "Other", "Ifeoma Igbokidi": "Work", "Evi Idoghor": "Other", "Esther Ende": "Sick"}};Object.entries(_absR).forEach(([sk,rec])=>{if(!absenceReasons[sk])absenceReasons[sk]={...rec};});
@@ -1506,6 +1632,7 @@ function copyAbsentNames(){
 
 // ── GUESTS ────────────────────────────────────────────────────────────────────
 function renderGuests(){
+  renderGuestFunnel();
   const search=(document.getElementById('gSearch').value||'').toLowerCase();
   const guests=MEMBERS.filter(m=>m.gc==='Guest'&&(!search||m.n.toLowerCase().includes(search))).sort(bySurname);
   const recs=getRecordedSessions();
@@ -2817,17 +2944,19 @@ function checkMagicLink(){
   const params=new URLSearchParams(window.location.search);
   const clusterId=params.get('cluster');
   if(!clusterId)return;
-  // Unlock clusters silently
   sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
-  // Switch to clusters tab and scroll to the right cluster after render
   setTimeout(()=>{
     switchTab('clusters',document.querySelector('[data-id=clusters]'));
-    // Scroll to the cluster card
     setTimeout(()=>{
       const card=document.querySelector(`[data-cluster-id="${clusterId}"]`);
       if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
-      // Open the leader report directly
-      openClusterHeadReport(clusterId);
+      // Offer both: view report OR submit weekly check-in
+      const c=clusters.find(x=>x.id===clusterId);
+      if(c){
+        const choice=confirm(`Welcome, ${c.head}!\n\nWould you like to submit your weekly check-in?\n\nOK = Submit check-in\nCancel = View your cluster report`);
+        if(choice)openClusterHeadSubmission(clusterId);
+        else openClusterHeadReport(clusterId);
+      }
     },400);
   },800);
 }
@@ -4168,6 +4297,635 @@ function deletePrayerRequest(id){
   if(idx>=0){prayerRequests.splice(idx,1);saveAll();renderPrayerRequests();}
 }
 
+// ── SESSION DEBRIEF ───────────────────────────────────────────────────────────
+let _debriefSession=null;
+let _debriefData={}; // {memberName: {reason, wellbeing, note, checkedIn}}
+
+function openSessionDebrief(){
+  if(!requireEdit())return;
+  const recs=getRecordedSessions();
+  if(!recs.length){showToast('No sessions recorded yet',2500);return;}
+  // Default to last session
+  const last=recs[recs.length-1];
+  _debriefSession=last;
+  _debriefData={};
+  renderDebriefContent();
+  document.getElementById('debriefModal').className='member-modal open';
+}
+
+function closeDebrief(){
+  document.getElementById('debriefModal').className='member-modal';
+}
+
+function saveDebriefAndClose(){
+  // Write all debrief data back to the main data structures
+  const sk=_debriefSession.key;
+  Object.entries(_debriefData).forEach(([mn,d])=>{
+    if(d.reason!==undefined){
+      if(!absenceReasons[sk])absenceReasons[sk]={};
+      if(d.reason)absenceReasons[sk][mn]=d.reason;
+      else delete (absenceReasons[sk]||{})[mn];
+    }
+    if(d.wellbeing!==undefined){
+      if(!wellbeing[sk])wellbeing[sk]={};
+      if(d.wellbeing)wellbeing[sk][mn]=d.wellbeing;
+      else delete (wellbeing[sk]||{})[mn];
+    }
+    if(d.note!==undefined){
+      if(!careNotes[sk])careNotes[sk]={};
+      if(d.note.trim())careNotes[sk][mn]=d.note.trim();
+      else delete (careNotes[sk]||{})[mn];
+    }
+    if(d.checkedIn!==undefined){
+      if(!checkIns[sk])checkIns[sk]={};
+      checkIns[sk][mn]=d.checkedIn?'yes':'no';
+    }
+  });
+  saveAll();
+  closeDebrief();
+  showToast('Debrief saved ✓',2500);
+}
+
+function renderDebriefContent(){
+  const sk=_debriefSession.key;
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const absentees=nonGuests.filter(m=>{
+    if(firstSession[m.n]&&firstSession[m.n]>sk)return false;
+    return attendance[sk]?attendance[sk][m.n]!=='present':true;
+  }).sort(byFirstName);
+  const present=nonGuests.filter(m=>attendance[sk]&&attendance[sk][m.n]==='present').sort(byFirstName);
+
+  document.getElementById('debriefSubtitle').textContent=`${_debriefSession.date} · ${present.length} present · ${absentees.length} absent`;
+  document.getElementById('debriefProgress').textContent=`${absentees.length} to review`;
+
+  const reasonOpts=REASONS.map(r=>`<option value="${r}">${r}</option>`).join('');
+
+  const absentSection=absentees.length?`
+    <div style="font-size:11px;font-weight:700;color:#a32d2d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Absent (${absentees.length}) — log reasons &amp; check-ins</div>
+    ${absentees.map(m=>{
+      const existing={
+        reason:(absenceReasons[sk]||{})[m.n]||'',
+        wellbeing:(wellbeing[sk]||{})[m.n]||'',
+        note:(careNotes[sk]||{})[m.n]||'',
+        checkedIn:(checkIns[sk]||{})[m.n]==='yes'
+      };
+      if(!_debriefData[m.n])_debriefData[m.n]=existing;
+      const streak=calcMember(m.n).curStreak;
+      const mEsc=m.n.replace(/'/g,"\\'");
+      return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
+          <div>
+            <div style="font-size:14px;font-weight:600">${m.n}</div>
+            <div style="font-size:11px;color:#888">${m.gc}${streak>=2?` · <span style="color:#a32d2d;font-weight:600">${streak} missed in a row</span>`:''}</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" ${existing.checkedIn?'checked':''} onchange="updateDebrief('${mEsc}','checkedIn',this.checked)" style="width:14px;height:14px">
+            Checked in
+          </label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:11px;color:#888;font-weight:500;display:block;margin-bottom:3px">Absence reason</label>
+            <select onchange="updateDebrief('${mEsc}','reason',this.value)" style="width:100%;font-size:12px;padding:5px 8px;border:0.5px solid #ccc;border-radius:6px">
+              <option value="">Select reason...</option>
+              ${REASONS.map(r=>`<option value="${r}"${existing.reason===r?' selected':''}>${r}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:#888;font-weight:500;display:block;margin-bottom:3px">Wellbeing</label>
+            <div style="display:flex;gap:6px;padding-top:4px">
+              ${['red','amber','green'].map(col=>{
+                const labels={red:'Urgent',amber:'Needs support',green:'Doing well'};
+                const colors={red:'#E24B4A',amber:'#EF9F27',green:'#1D9E75'};
+                const sel=existing.wellbeing===col;
+                return`<button onclick="updateDebrief('${mEsc}','wellbeing','${col}')" title="${labels[col]}" style="width:24px;height:24px;border-radius:50%;border:2px solid ${sel?colors[col]:'#e0e0d8'};background:${sel?colors[col]:'#fff'};cursor:pointer;transition:all .15s" id="wb_${m.n.replace(/\s/g,'_')}_${col}"></button>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:#888;font-weight:500;display:block;margin-bottom:3px">Care note</label>
+          <textarea onchange="updateDebrief('${mEsc}','note',this.value)" placeholder="How are they doing? Any context from the leader?" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid #ccc;border-radius:6px;resize:vertical;font-family:inherit;min-height:44px">${existing.note}</textarea>
+        </div>
+      </div>`;
+    }).join('')}
+  `:'<div style="font-size:13px;color:#1D9E75;font-weight:500;padding:8px 0">Everyone attended this session! ✓</div>';
+
+  const presentSection=present.length?`
+    <div style="font-size:11px;font-weight:700;color:#085041;text-transform:uppercase;letter-spacing:.05em;margin:16px 0 10px">Present (${present.length}) — optional wellbeing &amp; notes</div>
+    ${present.map(m=>{
+      const existing={
+        wellbeing:(wellbeing[sk]||{})[m.n]||'',
+        note:(careNotes[sk]||{})[m.n]||'',
+        checkedIn:(checkIns[sk]||{})[m.n]==='yes'
+      };
+      if(!_debriefData[m.n])_debriefData[m.n]=existing;
+      const mEsc=m.n.replace(/'/g,"\\'");
+      return`<div style="background:#f9faf8;border:0.5px solid #e0e0d8;border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:500">${m.n} <span style="color:#888;font-size:11px">${m.gc}</span></div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer">
+              <input type="checkbox" ${existing.checkedIn?'checked':''} onchange="updateDebrief('${mEsc}','checkedIn',this.checked)" style="width:13px;height:13px"> Checked in
+            </label>
+            <div style="display:flex;gap:5px">
+              ${['red','amber','green'].map(col=>{const colors={red:'#E24B4A',amber:'#EF9F27',green:'#1D9E75'};const sel=existing.wellbeing===col;return`<button onclick="updateDebrief('${mEsc}','wellbeing','${col}')" style="width:20px;height:20px;border-radius:50%;border:2px solid ${sel?colors[col]:'#e0e0d8'};background:${sel?colors[col]:'#fff'};cursor:pointer"></button>`;}).join('')}
+            </div>
+          </div>
+        </div>
+        <textarea onchange="updateDebrief('${mEsc}','note',this.value)" placeholder="Optional note..." style="width:100%;font-size:11px;padding:5px 7px;border:0.5px solid #ccc;border-radius:5px;resize:vertical;font-family:inherit;min-height:32px">${existing.note}</textarea>
+      </div>`;
+    }).join('')}
+  `:'';
+
+  // Session picker at top
+  const recs=getRecordedSessions();
+  const sessionPicker=`<div style="margin-bottom:14px">
+    <label style="font-size:11px;color:#888;font-weight:500;display:block;margin-bottom:4px">Session</label>
+    <select onchange="changeDebriefSession(this.value)" style="font-size:13px;padding:7px 10px;border:0.5px solid #ccc;border-radius:8px;width:100%">
+      ${[...recs].reverse().map(s=>`<option value="${s.key}"${s.key===sk?' selected':''}>${s.date}</option>`).join('')}
+    </select>
+  </div>`;
+
+  document.getElementById('debriefContent').innerHTML=sessionPicker+absentSection+presentSection;
+}
+
+function updateDebrief(memberName,field,val){
+  if(!_debriefData[memberName])_debriefData[memberName]={};
+  _debriefData[memberName][field]=val;
+  // Re-render wellbeing buttons for this member without full re-render
+  if(field==='wellbeing'){
+    ['red','amber','green'].forEach(col=>{
+      const colors={red:'#E24B4A',amber:'#EF9F27',green:'#1D9E75'};
+      const btn=document.getElementById('wb_'+memberName.replace(/\s/g,'_')+'_'+col);
+      if(btn){
+        const sel=val===col;
+        btn.style.border=`2px solid ${sel?colors[col]:'#e0e0d8'}`;
+        btn.style.background=sel?colors[col]:'#fff';
+      }
+    });
+  }
+}
+
+function changeDebriefSession(key){
+  // Save current before switching
+  const sk=_debriefSession.key;
+  Object.entries(_debriefData).forEach(([mn,d])=>{
+    if(d.reason!==undefined){if(!absenceReasons[sk])absenceReasons[sk]={};if(d.reason)absenceReasons[sk][mn]=d.reason;}
+    if(d.wellbeing!==undefined){if(!wellbeing[sk])wellbeing[sk]={};if(d.wellbeing)wellbeing[sk][mn]=d.wellbeing;}
+    if(d.note!==undefined){if(!careNotes[sk])careNotes[sk]={};if(d.note.trim())careNotes[sk][mn]=d.note.trim();}
+    if(d.checkedIn!==undefined){if(!checkIns[sk])checkIns[sk]={};checkIns[sk][mn]=d.checkedIn?'yes':'no';}
+  });
+  _debriefSession=getRecordedSessions().find(s=>s.key===key);
+  _debriefData={};
+  renderDebriefContent();
+}
+
+// ── WEEKLY EMAIL SUMMARY ──────────────────────────────────────────────────────
+async function sendWeeklySummary(){
+  if(!requireEdit())return;
+  if(typeof emailjs==='undefined'){showToast('Email service not loaded — check connection',3000);return;}
+
+  const recs=getRecordedSessions();
+  const lastSess=recs.length?recs[recs.length-1]:null;
+  if(!lastSess){showToast('No sessions recorded yet',2500);return;}
+
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const sk=lastSess.key;
+
+  // Present / absent
+  const present=MEMBERS.filter(m=>attendance[sk]&&attendance[sk][m.n]==='present');
+  const absent=nonGuests.filter(m=>{
+    if(firstSession[m.n]&&firstSession[m.n]>sk)return false;
+    return attendance[sk]?attendance[sk][m.n]!=='present':true;
+  }).sort(byFirstName);
+
+  // Follow-up list
+  const followUp=nonGuests.map(m=>({...m,...calcMember(m.n)}))
+    .filter(m=>m.curStreak>=2)
+    .sort((a,b)=>b.curStreak-a.curStreak);
+
+  // Check-in summary per cluster
+  const today=new Date().toISOString().split('T')[0];
+  const weeks=getClusterWeeks().filter(w=>w.key<=today);
+  const thisWeek=weeks.length?weeks[weeks.length-1]:null;
+  const ciSummary=clusters.map(c=>{
+    const members=getMembersInCluster(c.id);
+    const eligible=thisWeek?members.filter(m=>(clusterMembers[m.n]?.joinDate||'')<=thisWeek.key):[];
+    const done=eligible.filter(m=>(checkIns[thisWeek?.key]||{})[m.n]==='yes').length;
+    return`${c.name}: ${done}/${eligible.length} checked in`;
+  }).join('\n');
+
+  // Upcoming birthdays (next 14 days)
+  const bdayList=[];
+  const now=new Date();
+  MEMBERS.forEach(m=>{
+    const b=birthdays[m.n];if(!b)return;
+    try{
+      const [d,mo]=b.split('/').map(Number);
+      const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      let bdate=new Date(now.getFullYear(),mo-1,d);
+      if(bdate<now)bdate=new Date(now.getFullYear()+1,mo-1,d);
+      const diff=Math.round((bdate-now)/86400000);
+      if(diff<=14)bdayList.push(`${m.n} — ${MONTHS[mo-1]} ${d} (in ${diff} days)`);
+    }catch(e){}
+  });
+
+  // Absent list grouped by reason
+  const absentLines=absent.map(m=>{
+    const r=(absenceReasons[sk]||{})[m.n]||'No reason given';
+    const streak=calcMember(m.n).curStreak;
+    return`${m.n} (${r})${streak>=2?' ⚠ '+streak+' in a row':''}`;
+  }).join('\n')||'None';
+
+  const followUpLines=followUp.map(m=>`${m.n} — ${m.curStreak} in a row (${m.gc})`).join('\n')||'None';
+  const bdayLines=bdayList.join('\n')||'None in the next 14 days';
+  const activePrayers=prayerRequests.filter(p=>p.status==='active').length;
+
+  showToast('Sending summary email...',4000);
+  try{
+    await emailjs.send('service_kq9iu09','template_82gx2h7',{
+      week:lastSess.date,
+      present:present.length,
+      absent:absent.length,
+      followup_list:followUpLines,
+      checkin_summary:ciSummary||'No cluster check-in data yet',
+      birthdays:bdayLines,
+      prayer_count:activePrayers
+    });
+    showToast('Weekly summary sent to tokinumbere@gmail.com ✓',3000);
+  }catch(e){
+    console.error('EmailJS error:',e);
+    showToast('Email failed — check EmailJS setup',3500);
+  }
+}
+
+// ── MEMBER PROFILE ────────────────────────────────────────────────────────────
+let _profileMember=null;
+
+function openProfile(name){
+  _profileMember=name;
+  const m=MEMBERS.find(x=>x.n===name);if(!m)return;
+  document.getElementById('profileName').textContent=m.n;
+  document.getElementById('profileContent').innerHTML=buildProfileHTML(m);
+  document.getElementById('profileModal').className='member-modal open';
+}
+function closeProfile(){document.getElementById('profileModal').className='member-modal';}
+function openMemberModalFromProfile(){closeProfile();setTimeout(()=>openMemberModal(_profileMember),150);}
+
+function waLink(m){
+  const wa=m.wa||(PHONES[m.n]&&PHONES[m.n].wa)||'';
+  if(!wa)return'';
+  return`<a href="https://wa.me/${wa}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:#25D366;color:#fff;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;margin-top:4px">&#128241; WhatsApp</a>`;
+}
+
+function buildProfileHTML(m){
+  const recs=getRecordedSessions();
+  const c2=calcMember(m.n);
+  const clusterInfo=clusterMembers[m.n]?clusters.find(c=>c.id===clusterMembers[m.n].clusterId):null;
+  const GBKG={Core:'#e1f5ee',Frequent:'#e6f1fb',Rare:'#faeeda',Unresponsive:'#fcebeb',Guest:'#f1efe8'};
+  const GCOL={Core:'#085041',Frequent:'#0c447c',Rare:'#633806',Unresponsive:'#791f1f',Guest:'#444'};
+
+  // Attendance dots
+  const dots=recs.map(s=>{
+    if(firstSession[m.n]&&s.key<firstSession[m.n])return`<div class="dot" style="background:#e0e0d8" title="${s.date}"></div>`;
+    const st=attendance[s.key]?attendance[s.key][m.n]:'unknown';
+    return`<div class="dot ${st==='present'?'dot-y':'dot-n'}" title="${s.date}"></div>`;
+  }).join('');
+
+  // Wellbeing history
+  const allWeeks=getClusterWeeks();
+  const wbHistory=allWeeks.filter(w=>wellbeing[w.key]&&wellbeing[w.key][m.n]).map(w=>{
+    const v=wellbeing[w.key][m.n];
+    const c=v==='green'?'#1D9E75':v==='amber'?'#EF9F27':'#E24B4A';
+    const lbl=v==='green'?'Doing well':v==='amber'?'Needs support':'Needs urgent support';
+    return`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f0efe8;font-size:12px">
+      <div style="width:10px;height:10px;border-radius:50%;background:${c};flex-shrink:0"></div>
+      <span style="color:#888">${w.date}</span>
+      <span style="font-weight:500">${lbl}</span>
+    </div>`;
+  }).join('');
+
+  // Care notes history
+  const noteHistory=allWeeks.filter(w=>careNotes[w.key]&&careNotes[w.key][m.n]).map(w=>`
+    <div style="padding:8px 0;border-bottom:0.5px solid #f0efe8">
+      <div style="font-size:11px;color:#888;margin-bottom:3px">${w.date}</div>
+      <div style="font-size:13px">${careNotes[w.key][m.n]}</div>
+    </div>`).join('');
+
+  // Prayer requests
+  const memberPrayers=prayerRequests.filter(p=>p.memberId===m.n&&!p.anonymous);
+
+  // About field
+  const about=memberAbout[m.n]||'';
+  const nameEsc=m.n.replace(/'/g,"\\'");
+
+  return`
+    <!-- Header -->
+    <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="width:52px;height:52px;border-radius:50%;background:#1a1a1a;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0">${ini(m.n)}</div>
+      <div style="flex:1">
+        <div style="font-size:18px;font-weight:600;margin-bottom:4px">${m.n}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+          <span style="padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:${GBKG[m.gc]||'#f5f5f3'};color:${GCOL[m.gc]||'#888'}">${m.gc}</span>
+          ${clusterInfo?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f0f0ea;color:#555">${clusterInfo.name}</span>`:'<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f5f5f3;color:#aaa">No cluster</span>'}
+        </div>
+        ${m.phone?`<div style="font-size:13px;color:#555;margin-bottom:4px">&#128222; ${m.phone}</div>`:''}
+        ${waLink(m)}
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+      <div style="background:#f5f5f3;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#1D9E75">${c2.rate}%</div><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Attendance</div></div>
+      <div style="background:#f5f5f3;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700">${c2.present}</div><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Sessions</div></div>
+      <div style="background:${c2.curStreak>=2?'#fcebeb':'#f5f5f3'};border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:${c2.curStreak>=2?'#a32d2d':'#1a1a1a'}">${c2.curStreak}</div><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Current streak</div></div>
+    </div>
+
+    <!-- Attendance record -->
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Session record</div>
+      <div style="display:flex;gap:2px;flex-wrap:wrap">${dots}</div>
+    </div>
+
+    <!-- About -->
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">About</div>
+      <textarea onchange="saveAbout('${nameEsc}',this.value)" placeholder="Notes about this member..." style="width:100%;font-size:13px;padding:7px 9px;border:0.5px solid #ccc;border-radius:6px;resize:vertical;font-family:inherit;min-height:60px">${about}</textarea>
+    </div>
+
+    ${wbHistory?`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Wellbeing history</div>
+      ${wbHistory}
+    </div>`:''}
+
+    ${noteHistory?`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Care notes</div>
+      ${noteHistory}
+    </div>`:''}
+
+    ${memberPrayers.length?`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Prayer requests</div>
+      ${memberPrayers.map(p=>`<div style="padding:7px 0;border-bottom:0.5px solid #f0efe8;font-size:13px">
+        <div style="color:#888;font-size:11px;margin-bottom:2px">${p.date} · <span style="font-weight:600;color:${p.status==='active'?'#1D9E75':p.status==='answered'?'#0c447c':'#888'}">${p.status}</span></div>
+        ${p.request}
+      </div>`).join('')}
+    </div>`:''}
+  `;
+}
+
+function saveAbout(name,val){
+  if(val.trim())memberAbout[name]=val.trim();
+  else delete memberAbout[name];
+  saveAll();
+}
+
+// ── GUEST CONVERSION ──────────────────────────────────────────────────────────
+let _convertingGuest=null;
+
+function openGuestConvert(name){
+  _convertingGuest=name;
+  document.getElementById('convertGuestName').textContent=`Converting ${name} from Guest to a GC member`;
+  const cSel=document.getElementById('convertCluster');
+  cSel.innerHTML='<option value="">No cluster yet</option>'+clusters.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  document.getElementById('guestConvertModal').className='member-modal open';
+}
+function closeGuestConvert(){document.getElementById('guestConvertModal').className='member-modal';}
+
+function confirmGuestConvert(){
+  if(!_convertingGuest)return;
+  const m=MEMBERS.find(x=>x.n===_convertingGuest);if(!m)return;
+  const newGc=document.getElementById('convertGcStatus').value;
+  const clusterId=document.getElementById('convertCluster').value;
+  const joinDate=new Date().toISOString().split('T')[0];
+  m.gc=newGc;
+  if(clusterId)clusterMembers[m.n]={clusterId,joinDate};
+  closeGuestConvert();
+  saveAll();recalcAll();
+  showToast(`${m.n} converted to ${newGc} ✓`,2500);
+}
+
+// Guest funnel view — shown in guests tab
+function renderGuestFunnel(){
+  const recs=getRecordedSessions();
+  const guests=MEMBERS.filter(m=>m.gc==='Guest');
+  const newGuests=guests.filter(m=>recs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present').length<=2);
+  const warmGuests=guests.filter(m=>recs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present').length>=3&&!clusterMembers[m.n]);
+  const converted=guests.filter(m=>clusterMembers[m.n]);
+
+  const el=document.getElementById('guestFunnel');
+  if(!el)return;
+  el.innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+      <div style="background:#f5f5f3;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700">${newGuests.length}</div><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">New (1-2 visits)</div></div>
+      <div style="background:#faeeda;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#633806">${warmGuests.length}</div><div style="font-size:10px;color:#633806;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Warm (3+ visits)</div></div>
+      <div style="background:#e1f5ee;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#085041">${converted.length}</div><div style="font-size:10px;color:#085041;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">In cluster</div></div>
+    </div>
+    ${warmGuests.length?`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden;margin-bottom:10px">
+      <div style="padding:10px 12px;background:#faeeda;border-bottom:0.5px solid #e0d0a0;font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em">Ready to convert</div>
+      ${warmGuests.map(m=>{
+        const visits=recs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present').length;
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:0.5px solid #f0efe8;gap:8px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:13px;font-weight:500">${m.n}</div>
+            <div style="font-size:11px;color:#888">${visits} visits &middot; First: ${recs.find(s=>attendance[s.key]&&attendance[s.key][m.n]==='present')?.date||'?'}</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            ${m.wa||PHONES[m.n]?.wa?`<a href="https://wa.me/${m.wa||PHONES[m.n]?.wa}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;text-decoration:none;font-size:11px">WhatsApp</a>`:''}
+            <button class="btn btn-success btn-sm" onclick="openGuestConvert('${m.n.replace(/'/g,"\\'")}')">Convert</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`:''}
+    ${newGuests.length?`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden;margin-bottom:10px">
+      <div style="padding:10px 12px;border-bottom:0.5px solid #e0e0d8;font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em">New guests (1-2 visits)</div>
+      ${newGuests.map(m=>{
+        const visits=recs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present').length;
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:0.5px solid #f0efe8;font-size:13px;gap:8px">
+          <div><div style="font-weight:500">${m.n}</div><div style="font-size:11px;color:#888">${visits} visit${visits===1?'':'s'}</div></div>
+          <div style="display:flex;gap:6px">
+            ${m.wa||PHONES[m.n]?.wa?`<a href="https://wa.me/${m.wa||PHONES[m.n]?.wa}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;text-decoration:none;font-size:11px">WhatsApp</a>`:''}
+            <button class="btn btn-sm" onclick="openProfile('${m.n.replace(/'/g,"\\'")}')">Profile</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`:''}
+  `;
+}
+
+// ── CLUSTER HEAD SUBMISSION (via magic link) ──────────────────────────────────
+function openClusterHeadSubmission(clusterId){
+  const c=clusters.find(x=>x.id===clusterId);if(!c)return;
+  const members=getMembersInCluster(clusterId).sort(byFirstName);
+  const today=new Date().toISOString().split('T')[0];
+  const weeks=getClusterWeeks().filter(w=>w.key<=today);
+  const thisWeek=weeks.length?weeks[weeks.length-1]:null;
+
+  document.getElementById('clusterSubmitTitle').textContent=c.name+' — Weekly check-in';
+  document.getElementById('clusterSubmitSubtitle').textContent=`${c.head} · ${thisWeek?thisWeek.date:'No sessions yet'}`;
+
+  const submissionData={};
+  members.forEach(m=>submissionData[m.n]={checkedIn:false,wellbeing:'',note:'',prayerRequest:''});
+
+  document.getElementById('clusterSubmitContent').innerHTML=`
+    <div style="background:#e6f1fb;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:#0c447c">
+      Fill in what you know for each member this week. Your submission will be reviewed by the GC leader.
+    </div>
+    ${members.map(m=>{
+      const mEsc=m.n.replace(/'/g,"\\'");
+      const isAbsent=thisWeek&&attendance[thisWeek.key]?attendance[thisWeek.key][m.n]!=='present':false;
+      return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="font-size:14px;font-weight:600;margin-bottom:10px">${m.n} ${isAbsent?'<span style="font-size:10px;background:#fcebeb;color:#791f1f;border-radius:4px;padding:1px 5px">Absent</span>':''}</div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;cursor:pointer">
+          <input type="checkbox" onchange="submissionData_${clusterId}['${mEsc}'].checkedIn=this.checked" style="width:15px;height:15px">
+          I checked in on ${m.n.split(' ')[0]} this week
+        </label>
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:#888;font-weight:500;margin-bottom:4px">How are they doing?</div>
+          <div style="display:flex;gap:8px">
+            ${['red','amber','green'].map(col=>{
+              const labels={red:'Needs urgent support',amber:'Needs support',green:'Doing well'};
+              const colors={red:'#E24B4A',amber:'#EF9F27',green:'#1D9E75'};
+              return`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px">
+                <input type="radio" name="wb_${clusterId}_${m.n.replace(/\s/g,'_')}" value="${col}" onchange="submissionData_${clusterId}['${mEsc}'].wellbeing='${col}'" style="accent-color:${colors[col]}">
+                <span style="color:${colors[col]};font-weight:500">${labels[col]}</span>
+              </label>`;
+            }).join('')}
+          </div>
+        </div>
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:#888;font-weight:500;margin-bottom:4px">Any notes?</div>
+          <textarea onchange="submissionData_${clusterId}['${mEsc}'].note=this.value" placeholder="Anything the GC leader should know..." style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid #ccc;border-radius:6px;resize:vertical;font-family:inherit;min-height:40px"></textarea>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#888;font-weight:500;margin-bottom:4px">Prayer request (optional)</div>
+          <input type="text" onchange="submissionData_${clusterId}['${mEsc}'].prayerRequest=this.value" placeholder="Any prayer points?" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid #ccc;border-radius:6px;font-family:inherit">
+        </div>
+      </div>`;
+    }).join('')}
+    <div style="padding-top:8px">
+      <button class="btn btn-success" style="width:100%" onclick="submitClusterForm('${clusterId}','${c.head.replace(/'/g,"\\'")}','${thisWeek?.key||''}')">Submit weekly check-in</button>
+    </div>
+  `;
+
+  // Store submission data globally keyed by cluster
+  window[`submissionData_${clusterId}`]=submissionData;
+  document.getElementById('clusterSubmitModal').className='member-modal open';
+}
+
+function closeClusterSubmit(){document.getElementById('clusterSubmitModal').className='member-modal';}
+
+async function submitClusterForm(clusterId,headName,weekKey){
+  const data=window[`submissionData_${clusterId}`]||{};
+  const c=clusters.find(x=>x.id===clusterId);
+  const sub={
+    id:'sub_'+Date.now(),
+    clusterId,
+    clusterName:c?.name||'',
+    submittedBy:headName,
+    weekKey,
+    data,
+    submittedAt:new Date().toISOString()
+  };
+  pendingClusterSubmissions.push(sub);
+  await saveAll();
+  closeClusterSubmit();
+  showToast('Check-in submitted ✓ The GC leader will review it.',3000);
+
+  // Send email notification
+  try{
+    if(typeof emailjs!=='undefined'){
+      const memberCount=Object.keys(data).length;
+      const checkedIn=Object.values(data).filter(d=>d.checkedIn).length;
+      await emailjs.send('service_kq9iu09','template_82gx2h7',{
+        week:weekKey,
+        present:`${checkedIn}/${memberCount} checked in by ${headName}`,
+        absent:`New cluster submission from ${c?.name} (${headName})`,
+        followup_list:Object.entries(data).filter(([,d])=>d.note).map(([n,d])=>`${n}: ${d.note}`).join('\n')||'None',
+        checkin_summary:`${headName} submitted weekly check-in for ${c?.name}`,
+        birthdays:'See app for details',
+        prayer_count:Object.values(data).filter(d=>d.prayerRequest).length
+      });
+    }
+  }catch(e){console.warn('Email notification failed:',e);}
+}
+
+// Pending review
+function openPendingModal(){
+  const el=document.getElementById('pendingContent');
+  if(!pendingClusterSubmissions.length){
+    el.innerHTML='<div style="text-align:center;padding:2rem;color:#888;font-size:13px">No pending submissions.</div>';
+    document.getElementById('pendingModal').className='member-modal open';
+    return;
+  }
+  el.innerHTML=[...pendingClusterSubmissions].reverse().map(sub=>{
+    const members=Object.entries(sub.data);
+    const checkedIn=members.filter(([,d])=>d.checkedIn).length;
+    const hasPrayer=members.filter(([,d])=>d.prayerRequest).length;
+    return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:14px;font-weight:600">${sub.clusterName}</div>
+          <div style="font-size:12px;color:#888">Submitted by ${sub.submittedBy} · ${new Date(sub.submittedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+          <div style="font-size:12px;color:#888">Week: ${sub.weekKey} · ${checkedIn}/${members.length} checked in${hasPrayer?' · '+hasPrayer+' prayer requests':''}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-success btn-sm" onclick="approveSubmission('${sub.id}')">&#10003; Approve all</button>
+          <button class="btn btn-danger btn-sm" onclick="rejectSubmission('${sub.id}')">Discard</button>
+        </div>
+      </div>
+      ${members.map(([name,d])=>`<div style="padding:7px 0;border-bottom:0.5px solid #f0efe8;font-size:13px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+          <span style="font-weight:500">${name}</span>
+          ${d.checkedIn?'<span style="font-size:10px;background:#e1f5ee;color:#085041;border-radius:4px;padding:1px 5px">Checked in</span>':''}
+          ${d.wellbeing?`<span style="width:8px;height:8px;border-radius:50%;background:${d.wellbeing==='green'?'#1D9E75':d.wellbeing==='amber'?'#EF9F27':'#E24B4A'};display:inline-block"></span>`:''}
+        </div>
+        ${d.note?`<div style="font-size:12px;color:#555;margin-top:2px">${d.note}</div>`:''}
+        ${d.prayerRequest?`<div style="font-size:12px;color:#0c447c;margin-top:2px">🙏 ${d.prayerRequest}</div>`:''}
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+  document.getElementById('pendingModal').className='member-modal open';
+}
+function closePendingModal(){document.getElementById('pendingModal').className='member-modal';}
+
+async function approveSubmission(id){
+  const sub=pendingClusterSubmissions.find(x=>x.id===id);if(!sub)return;
+  const wk=sub.weekKey;
+  // Write all data to main structures
+  Object.entries(sub.data).forEach(([mn,d])=>{
+    if(d.checkedIn){if(!checkIns[wk])checkIns[wk]={};checkIns[wk][mn]='yes';}
+    if(d.wellbeing){if(!wellbeing[wk])wellbeing[wk]={};wellbeing[wk][mn]=d.wellbeing;}
+    if(d.note){if(!careNotes[wk])careNotes[wk]={};careNotes[wk][mn]=d.note;}
+    if(d.prayerRequest){
+      prayerRequests.push({id:'pr_'+Date.now()+'_'+mn,memberId:mn,clusterName:sub.clusterName,request:d.prayerRequest,anonymous:false,date:sub.weekKey,status:'active'});
+    }
+  });
+  // Remove from pending
+  pendingClusterSubmissions.splice(pendingClusterSubmissions.findIndex(x=>x.id===id),1);
+  await saveAll();
+  renderClusters();
+  openPendingModal();
+  showToast('Submission approved ✓',2000);
+  updatePendingBadge();
+}
+
+function rejectSubmission(id){
+  if(!confirm('Discard this submission?'))return;
+  pendingClusterSubmissions.splice(pendingClusterSubmissions.findIndex(x=>x.id===id),1);
+  saveAll();openPendingModal();updatePendingBadge();
+}
+
+function updatePendingBadge(){
+  const bar=document.getElementById('pendingBadgeBar');
+  const cnt=document.getElementById('pendingCount');
+  if(bar&&cnt){
+    const n=pendingClusterSubmissions.length;
+    bar.style.display=n?'flex':'none';
+    cnt.textContent=n;
+  }
+}
+
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 initSeedData();
 loadSaved();
@@ -4182,6 +4940,7 @@ setTimeout(async()=>{
 },500);
 // Check for magic link (cluster leader direct access)
 setTimeout(checkMagicLink,1200);
+updatePendingBadge();
 </script>
 </body>
 </html>
