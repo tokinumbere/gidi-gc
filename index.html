@@ -27,7 +27,8 @@ h1{font-size:20px;font-weight:600;color:#1a1a1a;font-family:'Playfair Display',s
 .notice{background:#e6f1fb;color:#0c447c;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem}
 .recalc-banner{background:#faeeda;color:#633806;border:0.5px solid #ef9f27;border-radius:8px;padding:12px 16px;margin-bottom:1rem;display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .recalc-banner.show{display:flex}
-.tabs{display:flex;gap:4px;border-bottom:1px solid #e0e0d8;margin-bottom:1.5rem;flex-wrap:wrap;background:#fff;border-radius:10px 10px 0 0;padding:6px 6px 0}
+.tabs{display:flex;gap:4px;border-bottom:1px solid #e0e0d8;margin-bottom:1.5rem;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:#fff;border-radius:10px 10px 0 0;padding:6px 6px 0}
+.tabs::-webkit-scrollbar{display:none}
 .tab{padding:8px 14px;font-size:13px;cursor:pointer;border:none;background:none;color:#888;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;white-space:nowrap;font-family:inherit;border-radius:6px 6px 0 0}
 .tab:hover{color:#1a1a1a;background:#f5f5f3}
 .tab.active{color:#1a1a1a;border-bottom-color:#1a1a1a;font-weight:500;background:#fff}
@@ -250,7 +251,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <div style="font-size:28px;margin-bottom:10px">&#128274;</div>
     <div class="pin-title" style="font-size:16px;font-weight:600;margin-bottom:6px">Edit mode</div>
     <div class="pin-subtitle" style="font-size:13px;color:#888;margin-bottom:18px">Enter the PIN to enable editing</div>
-    <input id="pinInput" type="password" maxlength="10" placeholder="PIN"
+    <input id="pinInput" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" maxlength="10" placeholder="PIN"
       style="width:100%;padding:10px 14px;font-size:18px;text-align:center;border:1.5px solid #ccc;border-radius:8px;font-family:inherit;letter-spacing:.2em;margin-bottom:14px"
       onkeydown="if(event.key==='Enter')checkPin()">
     <div id="pinError" style="font-size:12px;color:#a32d2d;margin-bottom:10px;display:none">Incorrect PIN. Try again.</div>
@@ -300,6 +301,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <button class="tab" data-id="trends" onclick="switchTab('trends',this)">Absence trends</button>
   <button class="tab" data-id="birthdays" onclick="switchTab('birthdays',this)">Birthdays</button>
   <button class="tab" data-id="clusters" onclick="switchTab('clusters',this)">&#127970; Clusters</button>
+  <button class="tab" data-id="prayer" onclick="switchTab('prayer',this)">&#128591; Prayer</button>
   <button class="tab" data-id="archive" onclick="switchTab('archive',this)">&#128190; Archive</button>
   <button class="tab" data-id="recalc" onclick="switchTab('recalc',this)">Recalculate</button>
 </div>
@@ -807,6 +809,68 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 </div>
 
 
+
+<!-- PRAYER REQUESTS -->
+<div id="tab-prayer" class="panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
+    <div>
+      <p class="sec-title" style="margin-bottom:2px">Prayer requests</p>
+      <div style="font-size:12px;color:#888">Anonymous requests visible with edit PIN only.</div>
+    </div>
+    <button class="btn btn-success btn-sm" onclick="openPrayerForm()">+ Add request</button>
+  </div>
+  <div class="filters" style="margin-bottom:1rem">
+    <select id="prayer-filter" onchange="renderPrayerRequests()">
+      <option value="active">Active</option>
+      <option value="answered">Answered</option>
+      <option value="archived">Archived</option>
+      <option value="all">All</option>
+    </select>
+    <select id="prayer-cluster-filter" onchange="renderPrayerRequests()">
+      <option value="">All clusters</option>
+    </select>
+  </div>
+  <div id="prayerList"></div>
+</div>
+
+<!-- PRAYER REQUEST FORM MODAL -->
+<div class="member-modal" id="prayerModal" onclick="if(event.target===this)closePrayerForm()">
+  <div class="member-modal-box" style="max-width:480px">
+    <div class="member-modal-header">
+      <div style="font-size:15px;font-weight:500">Log prayer request</div>
+      <button class="btn btn-sm" onclick="closePrayerForm()">Close</button>
+    </div>
+    <div style="padding:20px">
+      <div class="form-row">
+        <label class="form-label">Member</label>
+        <select class="form-input" id="pr-member">
+          <option value="">Select member...</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Cluster</label>
+        <select class="form-input" id="pr-cluster">
+          <option value="">No cluster</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Prayer request *</label>
+        <textarea class="form-input" id="pr-text" rows="4" placeholder="What should we be praying for?" style="resize:vertical"></textarea>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer">
+        <input type="checkbox" id="pr-anon" style="width:16px;height:16px">
+        <span>Mark as anonymous <span style="color:#888;font-size:12px">(only visible with edit PIN)</span></span>
+      </label>
+      <div id="pr-error" style="display:none;background:#fcebeb;color:#791f1f;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-sm" onclick="closePrayerForm()">Cancel</button>
+        <button class="btn btn-success" onclick="savePrayerRequest()">Save request</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <!-- ARCHIVE -->
 <div id="tab-archive" class="panel">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
@@ -959,8 +1023,14 @@ let clusters=[
 let clusterMembers={};
 // checkIns: {weekKey: {memberName: 'yes'|'no'|'na'}}  weekKey = Wednesday date string
 let checkIns={};
-// termArchive: [{id, name, savedAt, data:{attendance,absenceReasons,firstSession,checkIns,members,clusters,clusterMembers}}]
+// termArchive: [{id, name, savedAt, data:{...}}]
 let termArchive=[];
+// wellbeing: {weekKey: {memberName: 'green'|'amber'|'red'}}
+let wellbeing={};
+// careNotes: {weekKey: {memberName: 'note text'}}
+let careNotes={};
+// prayerRequests: [{id, memberId, request, anonymous, clusterId, date, status:'active'|'answered'|'archived'}]
+let prayerRequests=[];
 let pendingChanges=[];
 let charts={};
 
@@ -1002,7 +1072,7 @@ async function loadFromSupabase(){
 
 async function saveAll(){
   // Always save to localStorage first
-  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||''})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,savedAt:new Date().toISOString()}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||''})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,wellbeing,careNotes,prayerRequests,savedAt:new Date().toISOString()}));}catch(e){}
   // Then sync to Supabase
   try{
     showToast('Saving...');
@@ -1038,6 +1108,9 @@ function loadSaved(){
     if(d.clusterMembers)Object.assign(clusterMembers,d.clusterMembers);
     if(d.checkIns)Object.assign(checkIns,d.checkIns);
     if(d.termArchive)termArchive.splice(0,termArchive.length,...d.termArchive);
+    if(d.wellbeing)Object.assign(wellbeing,d.wellbeing);
+    if(d.careNotes)Object.assign(careNotes,d.careNotes);
+    if(d.prayerRequests)prayerRequests.splice(0,prayerRequests.length,...d.prayerRequests);
     return true;
   }catch(e){return false;}
 }
@@ -1056,7 +1129,7 @@ function exportData(){
     attendance,absenceReasons,birthdays,firstSession,
     clusters,clusterMembers,checkIns,
     customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),
-    termArchive
+    termArchive,wellbeing,careNotes,prayerRequests
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -1099,6 +1172,9 @@ function importData(input){
       if(d.checkIns)Object.assign(checkIns,d.checkIns);
       if(d.customReasons)d.customReasons.forEach(r=>{if(!REASONS.includes(r))REASONS.push(r);});
       if(d.termArchive&&d.termArchive.length)termArchive.splice(0,termArchive.length,...d.termArchive);
+      if(d.wellbeing)Object.assign(wellbeing,d.wellbeing);
+      if(d.careNotes)Object.assign(careNotes,d.careNotes);
+      if(d.prayerRequests&&d.prayerRequests.length)prayerRequests.splice(0,prayerRequests.length,...d.prayerRequests);
       recalcAll();
       // Save to Supabase so everyone sees the imported data
       showToast('Importing — syncing to server...', 5000);
@@ -2698,60 +2774,17 @@ function toggleMobMore(){
 }
 function closeMobMore(){document.getElementById('mobMore').style.display='none';}
 
-const CLUSTER_PIN='1234';
 const CLUSTER_SESSION_KEY='gidi_cluster_unlocked';
 
-function isClusterUnlocked(){
-  return sessionStorage.getItem(CLUSTER_SESSION_KEY)==='1'||isEditMode();
-}
-
-function unlockClusters(pin){
-  if(pin===CLUSTER_PIN||pin===CORRECT_PIN){
-    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
-    return true;
-  }
-  return false;
-}
-
 function openClusterPinModal(onSuccess){
-  // Show PIN modal but with cluster context
   const m=document.getElementById('pinModal');
   document.querySelector('#pinModal .pin-title').textContent='Clusters access';
-  document.querySelector('#pinModal .pin-subtitle').textContent='Enter the Clusters PIN to view cluster data';
+  document.querySelector('#pinModal .pin-subtitle').textContent='Enter PIN 1234 to view clusters, or GIDI for full edit';
   m.style.display='flex';
+  m._onSuccess=onSuccess;
   document.getElementById('pinInput').value='';
   document.getElementById('pinError').style.display='none';
-  // Store callback
-  m._onSuccess=onSuccess;
   setTimeout(()=>document.getElementById('pinInput').focus(),100);
-}
-
-function checkPin(){
-  const raw=document.getElementById('pinInput').value.trim();
-  const upper=raw.toUpperCase();
-  const m=document.getElementById('pinModal');
-
-  // Edit PIN (GIDI) — case-insensitive
-  if(upper===CORRECT_PIN){
-    sessionStorage.setItem(PIN_SESSION_KEY,'1');
-    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
-    closePinModal();applyMode();
-    showToast('Edit mode unlocked 🔓',2000);
-    if(m._onSuccess){m._onSuccess();m._onSuccess=null;}
-    return;
-  }
-  // Cluster PIN (1234) — exact match
-  if(raw===CLUSTER_PIN){
-    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
-    closePinModal();
-    showToast('Clusters unlocked ✓',2000);
-    if(m._onSuccess){m._onSuccess();m._onSuccess=null;}
-    return;
-  }
-  // Wrong
-  document.getElementById('pinError').style.display='block';
-  document.getElementById('pinInput').value='';
-  document.getElementById('pinInput').focus();
 }
 
 function switchTab(id,el){
@@ -2775,6 +2808,7 @@ function switchTab(id,el){
   if(id==='record')renderSessionList();
   if(id==='clusters')renderClusters();
   if(id==='archive')renderArchive();
+  if(id==='prayer')renderPrayerRequests();
   window.scrollTo(0,0);
 }
 
@@ -2920,36 +2954,96 @@ function renderClusters(){
     const members=getMembersInCluster(c.id).sort(byFirstName);
     const totalSess=clusterRecs.length;
 
-    // Attendance dots for all cluster-term sessions
+    // Attendance dots + pastoral care per member
     const memberRows=members.map(m=>{
       const joinDate=clusterMembers[m.n]?.joinDate||'2026-09-09';
+      const mEsc=m.n.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+
+      // Session dots (all sessions)
       const dots=recs.map(s=>{
         if(s.key<joinDate)return`<div class="dot" style="background:#e0e0d8" title="${s.date} (before join)"></div>`;
         const st=attendance[s.key]?attendance[s.key][m.n]:'unknown';
         return`<div class="dot ${st==='present'?'dot-y':'dot-n'}" title="${s.date}"></div>`;
       }).join('');
+
       const c2=calcMember(m.n);
       const streak=c2.curStreak;
       const followup=streak>=2?`<span style="font-size:10px;background:#fcebeb;color:#791f1f;border-radius:4px;padding:1px 5px;margin-left:4px">Follow up</span>`:'';
 
-      // Check-in for selected week
-      let ciHtml='';
-      if(weekKey&&clusterMembers[m.n]?.joinDate<=weekKey){
+      // Wellbeing dot timeline (per week)
+      const allWeeks=getClusterWeeks().filter(w=>w.key>=joinDate);
+      const wbDots=allWeeks.map(w=>{
+        const wbVal=(wellbeing[w.key]||{})[m.n]||'';
+        const wbColor=wbVal==='green'?'#1D9E75':wbVal==='amber'?'#EF9F27':wbVal==='red'?'#E24B4A':'#e0e0d8';
+        const wbLabel=wbVal==='green'?'Doing well':wbVal==='amber'?'Needs support':wbVal==='red'?'Needs urgent support':'No status';
+        return`<div style="width:10px;height:10px;border-radius:50%;background:${wbColor};flex-shrink:0" title="${w.date}: ${wbLabel}"></div>`;
+      }).join('');
+
+      // Current week pastoral care section
+      let careHtml='';
+      if(weekKey&&joinDate<=weekKey){
         const ciVal=(checkIns[weekKey]||{})[m.n]||'';
-        const mEsc=m.n.replace(/'/g,"\\'");
-        ciHtml=`<div style="display:flex;gap:4px;flex-shrink:0">
-          <button onclick="setCheckIn('${weekKey}','${mEsc}','yes')" style="border:none;background:${ciVal==='yes'?'#1D9E75':'#f0f0ea'};color:${ciVal==='yes'?'#fff':'#888'};border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;font-family:inherit" title="Checked in">✓</button>
-          <button onclick="setCheckIn('${weekKey}','${mEsc}','no')" style="border:none;background:${ciVal==='no'?'#E24B4A':'#f0f0ea'};color:${ciVal==='no'?'#fff':'#888'};border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;font-family:inherit" title="Not checked in">✗</button>
-          <button onclick="setCheckIn('${weekKey}','${mEsc}','na')" style="border:none;background:${ciVal==='na'?'#888':'#f0f0ea'};color:${ciVal==='na'?'#fff':'#888'};border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;font-family:inherit" title="N/A">–</button>
+        const wbVal=(wellbeing[weekKey]||{})[m.n]||'';
+        const noteVal=(careNotes[weekKey]||{})[m.n]||'';
+        const isAbsent=attendance[weekKey]?attendance[weekKey][m.n]!=='present':true;
+        const absReason=absenceReasons[weekKey]?absenceReasons[weekKey][m.n]:'';
+        const reasonOpts=REASONS.map(r=>`<option value="${r}"${absReason===r?' selected':''}>${r}</option>`).join('');
+
+        careHtml=`<div style="background:#f9f9f7;border-top:0.5px solid #f0efe8;padding:10px 12px;display:grid;gap:8px">
+
+          <!-- Check-in checkbox -->
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:500">
+              <input type="checkbox" ${ciVal==='yes'?'checked':''} onchange="setCheckIn('${weekKey}','${mEsc}',this.checked?'yes':'no')" style="width:15px;height:15px">
+              Leader checked in this week
+            </label>
+          </div>
+
+          <!-- Wellbeing traffic lights -->
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;color:#888;font-weight:500;min-width:70px">Wellbeing:</span>
+            <div style="display:flex;gap:6px">
+              ${['red','amber','green'].map(col=>{
+                const labels={red:'Needs urgent support',amber:'Needs support',green:'Doing well'};
+                const colors={red:'#E24B4A',amber:'#EF9F27',green:'#1D9E75'};
+                const selected=wbVal===col;
+                return`<button onclick="setWellbeing('${weekKey}','${mEsc}','${col}')" title="${labels[col]}" style="width:22px;height:22px;border-radius:50%;border:2px solid ${selected?colors[col]:'#e0e0d8'};background:${selected?colors[col]:'#fff'};cursor:pointer;transition:all .15s"></button>`;
+              }).join('')}
+              ${wbVal?`<button onclick="setWellbeing('${weekKey}','${mEsc}','')" title="Clear" style="font-size:10px;background:none;border:none;color:#aaa;cursor:pointer;padding:0 4px">✕</button>`:''}
+            </div>
+          </div>
+
+          <!-- Absence reason (if absent) -->
+          ${isAbsent?`<div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;color:#888;font-weight:500;min-width:70px">Absent:</span>
+            <select onchange="setClusterAbsenceReason('${weekKey}','${mEsc}',this.value)" style="font-size:12px;padding:4px 8px;border:0.5px solid #ccc;border-radius:6px;flex:1">
+              <option value="">Reason...</option>
+              ${reasonOpts}
+            </select>
+          </div>`:''}
+
+          <!-- Care note -->
+          <div style="display:flex;align-items:flex-start;gap:8px">
+            <span style="font-size:12px;color:#888;font-weight:500;min-width:70px;padding-top:4px">Note:</span>
+            <textarea onchange="setCareNote('${weekKey}','${mEsc}',this.value)" placeholder="How are they doing this week?" style="flex:1;font-size:12px;padding:5px 8px;border:0.5px solid #ccc;border-radius:6px;resize:vertical;font-family:inherit;min-height:40px">${noteVal}</textarea>
+          </div>
+
+          <!-- Prayer request button -->
+          <div style="display:flex;justify-content:flex-end">
+            <button class="btn btn-sm" style="font-size:11px" onclick="openPrayerForm('${mEsc}')">&#128591; Log prayer request</button>
+          </div>
         </div>`;
       }
 
-      return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:0.5px solid #f0efe8;gap:8px;flex-wrap:wrap">
-        <div style="min-width:0">
-          <div style="font-size:13px;font-weight:500;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${m.n}${followup}</div>
-          <div style="display:flex;gap:2px;margin-top:4px">${dots}</div>
+      return`<div style="border-bottom:0.5px solid #f0efe8">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;gap:8px;flex-wrap:wrap">
+          <div style="min-width:0">
+            <div style="font-size:13px;font-weight:500;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${m.n}${followup}</div>
+            <div style="display:flex;gap:2px;margin-top:4px;flex-wrap:wrap">${dots}</div>
+            ${allWeeks.length?`<div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">${wbDots}</div>`:''}
+          </div>
         </div>
-        ${ciHtml}
+        ${careHtml}
       </div>`;
     }).join('');
 
@@ -3431,10 +3525,15 @@ saveMember=function(){
 
 // ── PIN / VIEW-ONLY MODE ──────────────────────────────────────────────────────
 const CORRECT_PIN = 'GIDI';
+const CLUSTER_PIN = '1234';
 const PIN_SESSION_KEY = 'gidi_edit_unlocked';
 
 function isEditMode(){
   return sessionStorage.getItem(PIN_SESSION_KEY) === '1';
+}
+
+function isClusterUnlocked(){
+  return sessionStorage.getItem(CLUSTER_SESSION_KEY)==='1'||isEditMode();
 }
 
 function applyMode(){
@@ -3463,17 +3562,32 @@ function closePinModal(){
 }
 
 function checkPin(){
-  const val = document.getElementById('pinInput').value.trim().toUpperCase();
-  if(val === CORRECT_PIN){
-    sessionStorage.setItem(PIN_SESSION_KEY, '1');
-    closePinModal();
-    applyMode();
-    showToast('Edit mode unlocked 🔓', 2000);
-  } else {
-    document.getElementById('pinError').style.display = 'block';
-    document.getElementById('pinInput').value = '';
-    document.getElementById('pinInput').focus();
+  const raw=document.getElementById('pinInput').value.replace(/\s/g,'');
+  const upper=raw.toUpperCase();
+  const m=document.getElementById('pinModal');
+  // Edit PIN — GIDI (case-insensitive)
+  if(upper===CORRECT_PIN){
+    sessionStorage.setItem(PIN_SESSION_KEY,'1');
+    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
+    closePinModal();applyMode();
+    showToast('Edit mode unlocked 🔓',2000);
+    if(m._onSuccess){m._onSuccess();m._onSuccess=null;}
+    return;
   }
+  // Cluster PIN — 1234 (exact after whitespace strip)
+  if(raw===CLUSTER_PIN){
+    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
+    closePinModal();
+    showToast('Clusters unlocked ✓',2000);
+    if(m._onSuccess){m._onSuccess();m._onSuccess=null;}
+    return;
+  }
+  // Wrong PIN — show error
+  const err=document.getElementById('pinError');
+  err.textContent=`Incorrect PIN (got ${raw.length} characters)`;
+  err.style.display='block';
+  document.getElementById('pinInput').value='';
+  document.getElementById('pinInput').focus();
 }
 
 function toggleLock(){
@@ -3923,6 +4037,135 @@ async function confirmNewTerm(){
   showToast(`"${name}" archived. New term started! ✓`,3500);
   // Switch to overview
   switchTab('overview',document.querySelector('[data-id=overview]'));
+}
+
+// ── PASTORAL CARE FUNCTIONS ───────────────────────────────────────────────────
+
+function setWellbeing(weekKey,memberName,val){
+  if(!wellbeing[weekKey])wellbeing[weekKey]={};
+  if(val)wellbeing[weekKey][memberName]=val;
+  else delete wellbeing[weekKey][memberName];
+  saveAll();renderClusters();
+}
+
+function setCareNote(weekKey,memberName,val){
+  if(!careNotes[weekKey])careNotes[weekKey]={};
+  if(val.trim())careNotes[weekKey][memberName]=val.trim();
+  else delete careNotes[weekKey][memberName];
+  saveAll();
+}
+
+function setClusterAbsenceReason(sessionKey,memberName,val){
+  if(!absenceReasons[sessionKey])absenceReasons[sessionKey]={};
+  if(val)absenceReasons[sessionKey][memberName]=val;
+  else delete absenceReasons[sessionKey][memberName];
+  saveAll();
+}
+
+// ── PRAYER REQUESTS ───────────────────────────────────────────────────────────
+
+function openPrayerForm(memberName){
+  // Populate member dropdown
+  const mSel=document.getElementById('pr-member');
+  mSel.innerHTML='<option value="">Select member...</option>'+[...MEMBERS].sort(byFirstName).map(m=>`<option value="${m.n}"${m.n===memberName?' selected':''}>${m.n}</option>`).join('');
+  // Populate cluster dropdown
+  const cSel=document.getElementById('pr-cluster');
+  cSel.innerHTML='<option value="">No cluster</option>'+clusters.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  // Pre-select cluster based on member
+  if(memberName&&clusterMembers[memberName]){
+    cSel.value=clusterMembers[memberName].clusterId;
+  }
+  document.getElementById('pr-text').value='';
+  document.getElementById('pr-anon').checked=false;
+  document.getElementById('pr-error').style.display='none';
+  document.getElementById('prayerModal').className='member-modal open';
+}
+
+function closePrayerForm(){
+  document.getElementById('prayerModal').className='member-modal';
+}
+
+function savePrayerRequest(){
+  const member=document.getElementById('pr-member').value;
+  const clusterId=document.getElementById('pr-cluster').value;
+  const text=document.getElementById('pr-text').value.trim();
+  const anon=document.getElementById('pr-anon').checked;
+  const err=document.getElementById('pr-error');
+  if(!text){err.textContent='Please enter a prayer request.';err.style.display='block';return;}
+  prayerRequests.push({
+    id:'pr_'+Date.now(),
+    memberId:anon?'':member,
+    clusterName:clusterId?clusters.find(c=>c.id===clusterId)?.name||'':'',
+    request:text,
+    anonymous:anon,
+    date:new Date().toISOString().split('T')[0],
+    status:'active'
+  });
+  closePrayerForm();
+  saveAll();
+  renderPrayerRequests();
+  showToast('Prayer request saved',2000);
+}
+
+function renderPrayerRequests(){
+  const el=document.getElementById('prayerList');
+  if(!el)return;
+  const filter=document.getElementById('prayer-filter')?.value||'active';
+  const clusterFilter=document.getElementById('prayer-cluster-filter')?.value||'';
+
+  // Populate cluster filter dropdown
+  const cSel=document.getElementById('prayer-cluster-filter');
+  if(cSel){
+    const cur=cSel.value;
+    cSel.innerHTML='<option value="">All clusters</option>'+clusters.map(c=>`<option value="${c.name}"${c.name===cur?' selected':''}>${c.name}</option>`).join('');
+  }
+
+  const editMode=isEditMode();
+  const visible=prayerRequests.filter(p=>{
+    if(filter!=='all'&&p.status!==filter)return false;
+    if(clusterFilter&&p.clusterName!==clusterFilter)return false;
+    if(p.anonymous&&!editMode)return false; // anon only visible to GIDI
+    return true;
+  }).sort((a,b)=>b.date.localeCompare(a.date));
+
+  if(!visible.length){
+    el.innerHTML=`<div style="text-align:center;padding:2rem;color:#888;font-size:13px">No ${filter} prayer requests${!editMode?' (anonymous requests hidden)':''}.</div>`;
+    return;
+  }
+
+  const statusColors={active:'#e1f5ee',answered:'#e6f1fb',archived:'#f5f5f3'};
+  const statusText={active:'Active',answered:'Answered',archived:'Archived'};
+
+  el.innerHTML=visible.map(p=>`
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:2px">
+            ${p.anonymous?'<span style="background:#f5f5f3;color:#888;border-radius:4px;padding:1px 6px;font-size:11px">Anonymous</span>':p.memberId?p.memberId:'<span style="color:#888">No member</span>'}
+          </div>
+          <div style="font-size:11px;color:#888">${p.clusterName||'No cluster'} &middot; ${p.date}</div>
+        </div>
+        <span style="padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;background:${statusColors[p.status]};flex-shrink:0">${statusText[p.status]}</span>
+      </div>
+      <div style="font-size:14px;color:#1a1a1a;line-height:1.6;margin-bottom:10px">${p.request}</div>
+      ${isEditMode()||isClusterUnlocked()?`<div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${p.status==='active'?`<button class="btn btn-success btn-sm" onclick="updatePrayerStatus('${p.id}','answered')">&#10003; Mark answered</button>`:''}
+        ${p.status!=='archived'?`<button class="btn btn-sm" onclick="updatePrayerStatus('${p.id}','archived')">Archive</button>`:''}
+        ${isEditMode()?`<button class="btn btn-danger btn-sm" onclick="deletePrayerRequest('${p.id}')">Delete</button>`:''}
+      </div>`:''}
+    </div>
+  `).join('');
+}
+
+function updatePrayerStatus(id,status){
+  const p=prayerRequests.find(x=>x.id===id);
+  if(p){p.status=status;saveAll();renderPrayerRequests();showToast('Updated',1500);}
+}
+
+function deletePrayerRequest(id){
+  if(!confirm('Delete this prayer request permanently?'))return;
+  const idx=prayerRequests.findIndex(x=>x.id===id);
+  if(idx>=0){prayerRequests.splice(idx,1);saveAll();renderPrayerRequests();}
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
