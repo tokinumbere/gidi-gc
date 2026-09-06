@@ -303,12 +303,12 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 <div class="tabs">
   <button class="tab active" data-id="overview" onclick="switchTab('overview',this)">Overview</button>
   <button class="tab" data-id="members" onclick="switchTab('members',this)">Core &amp; Regulars</button>
+  <button class="tab" data-id="clusters" onclick="switchTab('clusters',this)">&#127970; Clusters</button>
   <button class="tab" data-id="guests" onclick="switchTab('guests',this)">Guests</button>
   <button class="tab" data-id="record" onclick="switchTab('record',this)">Record attendance</button>
   <button class="tab" data-id="absenteeism" onclick="switchTab('absenteeism',this)">Absenteeism</button>
   <button class="tab" data-id="trends" onclick="switchTab('trends',this)">Absence trends</button>
   <button class="tab" data-id="birthdays" onclick="switchTab('birthdays',this)">Birthdays</button>
-  <button class="tab" data-id="clusters" onclick="switchTab('clusters',this)">&#127970; Clusters</button>
   <button class="tab" data-id="prayer" onclick="switchTab('prayer',this)">&#128591; Prayer</button>
   <button class="tab" data-id="archive" onclick="switchTab('archive',this)">&#128190; Archive</button>
   <button class="tab" data-id="recalc" onclick="switchTab('recalc',this)">Recalculate</button>
@@ -1178,6 +1178,7 @@ async function loadFromSupabase(){
     cm.forEach(row=>{clusterMembers[row.member_name]={clusterId:row.cluster_id,joinDate:row.join_date};});
     ci.forEach(row=>{if(!checkIns[row.week_key])checkIns[row.week_key]={};checkIns[row.week_key][row.member_name]=row.status;});
     cr.forEach(row=>{if(!REASONS.includes(row.reason))REASONS.push(row.reason);});
+    applyPhoneNumbers();
     return true;
   }catch(e){console.error('loadFromSupabase',e);return false;}
 }
@@ -1356,6 +1357,15 @@ function applyBdayImport(){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
+function applyPhoneNumbers(){
+  Object.entries(PHONES).forEach(([n,p])=>{
+    if(!p.phone)return;
+    // Try exact match first, then trimmed
+    let m=MEMBERS.find(x=>x.n===n)||MEMBERS.find(x=>x.n.trim()===n.trim());
+    if(m){m.phone=m.phone||p.phone;m.wa=p.wa;}
+  });
+}
+
 function initSeedData(){
   // Seed phone numbers
   Object.entries(PHONES).forEach(([n,p])=>{
@@ -4933,6 +4943,7 @@ function updatePendingBadge(){
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 initSeedData();
 loadSaved();
+applyPhoneNumbers();
 recalcAll();
 applyMode();
 // Supabase loads silently in background — never blocks the UI
