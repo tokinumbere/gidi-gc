@@ -257,10 +257,10 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <div style="font-size:28px;margin-bottom:10px">&#128274;</div>
     <div class="pin-title" style="font-size:16px;font-weight:600;margin-bottom:6px">Edit mode</div>
     <div class="pin-subtitle" style="font-size:13px;color:#888;margin-bottom:18px">Enter the PIN to enable editing</div>
-    <input id="pinInput" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" maxlength="10" placeholder="PIN"
+    <input id="pinInput" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" maxlength="10"
       style="width:100%;padding:10px 14px;font-size:18px;text-align:center;border:1.5px solid #ccc;border-radius:8px;font-family:inherit;letter-spacing:.2em;margin-bottom:14px"
       onkeydown="if(event.key==='Enter')checkPin()">
-    <div id="pinError" style="font-size:12px;color:#a32d2d;margin-bottom:10px;display:none">Incorrect PIN. Try again.</div>
+    <div id="pinError" style="font-size:12px;color:#a32d2d;margin-bottom:10px;display:none">Incorrect. Try again.</div>
     <div style="display:flex;gap:8px;justify-content:center">
       <button class="btn btn-sm" onclick="closePinModal()">Cancel</button>
       <button class="btn btn-success" onclick="checkPin()">Unlock</button>
@@ -1647,12 +1647,12 @@ function renderGuests(){
       return`<div class="dot ${st==='present'?'dot-y':'dot-n'}" title="${s.date.replace(' 2026','')}"></div>`;
     }).join('');
     return`<tr>
-      <td style="font-weight:500;font-size:12px">${m.n}</td>
+      <td style="font-weight:500;font-size:12px;cursor:pointer" onclick="openProfile('${nameEsc}')">${m.n}</td>
       <td>${cityBadge(m.city)}</td>
       <td style="font-size:12px;color:#888">${m.g}</td>
       <td style="font-size:12px">${fsDate?`<span style="background:#eeedfe;color:#3c3489;border-radius:4px;padding:1px 6px;font-size:11px">${fsDate}</span>`:'<span style="color:#ccc;font-size:11px">not set</span>'}</td>
       <td><span style="font-size:13px;font-weight:500;color:#3c3489">${c.present}</span><span style="font-size:11px;color:#888"> session${c.present===1?'':'s'}</span></td>
-      <td><button onclick="openMemberModal('${nameEsc}')" title="Edit guest" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px">&#9998;</button></td>
+      <td style="display:flex;gap:4px"><button onclick="openProfile('${nameEsc}')" title="View profile" style="background:none;border:none;cursor:pointer;font-size:14px;color:#888;padding:2px 4px">&#128100;</button><button onclick="openMemberModal('${nameEsc}')" title="Edit guest" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px">&#9998;</button></td>
     </tr>`;
   }).join('');
   if(!guests.length) body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">No guests yet. Add guests using the button above.</td></tr>`;
@@ -2212,7 +2212,7 @@ function renderMembers(){
     const gcCell=changed?`${gcBadge(m.gcOrig)}<span class="arrow">&rarr;</span>${gcBadge(m.gc,true)}`:gcBadge(m.gc);
     const fs=firstSession[m.n]?`<span style="font-size:10px;background:#eeedfe;color:#3c3489;border-radius:4px;padding:1px 5px;white-space:nowrap">${getRecordedSessions().find(s=>s.key===firstSession[m.n])?.date.replace(' 2026','')||''}</span>`:'<span style="font-size:11px;color:#ccc">not set</span>';
     const nameEsc=m.n.replace(/'/g,"\\'");
-    return`<tr><td style="font-weight:500;font-size:12px">${m.n}</td><td>${cityBadge(m.city)}</td><td style="white-space:nowrap">${gcCell}</td><td style="font-size:11px">${fs}</td><td><span class="${rc}">${c.present}/${c.possible}</span></td><td><span class="${rc}">${c.rate}%</span></td><td><div class="dot-wrap">${dots}</div></td><td><button onclick="openMemberModal('${nameEsc}')" title="Edit member" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px" aria-label="Edit ${m.n}">&#9998;</button></td></tr>`;
+    return`<tr><td style="font-weight:500;font-size:12px;cursor:pointer" onclick="openProfile('${nameEsc}')">${m.n}</td><td>${cityBadge(m.city)}</td><td style="white-space:nowrap">${gcCell}</td><td style="font-size:11px">${fs}</td><td><span class="${rc}">${c.present}/${c.possible}</span></td><td><span class="${rc}">${c.rate}%</span></td><td><div class="dot-wrap">${dots}</div></td><td style="display:flex;gap:4px"><button onclick="openProfile('${nameEsc}')" title="View profile" style="background:none;border:none;cursor:pointer;font-size:14px;color:#888;padding:2px 4px" aria-label="Profile ${m.n}">&#128100;</button><button onclick="openMemberModal('${nameEsc}')" title="Edit member" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px" aria-label="Edit ${m.n}">&#9998;</button></td></tr>`;
   }).join('');
 }
 
@@ -2408,7 +2408,7 @@ function renderAbsenteeism(){
     const flag=m.curStreak>=2?`<div style="font-size:11px;color:#a32d2d;margin-top:3px">&#9888; ${m.curStreak} consecutive absences</div>`:'';
     const topR=activeReason?[[activeReason,m.reasons[activeReason]]].filter(e=>e[1]>0):Object.entries(m.reasons).sort((a,b)=>b[1]-a[1]).filter(e=>e[1]>0);
     const shownR=topR[0];
-    return`<div class="abs-card"><div style="width:36px;height:36px;border-radius:50%;background:#f5f5f3;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:#888;flex-shrink:0">${ini(m.n)}</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">${m.n}</div><div style="font-size:11px;color:#888;margin-top:2px">${gcBadge(m.gc)} ${cityBadge(m.city)} &middot; ${m.g}${shownR?' &middot; '+reasonBadge(shownR[0])+(shownR[1]>1?' &times;'+shownR[1]:''):''}</div>${flag}</div><div style="text-align:right;flex-shrink:0"><div class="${rc}" style="font-size:15px">${m.absRate}%</div><div style="font-size:11px;color:#888">absent</div><div class="pct-bar" style="width:70px"><div class="pct-fill pct-red" style="width:${m.absRate}%"></div></div></div></div>`;
+    return`<div class="abs-card"><div style="width:36px;height:36px;border-radius:50%;background:#f5f5f3;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:#888;flex-shrink:0;cursor:pointer" onclick="openProfile('${m.n.replace(/'/g,"\\'")}')">${ini(m.n)}</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;cursor:pointer" onclick="openProfile('${m.n.replace(/'/g,"\\'")}')">${m.n}</div><div style="font-size:11px;color:#888;margin-top:2px">${gcBadge(m.gc)} ${cityBadge(m.city)} &middot; ${m.g}${shownR?' &middot; '+reasonBadge(shownR[0])+(shownR[1]>1?' &times;'+shownR[1]:''):''}</div>${flag}</div><div style="text-align:right;flex-shrink:0"><div class="${rc}" style="font-size:15px">${m.absRate}%</div><div style="font-size:11px;color:#888">absent</div><div class="pct-bar" style="width:70px"><div class="pct-fill pct-red" style="width:${m.absRate}%"></div></div></div></div>`;
   }).join('')||(activeReason?`<div style="font-size:13px;color:#888;padding:1rem">No members with "${activeReason}" absences logged.</div>`:'');
 }
 
@@ -3166,11 +3166,12 @@ function renderClusters(){
 
       return`<div style="border-bottom:0.5px solid #f0efe8">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;gap:8px;flex-wrap:wrap">
-          <div style="min-width:0">
+          <div style="min-width:0;cursor:pointer" onclick="openProfile('${mEsc}')">
             <div style="font-size:13px;font-weight:500;display:flex;align-items:center;flex-wrap:wrap;gap:4px">${m.n}${followup}</div>
             <div style="display:flex;gap:2px;margin-top:4px;flex-wrap:wrap">${dots}</div>
             ${allWeeks.length?`<div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">${wbDots}</div>`:''}
           </div>
+          ${getWaNumber(m.n)?`<a href="https://wa.me/${getWaNumber(m.n)}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;text-decoration:none;flex-shrink:0">WhatsApp</a>`:''}
         </div>
         ${careHtml}
       </div>`;
@@ -3711,9 +3712,8 @@ function checkPin(){
     if(m._onSuccess){m._onSuccess();m._onSuccess=null;}
     return;
   }
-  // Wrong PIN — show error
   const err=document.getElementById('pinError');
-  err.textContent=`Incorrect PIN (got ${raw.length} characters)`;
+  err.textContent='Incorrect. Try again.';
   err.style.display='block';
   document.getElementById('pinInput').value='';
   document.getElementById('pinInput').focus();
@@ -4574,9 +4574,13 @@ function closeProfile(){document.getElementById('profileModal').className='membe
 function openMemberModalFromProfile(){closeProfile();setTimeout(()=>openMemberModal(_profileMember),150);}
 
 function waLink(m){
-  const wa=m.wa||(PHONES[m.n]&&PHONES[m.n].wa)||'';
+  const wa=(m&&m.wa)||PHONES[m?.n]?.wa||'';
   if(!wa)return'';
   return`<a href="https://wa.me/${wa}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:#25D366;color:#fff;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;margin-top:4px">&#128241; WhatsApp</a>`;
+}
+
+function getWaNumber(name){
+  return PHONES[name]?.wa||PHONES[name?.trim()]?.wa||'';
 }
 
 function buildProfileHTML(m){
@@ -4630,7 +4634,7 @@ function buildProfileHTML(m){
           <span style="padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:${GBKG[m.gc]||'#f5f5f3'};color:${GCOL[m.gc]||'#888'}">${m.gc}</span>
           ${clusterInfo?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f0f0ea;color:#555">${clusterInfo.name}</span>`:'<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f5f5f3;color:#aaa">No cluster</span>'}
         </div>
-        ${m.phone?`<div style="font-size:13px;color:#555;margin-bottom:4px">&#128222; ${m.phone}</div>`:''}
+        ${(m.phone||PHONES[m.n]?.phone)?`<div style="font-size:13px;color:#555;margin-bottom:4px">&#128222; ${m.phone||PHONES[m.n]?.phone}</div>`:''}
         ${waLink(m)}
       </div>
     </div>
@@ -4731,7 +4735,7 @@ function renderGuestFunnel(){
             <div style="font-size:11px;color:#888">${visits} visits &middot; First: ${recs.find(s=>attendance[s.key]&&attendance[s.key][m.n]==='present')?.date||'?'}</div>
           </div>
           <div style="display:flex;gap:6px">
-            ${m.wa||PHONES[m.n]?.wa?`<a href="https://wa.me/${m.wa||PHONES[m.n]?.wa}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;text-decoration:none;font-size:11px">WhatsApp</a>`:''}
+            ${getWaNumber(m.n)?`<a href="https://wa.me/${getWaNumber(m.n)}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;text-decoration:none;font-size:11px">WhatsApp</a>`:''}
             <button class="btn btn-success btn-sm" onclick="openGuestConvert('${m.n.replace(/'/g,"\\'")}')">Convert</button>
           </div>
         </div>`;
@@ -4744,7 +4748,7 @@ function renderGuestFunnel(){
         return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:0.5px solid #f0efe8;font-size:13px;gap:8px">
           <div><div style="font-weight:500">${m.n}</div><div style="font-size:11px;color:#888">${visits} visit${visits===1?'':'s'}</div></div>
           <div style="display:flex;gap:6px">
-            ${m.wa||PHONES[m.n]?.wa?`<a href="https://wa.me/${m.wa||PHONES[m.n]?.wa}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;text-decoration:none;font-size:11px">WhatsApp</a>`:''}
+            ${getWaNumber(m.n)?`<a href="https://wa.me/${getWaNumber(m.n)}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;text-decoration:none;font-size:11px">WhatsApp</a>`:''}
             <button class="btn btn-sm" onclick="openProfile('${m.n.replace(/'/g,"\\'")}')">Profile</button>
           </div>
         </div>`;
