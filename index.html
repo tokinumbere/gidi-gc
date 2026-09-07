@@ -316,7 +316,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 
     <div class="nav-section">Groups</div>
     <button class="nav-item" data-id="clusters" onclick="switchTab('clusters',this)"><span class="nav-icon">&#127970;</span>Clusters</button>
-    <button class="nav-item" data-id="superclusters" onclick="switchTab('superclusters',this)"><span class="nav-icon">&#11835;</span>Superclusters</button>
+    <button class="nav-item" data-id="superclusters" onclick="switchTab('superclusters',this)"><span class="nav-icon">&#127968;</span>Superclusters</button>
 
     <div class="nav-section">Care</div>
     <button class="nav-item" data-id="care" onclick="switchTab('care',this)"><span class="nav-icon">&#10084;</span>Exception view <span class="nav-badge" id="careBadge" style="display:none">0</span></button>
@@ -1232,7 +1232,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <button class="btn" onclick="switchTab('absenteeism',document.querySelector('[data-id=absenteeism]'));closeMobMore()" style="justify-content:center;padding:10px">&#128202; Absent</button>
     <button class="btn" onclick="switchTab('trends',document.querySelector('[data-id=trends]'));closeMobMore()" style="justify-content:center;padding:10px">&#128200; Trends</button>
     <button class="btn" onclick="switchTab('guests',document.querySelector('[data-id=guests]'));closeMobMore()" style="justify-content:center;padding:10px">&#128100; Guests</button>
-    <button class="btn" onclick="switchTab('superclusters',document.querySelector('[data-id=superclusters]'));closeMobMore()" style="justify-content:center;padding:10px">&#11835; Super</button>
+    <button class="btn" onclick="switchTab('superclusters',document.querySelector('[data-id=superclusters]'));closeMobMore()" style="justify-content:center;padding:10px">&#127968; Super</button>
     <button class="btn" onclick="switchTab('care',document.querySelector('[data-id=care]'));closeMobMore()" style="justify-content:center;padding:10px">&#10084; Care</button>
     <button class="btn" onclick="switchTab('prayer',document.querySelector('[data-id=prayer]'));closeMobMore()" style="justify-content:center;padding:10px">&#128591; Prayer</button>
     <button class="btn" onclick="switchTab('birthdays',document.querySelector('[data-id=birthdays]'));closeMobMore()" style="justify-content:center;padding:10px">&#127874; Birthdays</button>
@@ -1354,13 +1354,15 @@ async function sbPost(table,rows){
 
 async function loadFromSupabase(){
   try{
-    const [mems,att,ar,bd,fs,cl,cm,ci,cr,sc]=await Promise.all([
+    const [mems,att,ar,bd,fs,cl,cm,ci,cr,sc,sci,swb,scn,sa,ma,ta]=await Promise.all([
       sbGet('members'),sbGet('attendance'),sbGet('absence_reasons'),
       sbGet('birthdays'),sbGet('first_session'),sbGet('clusters'),
       sbGet('cluster_members'),sbGet('check_ins'),sbGet('custom_reasons'),
-      sbGet('superclusters')
+      sbGet('superclusters'),sbGet('sc_check_ins'),sbGet('sc_wellbeing'),
+      sbGet('sc_care_notes'),sbGet('sc_about'),sbGet('member_about'),
+      sbGet('term_archive')
     ]);
-    if(!mems.length&&!att.length)return false; // nothing in DB yet
+    if(!mems.length&&!att.length)return false;
     mems.forEach(row=>{let m=MEMBERS.find(x=>x.n===row.name);if(!m){m={n:row.name,gc:row.gc,gcOrig:row.gc_orig||row.gc,city:row.city||'Attendee',g:row.gender||'Female',phone:row.phone||'',email:row.email||''};MEMBERS.push(m);}else{m.gc=row.gc;m.gcOrig=row.gc_orig||row.gc;if(row.city)m.city=row.city;if(row.gender)m.g=row.gender;if(row.phone)m.phone=row.phone;if(row.email)m.email=row.email;}});
     att.forEach(row=>{if(!attendance[row.session_key])attendance[row.session_key]={};attendance[row.session_key][row.member_name]=row.status;});
     ar.forEach(row=>{if(!absenceReasons[row.session_key])absenceReasons[row.session_key]={};absenceReasons[row.session_key][row.member_name]=row.reason;});
@@ -1371,6 +1373,12 @@ async function loadFromSupabase(){
     ci.forEach(row=>{if(!checkIns[row.week_key])checkIns[row.week_key]={};checkIns[row.week_key][row.member_name]=row.status;});
     cr.forEach(row=>{if(!REASONS.includes(row.reason))REASONS.push(row.reason);});
     if(sc&&sc.length)superclusters.splice(0,superclusters.length,...sc.map(r=>({id:r.id,name:r.name||'',gcLeader:r.gc_leader||'',clusterIds:JSON.parse(r.cluster_ids||'[]'),specialMembers:JSON.parse(r.special_members||'[]')})));
+    sci.forEach(row=>{if(!scCheckIns[row.week_key])scCheckIns[row.week_key]={};scCheckIns[row.week_key][row.member_name]=row.status;});
+    swb.forEach(row=>{if(!scWellbeing[row.week_key])scWellbeing[row.week_key]={};scWellbeing[row.week_key][row.member_name]=row.status;});
+    scn.forEach(row=>{if(!scCareNotes[row.week_key])scCareNotes[row.week_key]={};scCareNotes[row.week_key][row.member_name]=row.note;});
+    sa.forEach(row=>{scAbout[row.member_name]=row.about;});
+    ma.forEach(row=>{memberAbout[row.member_name]=row.about;});
+    if(ta&&ta.length)termArchive.splice(0,termArchive.length,...ta.map(r=>({id:r.id,name:r.name,savedAt:r.saved_at,data:JSON.parse(r.data||'{}')})));
     applyPhoneNumbers();
     return true;
   }catch(e){console.error('loadFromSupabase',e);return false;}
@@ -5668,6 +5676,7 @@ function buildProfileHTML(m){
   const recs=getRecordedSessions();
   const c2=calcMember(m.n);
   const clusterInfo=clusterMembers[m.n]?clusters.find(c=>c.id===clusterMembers[m.n].clusterId):null;
+  const isHeadOf=clusters.find(c=>c.head===m.n);
   const GBKG={Core:'#e1f5ee',Frequent:'#e6f1fb',Rare:'#faeeda',Unresponsive:'#fcebeb',Guest:'#f1efe8'};
   const GCOL={Core:'#085041',Frequent:'#0c447c',Rare:'#633806',Unresponsive:'#791f1f',Guest:'#444'};
 
@@ -5713,7 +5722,7 @@ function buildProfileHTML(m){
         <div style="font-size:18px;font-weight:600;margin-bottom:4px">${m.n}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
           <span style="padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:${GBKG[m.gc]||'#f5f5f3'};color:${GCOL[m.gc]||'#888'}">${m.gc}</span>
-          ${clusterInfo?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f0f0ea;color:#555">${clusterInfo.name}</span>`:'<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f5f5f3;color:#aaa">No cluster</span>'}
+          ${clusterInfo?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f0f0ea;color:#555">${clusterInfo.name}</span>`:isHeadOf?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#e1f5ee;color:#085041;font-weight:600">Cluster Leader · ${isHeadOf.name}</span>`:'<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f5f5f3;color:#aaa">No cluster</span>'}
         </div>
         ${(m.phone||PHONES[m.n]?.phone)?`<div style="font-size:13px;color:#555;margin-bottom:4px">&#128222; ${m.phone||PHONES[m.n]?.phone}</div>`:''}
         ${waLink(m)}
@@ -6814,6 +6823,46 @@ ${nextSess?`<div class="next">
   </div>
   <div style="font-size:28px">📅</div>
 </div>`:''}
+
+${(()=>{
+  // Find GC leader from superclusters
+  const sc=superclusters.find(x=>x.clusterIds&&x.clusterIds.includes(c.id));
+  const gcLeaderName=sc?.gcLeader||'';
+  const gcLeaderWa=gcLeaderName?getWaNumber(gcLeaderName):'';
+  if(!gcLeaderWa)return'';
+
+  // Build summary
+  const lastWeek=allWeeks.length?allWeeks[allWeeks.length-1]:null;
+  const presentCount=lastSess?members.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length:0;
+  const absentCount=members.length-presentCount;
+  const clusterRate=members.length?Math.round(presentCount/members.length*100):0;
+
+  let ciDone=0,ciTotal=0;
+  if(lastWeek){members.forEach(m=>{ciTotal++;if((checkIns[lastWeek.key]||{})[m.n]==='yes')ciDone++;});}
+
+  const urgent=members.filter(m=>calcMember(m.n).curStreak>=3).map(m=>m.n.split(' ')[0]);
+  const followUp=members.filter(m=>calcMember(m.n).curStreak===2).map(m=>m.n.split(' ')[0]);
+  const redWb=lastWeek?members.filter(m=>(wellbeing[lastWeek.key]||{})[m.n]==='red').map(m=>m.n.split(' ')[0]):[];
+
+  const notes=lastWeek?members.filter(m=>(careNotes[lastWeek.key]||{})[m.n]).map(m=>`${m.n.split(' ')[0]}: ${careNotes[lastWeek.key][m.n]}`):[];
+
+  const msg=[
+    `Hi ${gcLeaderName.split(' ')[0]}! Here's my weekly update for ${c.name}:`,
+    ``,
+    `📊 Attendance: ${presentCount}/${members.length} present (${clusterRate}%)`,
+    ciTotal?`✅ Check-ins: ${ciDone}/${ciTotal} done`:'',
+    urgent.length?`🔴 Urgent (3+ missed): ${urgent.join(', ')}`:'',
+    followUp.length?`🟡 Follow-up (2 missed): ${followUp.join(', ')}`:'',
+    redWb.length?`⚠ Wellbeing concern: ${redWb.join(', ')}`:'',
+    notes.length?`📝 Notes: ${notes.join(' | ')}`:'',
+    ``,
+    `Next session: ${nextSess?nextSess.date:'TBD'}`,
+  ].filter(Boolean).join('\n');
+
+  return`<a href="https://wa.me/${gcLeaderWa}?text=${encodeURIComponent(msg)}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:8px;background:#25D366;color:#fff;border-radius:12px;padding:14px;margin-bottom:12px;font-size:15px;font-weight:600;text-decoration:none">
+    📱 Send weekly summary to ${gcLeaderName.split(' ')[0]}
+  </a>`;
+})()}
 
 <footer>${c.name} · Gidi GC · ${lastSess?lastSess.date:''}</footer>
 </body></html>`;
