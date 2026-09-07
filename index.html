@@ -223,7 +223,9 @@ body.cluster-head-view .mob-nav{display:none!important}
 body.cluster-head-view .content{padding-bottom:20px!important}
 body.cluster-head-view #pendingBadgeBar{display:none!important}
 body.cluster-head-view #cluster-guest-alert{display:none!important}
-body.cluster-head-view [onclick*="openClusterModal"],[onclick*="generateMagicLinks"],[onclick*="toggleClusterAnalytics"]{display:none!important}
+body.cluster-head-view [onclick*="openClusterModal"],
+body.cluster-head-view [onclick*="generateMagicLinks"],
+body.cluster-head-view [onclick*="toggleClusterAnalytics"]{display:none!important}
 body.cluster-head-view .topbar-title::after{content:' — Cluster View';font-size:12px;color:#888;font-weight:400;font-family:'Kumbh Sans',sans-serif}
 
 /* View-only mode — hide all edit controls */
@@ -1781,9 +1783,9 @@ function renderOverview(){
   const followUp=nonGuests.map(m=>({...m,streak:calcMember(m.n).curStreak}))
     .filter(m=>m.streak===2).sort(byFirstName);
 
-  // 3. Guests ready for cluster (3+ sessions, no cluster)
+  // 3. Guests ready for cluster (3+ sessions, no cluster, not frozen)
   const guestsReady=MEMBERS.filter(m=>{
-    if(m.gc!=='Guest')return false;
+    if(m.gc!=='Guest'||m.frozen)return false;
     const sessions=recs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present');
     return sessions.length>=3&&!clusterMembers[m.n];
   });
@@ -3803,7 +3805,7 @@ function renderClusterGuestAlert(){
   if(!el||!list)return;
   const recs=getRecordedSessions();
   const ready=MEMBERS.filter(m=>{
-    if(m.gc!=='Guest')return false;
+    if(m.gc!=='Guest'||m.frozen)return false;
     const sessions=recs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present');
     return sessions.length>=3&&!clusterMembers[m.n];
   });
@@ -5762,7 +5764,7 @@ function confirmGuestConvert(){
 // Guest funnel view — shown in guests tab
 function renderGuestFunnel(){
   const recs=getRecordedSessions();
-  const guests=MEMBERS.filter(m=>m.gc==='Guest');
+  const guests=MEMBERS.filter(m=>m.gc==='Guest'&&!m.frozen);
   const newGuests=guests.filter(m=>recs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present').length<=2);
   const warmGuests=guests.filter(m=>recs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present').length>=3&&!clusterMembers[m.n]);
   const converted=guests.filter(m=>clusterMembers[m.n]);
