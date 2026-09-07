@@ -746,6 +746,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <button class="btn btn-primary btn-sm" id="analyticsToggleBtn" onclick="toggleClusterAnalytics()">&#128200; Leader analytics</button>
     <button class="btn btn-sm" onclick="generateMagicLinks()">&#128279; Leader links</button>
     <button class="btn btn-success btn-sm" onclick="openClusterModal(null)">+ Add cluster</button>
+    <div id="clusterSyncStatus" style="font-size:11px;color:#888;margin-left:auto;display:flex;align-items:center;gap:4px"></div>
   </div>
 
   <!-- Cluster health — admin only -->
@@ -1392,7 +1393,10 @@ async function saveAll(){
     if(prayerRequests.length)await sbPost('prayer_requests',prayerRequests.map(p=>({id:p.id,member_id:p.memberId||'',cluster_name:p.clusterName||'',request:p.request,anonymous:p.anonymous,date:p.date,status:p.status})));
     if(pendingClusterSubmissions.length)await sbPost('pending_submissions',pendingClusterSubmissions.map(s=>({id:s.id,cluster_id:s.clusterId,cluster_name:s.clusterName,submitted_by:s.submittedBy,week_key:s.weekKey,data:JSON.stringify(s.data),submitted_at:s.submittedAt})));
     showToast('Saved \u2713',2000);
-    setSyncStatus('green',`Synced ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`);
+    const _t=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    setSyncStatus('green',`Synced ${_t}`);
+    const _cSS=document.getElementById('clusterSyncStatus');
+    if(_cSS)_cSS.innerHTML=`<span style="color:#1D9E75">●</span> Saved ${_t}`;
   }catch(e){showToast('Saved locally \u2014 sync failed',3000);setSyncStatus('red','Sync failed');}
 }
 
@@ -3622,17 +3626,13 @@ function checkMagicLink(){
   const params=new URLSearchParams(window.location.search);
   const clusterId=params.get('cluster');
   const urlToken=params.get('token');
+  console.log('[MagicLink] clusterId=',clusterId,'urlToken=',urlToken);
   if(!clusterId)return;
 
-  // Lock this session to this cluster only
   _magicClusterId=clusterId;
-
-  // Unlock clusters and edit mode for magic link
   sessionStorage.setItem(PIN_SESSION_KEY,'1');
   sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
-  localStorage.setItem(TRUST_TOKEN_KEY,'magic_'+clusterId); // trust this device for this session
-
-  // Hide sidebar and topbar for cluster head view
+  localStorage.setItem(TRUST_TOKEN_KEY,'magic_'+clusterId);
   document.querySelector('.sidebar')?.style.setProperty('display','none');
   document.querySelector('.topbar-actions')?.style.setProperty('display','none');
   document.body.classList.add('cluster-head-view');
@@ -3640,14 +3640,14 @@ function checkMagicLink(){
 
   let retries=0;
   const proceed=()=>{
-    // Validate token
+    console.log('[MagicLink] proceed() attempt',retries,'clusters.length=',clusters.length,'isClusterUnlocked=',isClusterUnlocked());
     const storedToken=clusterTokens[clusterId];
     if(storedToken&&urlToken&&urlToken!==storedToken){
       alert('This link has been revoked. Please ask your GC leader for a new link.');
       return;
     }
-    // Find cluster — retry up to 10 times waiting for Supabase
     const c=clusters.find(x=>x.id===clusterId);
+    console.log('[MagicLink] cluster found=',c?.name||'NOT FOUND');
     if(!c){
       retries++;
       if(retries>10){
@@ -3657,10 +3657,11 @@ function checkMagicLink(){
       setTimeout(proceed,800);
       return;
     }
-    // Switch to clusters tab
+    console.log('[MagicLink] switching to clusters tab');
     switchTab('clusters',document.querySelector('[data-id=clusters]'));
     setTimeout(()=>{
       const card=document.querySelector(`[data-cluster-id="${clusterId}"]`);
+      console.log('[MagicLink] card found=',!!card);
       if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
       const choice=confirm(`Welcome, ${c.head}!\n\nWould you like to submit your weekly check-in?\n\nOK = Submit check-in\nCancel = Open cluster report`);
       if(choice)openClusterHeadSubmission(clusterId);
@@ -3668,7 +3669,6 @@ function checkMagicLink(){
     },400);
   };
 
-  // Start after a short delay to let Supabase load
   setTimeout(proceed,1200);
 }
 
@@ -3764,8 +3764,12 @@ function populateClusterWeekPicker(){
   const sel=document.getElementById('cluster-week-picker');
   if(!sel)return;
   const weeks=getClusterWeeks();
-  const cur=sel.value;
+  const today=new Date().toISOString().split('T')[0];
+  // Auto-select the most recent week that has passed
+  const cur=sel.value||weeks.filter(w=>w.key<=today).slice(-1)[0]?.key||'';
   sel.innerHTML='<option value="">Select week for check-ins...</option>'+[...weeks].reverse().map(s=>`<option value="${s.key}"${s.key===cur?' selected':''}>${s.date}</option>`).join('');
+  // Trigger render if we auto-selected
+  if(!sel.value&&cur){sel.value=cur;renderClusters();}
 }
 
 // ── RENDER CLUSTER GUEST ALERT ─────────────────────────────────────────────────
@@ -3892,7 +3896,10 @@ function renderClusters(){
           <!-- Care note -->
           <div style="display:flex;align-items:flex-start;gap:8px">
             <span style="font-size:12px;color:#888;font-weight:500;min-width:70px;padding-top:4px">Note:</span>
-            <textarea onchange="setCareNote('${weekKey}','${mEsc}',this.value)" placeholder="How are they doing this week?" style="flex:1;font-size:12px;padding:5px 8px;border:0.5px solid #ccc;border-radius:6px;resize:vertical;font-family:inherit;min-height:40px">${noteVal}</textarea>
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+              <textarea onchange="setCareNote('${weekKey}','${mEsc}',this.value);this.nextElementSibling.textContent='Saved ✓';this.nextElementSibling.style.opacity='1';setTimeout(()=>{this.nextElementSibling.style.opacity='0'},2000)" placeholder="How are they doing this week?" style="width:100%;font-size:12px;padding:5px 8px;border:0.5px solid #ccc;border-radius:6px;resize:vertical;font-family:inherit;min-height:40px">${noteVal}</textarea>
+              <div style="font-size:11px;color:#1D9E75;font-weight:600;opacity:0;transition:opacity .3s">Saved ✓</div>
+            </div>
           </div>
 
           <!-- Prayer request button -->
@@ -4225,7 +4232,7 @@ function renderClusterHealth(weekKey){
 function setCheckIn(weekKey,memberName,val){
   if(!checkIns[weekKey])checkIns[weekKey]={};
   checkIns[weekKey][memberName]=val;
-  saveAll();
+  saveAll().then(()=>showSaveTick(`ci_${weekKey}_${memberName}`));
   renderClusters();
 }
 
@@ -5150,21 +5157,22 @@ function setWellbeing(weekKey,memberName,val){
   if(!wellbeing[weekKey])wellbeing[weekKey]={};
   if(val)wellbeing[weekKey][memberName]=val;
   else delete wellbeing[weekKey][memberName];
-  saveAll();renderClusters();
+  saveAll().then(()=>showSaveTick(`wb_${weekKey}_${memberName}`));
+  renderClusters();
 }
 
 function setCareNote(weekKey,memberName,val){
   if(!careNotes[weekKey])careNotes[weekKey]={};
   if(val.trim())careNotes[weekKey][memberName]=val.trim();
   else delete careNotes[weekKey][memberName];
-  saveAll();
+  saveAll().then(()=>showToast('Note saved ✓',1500));
 }
 
 function setClusterAbsenceReason(sessionKey,memberName,val){
   if(!absenceReasons[sessionKey])absenceReasons[sessionKey]={};
   if(val)absenceReasons[sessionKey][memberName]=val;
   else delete absenceReasons[sessionKey][memberName];
-  saveAll();
+  saveAll().then(()=>showToast('Reason saved ✓',1500));
 }
 
 // ── PRAYER REQUESTS ───────────────────────────────────────────────────────────
@@ -5984,6 +5992,12 @@ function setSyncStatus(status,label){
   const colors={green:'#1D9E75',amber:'#EF9F27',red:'#E24B4A',grey:'#e0e0d8'};
   dot.style.background=colors[status]||colors.grey;
   if(lbl)lbl.textContent=label||'';
+}
+
+// ── SAVE TICK — brief ✓ indicator for pastoral inputs ─────────────────────────
+function showSaveTick(id){
+  // Show a brief green ✓ toast
+  showToast('Saved ✓',1200);
 }
 
 // ── OFFLINE QUEUE ─────────────────────────────────────────────────────────────
