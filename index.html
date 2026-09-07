@@ -93,7 +93,7 @@ tr:hover td{background:#fafaf8}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
 .b-core{background:#e1f5ee;color:#085041}.b-freq{background:#e6f1fb;color:#0c447c}
 .b-rare{background:#faeeda;color:#633806}.b-unres{background:#fcebeb;color:#791f1f}
-.b-guest{background:#f1efe8;color:#444441}.b-member{background:#eeedfe;color:#3c3489}
+.b-guest{background:#f1efe8;color:#444441}.b-frozen{background:#e8e8e8;color:#888;text-decoration:line-through}.b-member{background:#eeedfe;color:#3c3489}
 .b-attendee{background:#e1f5ee;color:#085041}.b-non{background:#fcebeb;color:#791f1f}
 .r-travel{background:#e6f1fb;color:#0c447c}.r-sick{background:#fcebeb;color:#791f1f}
 .r-exam{background:#faeeda;color:#633806}.r-work{background:#eeedfe;color:#3c3489}
@@ -216,6 +216,16 @@ tr:hover td{background:#fafaf8}
   #printArea>div:first-child{border:none!important;background:linear-gradient(135deg,#1a1a1a,#2d2d2d)!important;color:#fff!important;text-align:center!important;border-radius:12px!important}
 }
 
+/* Cluster head magic link view */
+body.cluster-head-view .sidebar{display:none!important}
+body.cluster-head-view .topbar-actions{display:none!important}
+body.cluster-head-view .mob-nav{display:none!important}
+body.cluster-head-view .content{padding-bottom:20px!important}
+body.cluster-head-view #pendingBadgeBar{display:none!important}
+body.cluster-head-view #cluster-guest-alert{display:none!important}
+body.cluster-head-view [onclick*="openClusterModal"],[onclick*="generateMagicLinks"],[onclick*="toggleClusterAnalytics"]{display:none!important}
+body.cluster-head-view .topbar-title::after{content:' — Cluster View';font-size:12px;color:#888;font-weight:400;font-family:'Kumbh Sans',sans-serif}
+
 /* View-only mode — hide all edit controls */
 body.view-only .btn-success:not(#lockBtn):not(.view-allow),
 body.view-only .btn-warn,
@@ -290,6 +300,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <div class="sidebar-nav">
     <div class="nav-section">Dashboard</div>
     <button class="nav-item active" data-id="overview" onclick="switchTab('overview',this)"><span class="nav-icon">&#9685;</span>Overview</button>
+    <button class="nav-item" data-id="birthdays" onclick="switchTab('birthdays',this)"><span class="nav-icon">&#127874;</span>Birthdays</button>
 
     <div class="nav-section">People</div>
     <button class="nav-item" data-id="members" onclick="switchTab('members',this)"><span class="nav-icon">&#128101;</span>Members</button>
@@ -306,7 +317,6 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 
     <div class="nav-section">Reports</div>
     <button class="nav-item" data-id="prayer" onclick="switchTab('prayer',this)"><span class="nav-icon">&#128591;</span>Prayer <span class="nav-badge" id="prayerBadge" style="display:none">0</span></button>
-    <button class="nav-item" data-id="birthdays" onclick="switchTab('birthdays',this)"><span class="nav-icon">&#127874;</span>Birthdays</button>
     <button class="nav-item" data-id="archive" onclick="switchTab('archive',this)"><span class="nav-icon">&#128190;</span>Archive</button>
 
     <div class="nav-section">Admin</div>
@@ -329,6 +339,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <div class="topbar-actions">
       <button class="btn btn-warn btn-sm" onclick="openSessionDebrief()" title="Post-session pastoral debrief">&#128203; Debrief</button>
       <button class="btn btn-sm" onclick="sendWeeklySummary()" title="Email weekly summary">&#128140; Summary</button>
+      <button class="btn btn-sm" onclick="sendClusterPerformanceEmail()" title="Email cluster performance report">&#128202; Clusters</button>
       <button class="btn btn-success btn-sm" onclick="openSummary()">&#9113; Print</button>
       <button class="btn btn-danger btn-sm" onclick="openNewTerm()">&#127379; New Term</button>
     </div>
@@ -349,6 +360,9 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <!-- HEADLINE STAT -->
   <div id="ov-headline" style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);border-radius:12px;padding:20px;margin-bottom:16px;color:#e8e8e8"></div>
 
+  <!-- UPCOMING BIRTHDAYS -->
+  <div id="ov-upcoming-bdays" style="margin-bottom:16px"></div>
+
   <!-- ATTENTION REQUIRED -->
   <div id="ov-attention" style="margin-bottom:16px"></div>
 
@@ -357,6 +371,14 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 
   <!-- CLUSTER HEALTH TABLE -->
   <div id="ov-clusters" style="margin-bottom:16px"></div>
+
+  <!-- WELLBEING ALERTS -->
+  <div id="wellbeingAlertPanel" style="margin-bottom:16px;display:none">
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;overflow:hidden">
+      <div style="padding:10px 14px;border-bottom:0.5px solid #e0e0d8;font-size:13px;font-weight:600">Wellbeing trends</div>
+      <div style="padding:10px 14px" id="wellbeingAlerts"></div>
+    </div>
+  </div>
 
   <!-- TREND CHART -->
   <div class="chart-wrap" style="height:185px;margin-bottom:16px">
@@ -587,17 +609,20 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 
 <!-- PRINT / SUMMARY MODAL -->
 <div class="modal-overlay" id="summaryModal">
-  <div class="modal-box">
+  <div class="modal-box" style="max-width:640px">
     <div class="modal-header">
-      <div style="font-size:15px;font-weight:500">Summary sheet</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-success btn-sm" onclick="doPrint()">Print / Save PDF</button>
-        <button class="btn btn-purple btn-sm" onclick="openWebSummary()">&#127760; Open as web page</button>
-        <button class="btn btn-primary btn-sm" onclick="copySummaryText()">Copy as text</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" id="sumTabLeader" onclick="switchSummaryTab('leader')" style="background:#1a1a1a;color:#fff;border-color:#1a1a1a">Leader view</button>
+        <button class="btn btn-sm" id="sumTabMember" onclick="switchSummaryTab('member')">Member report</button>
+        <button class="btn btn-sm" id="sumTabFollowup" onclick="switchSummaryTab('followup')">📱 Follow-up</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-success btn-sm" onclick="doPrint()">⎙ Print</button>
+        <button class="btn btn-primary btn-sm" id="sumShareBtn" onclick="generateMemberReport()">&#127760; Open report</button>
         <button class="btn btn-sm" onclick="closeSummary()">Close</button>
       </div>
     </div>
-    <div id="summaryContent" style="padding:24px 28px;font-size:13px;line-height:1.7;max-height:80vh;overflow-y:auto"></div>
+    <div id="summaryContent" style="padding:20px 24px;font-size:13px;line-height:1.7;max-height:82vh;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -722,6 +747,9 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <button class="btn btn-sm" onclick="generateMagicLinks()">&#128279; Leader links</button>
     <button class="btn btn-success btn-sm" onclick="openClusterModal(null)">+ Add cluster</button>
   </div>
+
+  <!-- Cluster health — admin only -->
+  <div id="cluster-health-panel" style="display:none;margin-bottom:1rem"></div>
 
   <!-- Analytics panel (hidden by default) -->
   <div id="clusterAnalyticsPanel" style="display:none;margin-bottom:1.5rem"></div>
@@ -964,9 +992,14 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
     <div>
       <p class="sec-title" style="margin-bottom:2px">Superclusters</p>
-      <div style="font-size:12px;color:#888">Group clusters under a GC leader. Add any member for special attention.</div>
+      <div style="font-size:12px;color:#888">Track your cluster heads and special attention members.</div>
     </div>
     <button class="btn btn-success btn-sm" onclick="openSuperclusterModal(null)">+ Add supercluster</button>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
+    <select id="sc-week-picker" onchange="renderSuperclusters()" style="font-size:13px;padding:7px 10px;border:0.5px solid #ccc;border-radius:8px;min-width:200px">
+      <option value="">Select week for check-ins...</option>
+    </select>
   </div>
   <div id="superclusterList"></div>
 </div>
@@ -1008,6 +1041,16 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
       </div>
     </div>
   </div>
+</div>
+
+
+<!-- CARE / EXCEPTION VIEW -->
+<div id="tab-care" class="panel">
+  <div style="margin-bottom:1rem">
+    <p class="sec-title" style="margin-bottom:2px">Exception view</p>
+    <div style="font-size:12px;color:#888">Everyone in the GC who needs attention right now.</div>
+  </div>
+  <div id="careContent"></div>
 </div>
 
 <!-- PRAYER REQUESTS -->
@@ -1167,6 +1210,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <button class="btn" onclick="switchTab('trends',document.querySelector('[data-id=trends]'));closeMobMore()" style="justify-content:center;padding:10px">&#128200; Trends</button>
     <button class="btn" onclick="switchTab('guests',document.querySelector('[data-id=guests]'));closeMobMore()" style="justify-content:center;padding:10px">&#128100; Guests</button>
     <button class="btn" onclick="switchTab('superclusters',document.querySelector('[data-id=superclusters]'));closeMobMore()" style="justify-content:center;padding:10px">&#11835; Super</button>
+    <button class="btn" onclick="switchTab('care',document.querySelector('[data-id=care]'));closeMobMore()" style="justify-content:center;padding:10px">&#10084; Care</button>
     <button class="btn" onclick="switchTab('prayer',document.querySelector('[data-id=prayer]'));closeMobMore()" style="justify-content:center;padding:10px">&#128591; Prayer</button>
     <button class="btn" onclick="switchTab('birthdays',document.querySelector('[data-id=birthdays]'));closeMobMore()" style="justify-content:center;padding:10px">&#127874; Birthdays</button>
     <button class="btn" onclick="switchTab('archive',document.querySelector('[data-id=archive]'));closeMobMore()" style="justify-content:center;padding:10px">&#128190; Archive</button>
@@ -1251,6 +1295,14 @@ let memberAbout={};
 let superclusters=[];
 // clusterTokens: {clusterId: tokenString} — for revocable magic links
 let clusterTokens={};
+// scCheckIns: {weekKey: {memberName: 'yes'|'no'}} — GC leader check-ins on cluster heads & special attention members
+let scCheckIns={};
+// scWellbeing: {weekKey: {memberName: 'green'|'amber'|'red'}}
+let scWellbeing={};
+// scCareNotes: {weekKey: {memberName: 'note'}}
+let scCareNotes={};
+// scAbout: {memberName: 'about text'} — persistent notes on cluster heads
+let scAbout={};
 // changeLog: [{who, when, action}]
 let changeLog=[];
 // offlineQueue: [{table, rows, ts}]
@@ -1301,7 +1353,7 @@ async function loadFromSupabase(){
 
 async function saveAll(){
   // Always save to localStorage first
-  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||''})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,wellbeing,careNotes,prayerRequests,memberAbout,pendingClusterSubmissions,superclusters,changeLog,clusterTokens,savedAt:new Date().toISOString()}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||'',frozen:m.frozen||false})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,wellbeing,careNotes,prayerRequests,memberAbout,pendingClusterSubmissions,superclusters,changeLog,clusterTokens,scCheckIns,scWellbeing,scCareNotes,scAbout,savedAt:new Date().toISOString()}));}catch(e){}
   if(!isOnline()){
     showOfflineBanner(true);
     setSyncStatus('red','Offline — saved locally');
@@ -1380,7 +1432,7 @@ function exportData(){
     attendance,absenceReasons,birthdays,firstSession,
     clusters,clusterMembers,checkIns,
     customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),
-    termArchive,wellbeing,careNotes,prayerRequests,superclusters,changeLog,clusterTokens
+    termArchive,wellbeing,careNotes,prayerRequests,superclusters,changeLog,clusterTokens,scCheckIns,scWellbeing,scCareNotes,scAbout
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -1488,6 +1540,15 @@ function applyBdayImport(){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
+function isFrozen(name){
+  const m=MEMBERS.find(x=>x.n===name);
+  return m&&m.frozen===true;
+}
+
+function isActiveGuest(m){
+  return m.gc==='Guest'&&!m.frozen;
+}
+
 function applyPhoneNumbers(){
   Object.entries(PHONES).forEach(([n,p])=>{
     if(!p.phone)return;
@@ -1530,7 +1591,7 @@ function calcMember(name){
   return{present,possible,rate,absRate:100-rate,curStreak,reasons,history,firstSessionKey:firstSession[name]||null};
 }
 function rateToStatus(r,c,f,ra){return r>=c?'Core':r>=f?'Frequent':r>=ra?'Rare':'Unresponsive';}
-function gcBadge(gc,changed){const cls={Core:'b-core',Frequent:'b-freq',Rare:'b-rare',Unresponsive:'b-unres',Guest:'b-guest'}[gc]||'b-guest';return`<span class="badge ${cls}">${gc}${changed?' \u2746':''}</span>`;}
+function gcBadge(gc,changed,frozen){const cls={Core:'b-core',Frequent:'b-freq',Rare:'b-rare',Unresponsive:'b-unres',Guest:'b-guest'}[gc]||'b-guest';return`<span class="badge ${frozen?'b-frozen':cls}">${gc}${frozen?' ❄':changed?' \u2746':''}</span>`;}
 function cityBadge(c){const cls={Member:'b-member',Attendee:'b-attendee','Non-Attendee':'b-non'}[c]||'b-guest';return`<span class="badge ${cls}">${c||'\u2014'}</span>`;}
 function reasonBadge(r){if(!r)return'';const cls={Travel:'r-travel',Sick:'r-sick',Exam:'r-exam',Work:'r-work',Other:'r-other'}[r]||'r-other';return`<span class="badge ${cls}">${r}</span>`;}
 function ini(n){return n.trim().split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();}
@@ -1584,7 +1645,7 @@ function clearAllBirthdays(){if(!confirm('Clear all birthday data?'))return;birt
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
 function renderOverview(){
   const recs=getRecordedSessions();
-  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   const today=new Date();
   const todayStr=today.toISOString().split('T')[0];
 
@@ -1664,6 +1725,44 @@ function renderOverview(){
   }
   document.getElementById('ov-headline').innerHTML=headlineHTML;
 
+  // ── Upcoming birthdays (top section) ──────────────────────────────────────────
+  const BDAY_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const bdaysUpcoming=[];
+  MEMBERS.forEach(m=>{
+    const b=birthdays[m.n];if(!b)return;
+    try{
+      const [d,mo]=b.split('/').map(Number);
+      let bdate=new Date(today.getFullYear(),mo-1,d);
+      if(bdate<today)bdate=new Date(today.getFullYear()+1,mo-1,d);
+      const diff=Math.round((bdate-today)/86400000);
+      if(diff<=30)bdaysUpcoming.push({m,diff,label:`${d} ${BDAY_MONTHS[mo-1]}`});
+    }catch(e){}
+  });
+  bdaysUpcoming.sort((a,b)=>a.diff-b.diff);
+
+  const bdayEl=document.getElementById('ov-upcoming-bdays');
+  if(bdayEl){
+    if(bdaysUpcoming.length){
+      bdayEl.innerHTML=`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;overflow:hidden">
+        <div style="padding:10px 14px;border-bottom:0.5px solid #e0e0d8;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:13px;font-weight:600">Upcoming birthdays</div>
+          <div style="font-size:12px;color:#888">Next 30 days</div>
+        </div>
+        <div style="padding:0 14px">
+          ${bdaysUpcoming.map(({m,diff,label})=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid #f0efe8;gap:8px">
+            <div style="font-size:13px;font-weight:500">${m.n}</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+              <span style="font-size:12px;color:${diff===0?'#085041':diff<=7?'#633806':'#888'};font-weight:${diff<=7?'600':'400'}">${diff===0?'🎂 Today!':diff===1?'Tomorrow':`${label} · in ${diff} days`}</span>
+              ${getWaNumber(m.n)?`<a href="https://wa.me/${getWaNumber(m.n)}?text=Happy%20Birthday%20${encodeURIComponent(m.n.split(' ')[0])}!%20%F0%9F%8E%82" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;text-decoration:none">WA</a>`:''}
+            </div>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    } else {
+      bdayEl.innerHTML='';
+    }
+  }
+
   // ── Attention required ──────────────────────────────────────────────────────
   const items=[];
 
@@ -1715,7 +1814,7 @@ function renderOverview(){
     <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;overflow:hidden">
       <div style="padding:12px 14px;border-bottom:0.5px solid #e0e0d8;display:flex;align-items:center;justify-content:space-between">
         <div style="font-size:13px;font-weight:600;color:#1a1a1a">Needs attention</div>
-        <div style="font-size:12px;color:#888">${urgentAbsent.length+followUp.length+guestsReady.length+pendingCount+bdaySoon.length+wbAlerts.length} items</div>
+        <div style="font-size:12px;color:#888">${urgentAbsent.length+followUp.length+guestsReady.length+pendingCount+wbAlerts.length} items</div>
       </div>
 
       ${urgentAbsent.length?`
@@ -1825,53 +1924,8 @@ function renderOverview(){
       </div>`;
   }
 
-  // ── Cluster health table ────────────────────────────────────────────────────
-  if(clusters.length){
-    const clusterRecs=getClusterSessions();
-    const clusterRows=clusters.map(c=>{
-      const members=getMembersInCluster(c.id);
-      let attRate=0;
-      if(clusterRecs.length&&members.length){
-        const tot=members.reduce((s,m)=>s+clusterRecs.filter(r=>attendance[r.key]&&attendance[r.key][m.n]==='present').length,0);
-        attRate=Math.round(tot/(members.length*clusterRecs.length)*100);
-      }
-      const fuCount=members.filter(m=>calcMember(m.n).curStreak>=2).length;
-      let ciClDone=0,ciClTotal=0;
-      if(thisWeek){
-        members.filter(m=>(clusterMembers[m.n]?.joinDate||'')<=thisWeek.key).forEach(m=>{
-          ciClTotal++;if((checkIns[thisWeek.key]||{})[m.n]==='yes')ciClDone++;
-        });
-      }
-      const ciDoneAll=ciClTotal&&ciClDone===ciClTotal;
-      const attColor=attRate>=70?'#1D9E75':attRate>=50?'#EF9F27':'#E24B4A';
-      return`<tr style="cursor:pointer" onclick="switchTab('clusters',document.querySelector('[data-id=clusters]'))">
-        <td style="font-weight:500;font-size:13px">${c.name}</td>
-        <td style="font-size:12px;color:#888">${c.head.split(' ')[0]}</td>
-        <td style="text-align:center;font-size:12px">${members.length}</td>
-        <td style="text-align:center"><span style="font-weight:600;color:${attColor};font-size:13px">${clusterRecs.length?attRate+'%':'—'}</span></td>
-        <td style="text-align:center"><span style="font-size:13px">${ciClTotal?`${ciClDone}/${ciClTotal}`:'—'}</span></td>
-        <td style="text-align:center">${fuCount?`<span style="background:#fcebeb;color:#791f1f;border-radius:20px;padding:2px 7px;font-size:11px;font-weight:600">${fuCount}</span>`:'<span style="color:#1D9E75;font-size:13px">✓</span>'}</td>
-      </tr>`;
-    }).join('');
-
-    document.getElementById('ov-clusters').innerHTML=`
-      <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;overflow:hidden">
-        <div style="padding:10px 14px;border-bottom:0.5px solid #e0e0d8;font-size:13px;font-weight:600">Cluster health</div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            <thead><tr style="background:#fafaf8">
-              <th style="padding:8px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8;font-weight:600">Cluster</th>
-              <th style="padding:8px 10px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8;font-weight:600">Head</th>
-              <th style="padding:8px 10px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8;font-weight:600">Members</th>
-              <th style="padding:8px 10px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8;font-weight:600">Att%</th>
-              <th style="padding:8px 10px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8;font-weight:600">Check-ins</th>
-              <th style="padding:8px 10px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8;font-weight:600">Follow-up</th>
-            </tr></thead>
-            <tbody>${clusterRows}</tbody>
-          </table>
-        </div>
-      </div>`;
-  }
+  // ── Cluster health — shown in Clusters tab (admin only) ───────────────────
+  document.getElementById('ov-clusters').innerHTML='';
 
   // ── Trend chart ────────────────────────────────────────────────────────────
   dc('sessChart');
@@ -2054,7 +2108,8 @@ function copyAbsentNames(){
 function renderGuests(){
   renderGuestFunnel();
   const search=(document.getElementById('gSearch').value||'').toLowerCase();
-  const guests=MEMBERS.filter(m=>m.gc==='Guest'&&(!search||m.n.toLowerCase().includes(search))).sort(bySurname);
+  const guests=MEMBERS.filter(m=>m.gc==='Guest'&&!m.frozen&&(!search||m.n.toLowerCase().includes(search))).sort(bySurname);
+  const frozenGuests=MEMBERS.filter(m=>m.gc==='Guest'&&m.frozen&&(!search||m.n.toLowerCase().includes(search))).sort(bySurname);
   const recs=getRecordedSessions();
   const body=document.getElementById('gBody');
   body.innerHTML=guests.map(m=>{
@@ -2072,7 +2127,11 @@ function renderGuests(){
       <td style="font-size:12px;color:#888">${m.g}</td>
       <td style="font-size:12px">${fsDate?`<span style="background:#eeedfe;color:#3c3489;border-radius:4px;padding:1px 6px;font-size:11px">${fsDate}</span>`:'<span style="color:#ccc;font-size:11px">not set</span>'}</td>
       <td><span style="font-size:13px;font-weight:500;color:#3c3489">${c.present}</span><span style="font-size:11px;color:#888"> session${c.present===1?'':'s'}</span></td>
-      <td style="display:flex;gap:4px"><button onclick="openProfile('${nameEsc}')" title="View profile" style="background:none;border:none;cursor:pointer;font-size:14px;color:#888;padding:2px 4px">&#128100;</button><button onclick="openMemberModal('${nameEsc}')" title="Edit guest" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px">&#9998;</button></td>
+      <td style="display:flex;gap:4px;align-items:center">
+        <button onclick="openProfile('${nameEsc}')" title="View profile" style="background:none;border:none;cursor:pointer;font-size:14px;color:#888;padding:2px 4px">&#128100;</button>
+        <button onclick="openMemberModal('${nameEsc}')" title="Edit" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px">&#9998;</button>
+        <button onclick="toggleFreeze('${nameEsc}')" title="${m.frozen?'Unfreeze guest':'Freeze guest (exclude from tracking)'}" style="background:none;border:none;cursor:pointer;font-size:13px;color:${m.frozen?'#0c447c':'#aaa'};padding:2px 4px" class="edit-only">&#10052;</button>
+      </td>
     </tr>`;
   }).join('');
   if(!guests.length) body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">No guests yet. Add guests using the button above.</td></tr>`;
@@ -2492,7 +2551,7 @@ function renderSessionAbsences(){
   rLabel.textContent=sess?sess.date:sk;
   renderReasonChart(sk);
 
-  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   const absentees=nonGuests.filter(m=>{
     if(firstSession[m.n]&&firstSession[m.n]>sk)return false;
     return attendance[sk]?attendance[sk][m.n]!=='present':true;
@@ -2541,7 +2600,7 @@ function renderReasonGroups(sk){
   if(!sk){area.innerHTML='';return;}
   const reasonMap={};
   REASONS.forEach(r=>reasonMap[r]=[]);
-  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   nonGuests.forEach(m=>{
     if(firstSession[m.n]&&firstSession[m.n]>sk)return;
     if(attendance[sk]&&attendance[sk][m.n]==='present')return;
@@ -2579,7 +2638,7 @@ function renderReasonGroups(sk){
 function renderReasonChart(sk){
   dc('reasonChart');
   const totR={};REASONS.forEach(r=>totR[r]=0);
-  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   if(sk){
     // Per-session
     nonGuests.forEach(m=>{
@@ -2803,7 +2862,7 @@ function renderAbsenteeism(){
     if(!existing.includes(v)){const o=document.createElement('option');o.value=v;o.textContent='By reason: '+r;sel.appendChild(o);}
   });
   const sortBy=sel.value,filter=document.getElementById('absFilter').value;
-  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   let data=nonGuests.map(m=>({...m,...calcMember(m.n)}));
   if(filter==='Core')data=data.filter(m=>m.gc==='Core');
   if(filter==='high')data=data.filter(m=>m.absRate>50);
@@ -2931,127 +2990,306 @@ function applyRecalc(){
 
 // ── SUMMARY / PRINT ───────────────────────────────────────────────────────────
 function openSummary(){
-  const recs=getRecordedSessions();
-  const now=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
-  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
-  const allCalc=nonGuests.map(m=>({...m,...calcMember(m.n)}));
-  const avg=recs.length?Math.round(recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
-  const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};MEMBERS.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
-  const sessTots=recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
-  const bdaySoon=MEMBERS.filter(m=>{const d=daysUntil(birthdays[m.n]);return d!==null&&d<=30;}).sort((a,b)=>daysUntil(birthdays[a.n])-daysUntil(birthdays[b.n]));
-
-  // ── Last session absences (excl. guests) ───────────────────────────────────
-  const lastSess=recs.length?recs[recs.length-1]:null;
-  const lastAbsent=lastSess?[...nonGuests].filter(m=>{
-    if(firstSession[m.n]&&firstSession[m.n]>lastSess.key)return false;
-    return attendance[lastSess.key]?attendance[lastSess.key][m.n]!=='present':true;
-  }):[];
-  const lastPresent=lastSess?MEMBERS.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length:0;
-
-  // ── Build reason-grouped absent list ──────────────────────────────────────
-  // Group absentees by their logged reason; untagged go to 'none'
-  const lastAbsentGrouped={}; // reason -> [members]
-  const lastAbsentNone=[]; // no reason logged
-  if(lastSess){
-    lastAbsent.forEach(m=>{
-      const r=absenceReasons[lastSess.key]?absenceReasons[lastSess.key][m.n]:'';
-      if(r){if(!lastAbsentGrouped[r])lastAbsentGrouped[r]=[];lastAbsentGrouped[r].push(m);}
-      else lastAbsentNone.push(m);
-    });
-    // Sort each reason group alphabetically by first name
-    Object.keys(lastAbsentGrouped).forEach(r=>lastAbsentGrouped[r].sort(byFirstName));
-    lastAbsentNone.sort(byFirstName);
-  }
-  const hasReasons=Object.keys(lastAbsentGrouped).length>0;
-
-  // ── Last-session absence reason summary ───────────────────────────────────
-  const lastR={};REASONS.forEach(r=>lastR[r]=0);
-  if(lastSess&&absenceReasons[lastSess.key]){
-    Object.values(absenceReasons[lastSess.key]).forEach(r=>{if(r&&lastR[r]!==undefined)lastR[r]++;});
-  }
-  const lastReasonSummary=Object.entries(lastR).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]).map(([r,n])=>`${r}: ${n}`).join(' · ')||'None logged';
-
-  // ── Members needing follow-up: 2+ consecutive absences ────────────────────
-  const followUp=allCalc.filter(m=>m.curStreak>=2).sort((a,b)=>b.curStreak-a.curStreak||byFirstName(a,b));
-
-  // ── Streak breakdown table ─────────────────────────────────────────────────
-  const streakCounts={};
-  allCalc.forEach(m=>{
-    if(m.curStreak>=2){
-      streakCounts[m.curStreak]=(streakCounts[m.curStreak]||0)+1;
-    }
-  });
-  const streakRows=Object.entries(streakCounts).sort((a,b)=>Number(b[0])-Number(a[0]));
-
-  document.getElementById('summaryContent').innerHTML=`
-    <div style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);color:#fff;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px">
-      <div style="font-size:24px;margin-bottom:6px">&#128203;</div>
-      <div style="font-size:18px;font-weight:600">Gidi GC</div>
-      <div style="font-size:13px;opacity:.7;margin-top:2px">Attendance Summary &middot; As at ${lastSess?lastSess.date:'no sessions recorded'}</div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-      ${[['All attendees',MEMBERS.length,'to date'],['Members &amp; attendees',nonGuests.length,'excl. guests'],['Sessions recorded',recs.length,'of '+SESSIONS_DEF.length+' planned'],['Avg attendance',avg,'per session (excl. guests)']].map(([l,v,s])=>`<div style="background:#f5f5f3;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:700;color:#1a1a1a">${v}</div><div style="font-size:10px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:4px">${l}</div>${s?`<div style="font-size:10px;color:#aaa;margin-top:2px">${s}</div>`:''}</div>`).join('')}
-    </div>
-
-    ${bdaySoon.length?`<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #e0e0d8">
-      <div style="font-size:11px;font-weight:600;color:#3c3489;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">&#127874; Birthdays — next 30 days</div>
-      ${bdaySoon.map(m=>{const d=daysUntil(birthdays[m.n]);const b=parseBday(birthdays[m.n]);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8"><span style="font-size:14px;font-weight:500">${m.n}</span><span style="font-size:12px;color:${d===0?'#085041':d<=7?'#633806':'#888'};font-weight:${d<=7?'600':'400'}">${d===0?'&#127874; Today':d<=7?'In '+d+' days':MONTHS[b.mo]+' '+b.d}</span></div>`;}).join('')}
-    </div>`:''}
-
-    <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #e0e0d8">
-      <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">GC status breakdown</div>
-      ${Object.entries(gcC).map(([gc,n])=>{const bg={Core:'#e1f5ee',Frequent:'#e6f1fb',Rare:'#faeeda',Unresponsive:'#fcebeb',Guest:'#f1efe8'}[gc];const fg={Core:'#085041',Frequent:'#0c447c',Rare:'#633806',Unresponsive:'#791f1f',Guest:'#444441'}[gc];const pct=Math.round((n/MEMBERS.length)*100);return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;background:${bg};color:${fg};min-width:100px">${gc}</span><div style="flex:1;height:6px;background:#f0efe8;border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${fg};border-radius:3px"></div></div><span style="font-size:13px;font-weight:600;color:#1a1a1a;min-width:24px;text-align:right">${n}</span></div>`;}).join('')}
-    </div>
-
-    <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #e0e0d8">
-      <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Session attendance (excl. guests)</div>
-      ${sessTots.map((s,i)=>{const isLast=i===sessTots.length-1;return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8;${isLast?'background:#f2fbf7;margin:0 -4px;padding:8px 4px;border-radius:6px;border-bottom:none':''}"><span style="font-size:${isLast?'14':'13'}px;font-weight:${isLast?'600':'400'};color:#1a1a1a">${s.date}${isLast?' <span style="font-size:10px;background:#e1f5ee;color:#085041;border-radius:20px;padding:1px 6px;margin-left:4px;font-weight:500">Latest</span>':''}</span><span style="font-size:${isLast?'18':'14'}px;font-weight:700;color:${isLast?'#1D9E75':'#1a1a1a'}">${s.total}</span></div>`;}).join('')}
-    </div>
-
-    ${lastSess?`<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #e0e0d8">
-      <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Last session &mdash; ${lastSess.date}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-        <div style="background:#f2fbf7;border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:#1D9E75">${lastPresent}</div><div style="font-size:11px;color:#085041;margin-top:2px;font-weight:600">PRESENT</div></div>
-        <div style="background:#fcebeb;border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:700;color:#a32d2d">${lastAbsent.length}</div><div style="font-size:11px;color:#791f1f;margin-top:2px;font-weight:600">ABSENT</div></div>
-      </div>
-      ${lastAbsent.length?`
-        <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Absent members</div>
-        ${hasReasons?`
-          ${Object.entries(lastAbsentGrouped).map(([reason,members])=>`
-            <div style="margin-bottom:12px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                <span style="width:10px;height:10px;border-radius:2px;background:${getReasonColor(reason)};display:inline-block;flex-shrink:0"></span>
-                <span style="font-size:12px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:.04em">${reason}</span>
-                <span style="font-size:11px;color:#888">(${members.length})</span>
-              </div>
-              ${members.map(m=>{const streak=calcMember(m.n).curStreak;const sc=streak>=4?'#a32d2d':streak>=2?'#ba7517':'#aaa';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0 7px 16px;border-bottom:0.5px solid #f0efe8"><div><div style="font-size:14px;font-weight:500">${m.n}</div><span style="font-size:11px;color:#888">${m.gc}</span></div><span style="font-size:12px;font-weight:600;color:${sc}">${streak} missed</span></div>`;}).join('')}
-            </div>`).join('')}
-          ${lastAbsentNone.length?`
-            <div style="margin-bottom:8px">
-              <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">No reason given (${lastAbsentNone.length})</div>
-              ${lastAbsentNone.map(m=>{const streak=calcMember(m.n).curStreak;const sc=streak>=4?'#a32d2d':streak>=2?'#ba7517':'#aaa';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0 7px 16px;border-bottom:0.5px solid #f0efe8"><div><div style="font-size:14px;font-weight:500">${m.n}</div><span style="font-size:11px;color:#888">${m.gc}</span></div><span style="font-size:12px;font-weight:600;color:${sc}">${streak} missed</span></div>`;}).join('')}
-            </div>`:''}
-        `:`
-          ${lastAbsentNone.map(m=>{const streak=calcMember(m.n).curStreak;const sc=streak>=4?'#a32d2d':streak>=2?'#ba7517':'#aaa';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8"><div><div style="font-size:14px;font-weight:500">${m.n}</div><span style="font-size:11px;color:#888">${m.gc}</span></div><span style="font-size:12px;font-weight:600;color:${sc}">${streak} missed</span></div>`;}).join('')}
-        `}
-      `:'<div style="font-size:14px;color:#3b6d11;font-weight:500">Everyone attended! &#127881;</div>'}
-    </div>`:''}
-
-    ${followUp.length?`<div style="background:#faeeda;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #ef9f27">
-      <div style="font-size:11px;font-weight:600;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">&#9888; Members needing follow-up (2+ absences in a row)</div>
-      ${followUp.map(m=>{const sc=m.curStreak>=4?'#a32d2d':'#ba7517';return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid rgba(0,0,0,0.07)"><div><div style="font-size:14px;font-weight:600;color:#1a1a1a">${m.n}</div><span style="font-size:11px;color:#888">${m.gc}</span></div><span style="font-size:13px;font-weight:700;color:${sc}">${m.curStreak} in a row</span></div>`;}).join('')}
-    </div>`:''}
-
-    ${streakRows.length?`<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #e0e0d8">
-      <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Absence streak breakdown</div>
-      ${streakRows.map(([streak,count])=>{const sc=Number(streak)>=4?'#a32d2d':'#ba7517';return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8"><div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${sc};display:inline-block"></span><span style="font-size:14px;font-weight:500;color:#1a1a1a">${streak} in a row</span></div><span style="font-size:18px;font-weight:700;color:${sc}">${count}</span></div>`;}).join('')}
-    </div>`:''}
-
-    <div style="text-align:center;font-size:11px;color:#aaa;padding-top:8px">Gidi GC Attendance Tracking &middot; As at ${lastSess?lastSess.date:now}</div>
-  `;
+  _buildSummaryData();
+  switchSummaryTab('leader');
   document.getElementById('summaryModal').style.display='block';
 }
+
+let _sd={}; // shared summary data
+
+function _buildSummaryData(){
+  const recs=getRecordedSessions();
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
+  const lastSess=recs.length?recs[recs.length-1]:null;
+  const prevSess=recs.length>=2?recs[recs.length-2]:null;
+  const now=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+
+  const lastPresent=lastSess?MEMBERS.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present'):[];
+  const lastAbsent=lastSess?nonGuests.filter(m=>{
+    if(firstSession[m.n]&&firstSession[m.n]>lastSess.key)return false;
+    return attendance[lastSess.key]?attendance[lastSess.key][m.n]!=='present':true;
+  }).sort(byFirstName):[];
+  const possible=lastSess?nonGuests.filter(m=>!firstSession[m.n]||firstSession[m.n]<=lastSess.key).length:0;
+  const lastRate=possible?Math.round(lastPresent.filter(m=>m.gc!=='Guest'&&!m.frozen).length/possible*100):0;
+
+  const prevPresent=prevSess?nonGuests.filter(m=>attendance[prevSess.key]&&attendance[prevSess.key][m.n]==='present').length:0;
+  const prevPossible=prevSess?nonGuests.filter(m=>!firstSession[m.n]||firstSession[m.n]<=prevSess.key).length:0;
+  const prevRate=prevPossible?Math.round(prevPresent/prevPossible*100):0;
+  const delta=lastRate-prevRate;
+
+  const allCalc=nonGuests.map(m=>({...m,...calcMember(m.n)}));
+  const followUp=allCalc.filter(m=>m.curStreak>=2).sort((a,b)=>b.curStreak-a.curStreak||byFirstName(a,b));
+
+  const bdaySoon=MEMBERS.filter(m=>{const d=daysUntil(birthdays[m.n]);return d!==null&&d<=14;}).sort((a,b)=>daysUntil(birthdays[a.n])-daysUntil(birthdays[b.n]));
+
+  const lastAbsentGrouped={};
+  const lastAbsentNone=[];
+  lastAbsent.forEach(m=>{
+    const r=absenceReasons[lastSess?.key]?absenceReasons[lastSess.key][m.n]:'';
+    if(r){if(!lastAbsentGrouped[r])lastAbsentGrouped[r]=[];lastAbsentGrouped[r].push(m);}
+    else lastAbsentNone.push(m);
+  });
+
+  const presentNonGuests=lastPresent.filter(m=>m.gc!=='Guest'&&!m.frozen).sort(byFirstName);
+
+  _sd={recs,nonGuests,lastSess,prevSess,now,lastPresent,lastAbsent,lastRate,prevRate,delta,allCalc,followUp,bdaySoon,lastAbsentGrouped,lastAbsentNone,presentNonGuests,possible};
+}
+
+function switchSummaryTab(tab){
+  ['leader','member','followup'].forEach(t=>{
+    const btn=document.getElementById('sumTab'+t.charAt(0).toUpperCase()+t.slice(1));
+    if(btn){btn.style.background=t===tab?'#1a1a1a':'';btn.style.color=t===tab?'#fff':'';btn.style.borderColor=t===tab?'#1a1a1a':'';}
+  });
+  const shareBtn=document.getElementById('sumShareBtn');
+  if(shareBtn)shareBtn.style.display=tab==='member'?'inline-flex':'none';
+
+  if(tab==='leader')_renderLeaderSummary();
+  else if(tab==='member')_renderMemberReport();
+  else _renderFollowupQueue();
+}
+
+function _renderLeaderSummary(){
+  const {recs,nonGuests,lastSess,lastPresent,lastAbsent,lastRate,prevRate,delta,followUp,bdaySoon,lastAbsentGrouped,lastAbsentNone,possible}=_sd;
+  const lastPresentCount=lastPresent.filter(m=>m.gc!=='Guest'&&!m.frozen).length;
+
+  const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0};
+  nonGuests.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
+  const GBKG={Core:'#e1f5ee',Frequent:'#e6f1fb',Rare:'#faeeda',Unresponsive:'#fcebeb'};
+  const GCOL={Core:'#085041',Frequent:'#0c447c',Rare:'#633806',Unresponsive:'#791f1f'};
+
+  document.getElementById('summaryContent').innerHTML=`
+    <div style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);color:#fff;border-radius:12px;padding:18px;text-align:center;margin-bottom:14px">
+      <div style="font-size:22px;font-weight:700;margin-bottom:4px">Gidi GC</div>
+      <div style="font-size:13px;opacity:.6">${lastSess?lastSess.date:'No sessions recorded'}</div>
+      ${lastSess?`<div style="margin-top:12px;display:flex;justify-content:center;gap:20px">
+        <div><div style="font-size:28px;font-weight:700;color:#4ade80">${lastPresentCount}</div><div style="font-size:11px;opacity:.6;margin-top:2px">PRESENT</div></div>
+        <div><div style="font-size:28px;font-weight:700;color:#f87171">${lastAbsent.length}</div><div style="font-size:11px;opacity:.6;margin-top:2px">ABSENT</div></div>
+        <div><div style="font-size:28px;font-weight:700;color:${lastRate>=70?'#4ade80':lastRate>=50?'#fbbf24':'#f87171'}">${lastRate}%</div><div style="font-size:11px;opacity:.6;margin-top:2px">RATE</div></div>
+      </div>
+      <div style="font-size:12px;opacity:.5;margin-top:8px">${delta>=0?'↑':'↓'} ${Math.abs(delta)}% vs previous session</div>`:''}
+    </div>
+
+    <!-- GC breakdown -->
+    <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">GC status</div>
+      ${Object.entries(gcC).map(([gc,n])=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+        <span style="padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:${GBKG[gc]};color:${GCOL[gc]};min-width:90px">${gc}</span>
+        <div style="flex:1;height:5px;background:#f0efe8;border-radius:3px;overflow:hidden"><div style="height:100%;width:${nonGuests.length?Math.round(n/nonGuests.length*100):0}%;background:${GCOL[gc]};border-radius:3px"></div></div>
+        <span style="font-size:13px;font-weight:600;min-width:20px;text-align:right">${n}</span>
+      </div>`).join('')}
+    </div>
+
+    <!-- Session history -->
+    <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Session history</div>
+      ${recs.slice(-6).reverse().map((s,i)=>{
+        const p=nonGuests.filter(m=>attendance[s.key]&&attendance[s.key][m.n]==='present').length;
+        const poss=nonGuests.filter(m=>!firstSession[m.n]||firstSession[m.n]<=s.key).length;
+        const r=poss?Math.round(p/poss*100):0;
+        return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8">
+          <span style="font-size:13px;${i===0?'font-weight:600':''}">${s.date}${i===0?' <span style="font-size:10px;background:#e1f5ee;color:#085041;border-radius:20px;padding:1px 6px;margin-left:4px">Latest</span>':''}</span>
+          <div style="text-align:right"><span style="font-size:14px;font-weight:700;color:${r>=70?'#1D9E75':r>=50?'#EF9F27':'#E24B4A'}">${r}%</span> <span style="font-size:12px;color:#888">(${p})</span></div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Absent members -->
+    ${lastSess&&lastAbsent.length?`<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Absent — ${lastSess.date}</div>
+      ${Object.entries(lastAbsentGrouped).map(([reason,members])=>`
+        <div style="margin-bottom:10px">
+          <div style="font-size:11px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+            <span style="width:8px;height:8px;border-radius:50%;background:${getReasonColor(reason)};display:inline-block"></span>${reason} (${members.length})
+          </div>
+          ${members.map(m=>{const streak=calcMember(m.n).curStreak;return`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0 7px 14px;border-bottom:0.5px solid #f0efe8;gap:8px">
+            <div style="font-size:13px;font-weight:500">${m.n} <span style="color:#888;font-size:11px">${m.gc}</span></div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+              ${streak>=2?`<span style="color:#a32d2d;font-size:11px;font-weight:600">${streak} missed</span>`:''}
+            </div>
+          </div>`;}).join('')}
+        </div>`).join('')}
+      ${lastAbsentNone.length?`<div style="margin-bottom:6px">
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">No reason (${lastAbsentNone.length})</div>
+        ${lastAbsentNone.map(m=>{const streak=calcMember(m.n).curStreak;return`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0 7px 14px;border-bottom:0.5px solid #f0efe8;gap:8px">
+          <div style="font-size:13px;font-weight:500">${m.n} <span style="color:#888;font-size:11px">${m.gc}</span></div>
+          ${streak>=2?`<span style="color:#a32d2d;font-size:11px;font-weight:600;flex-shrink:0">${streak} missed</span>`:''}
+        </div>`;}).join('')}
+      </div>`:''}
+    </div>`:''}
+
+    <!-- Follow-up -->
+    ${followUp.length?`<div style="background:#faeeda;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #ef9f27">
+      <div style="font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">⚠ Follow-up needed</div>
+      ${followUp.map(m=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid rgba(0,0,0,.08);gap:8px">
+        <div><div style="font-size:13px;font-weight:500">${m.n}</div><span style="font-size:11px;color:#8a5010">${m.gc}</span></div>
+        <span style="font-size:12px;font-weight:700;color:${m.curStreak>=4?'#a32d2d':'#ba7517'}">${m.curStreak} in a row</span>
+      </div>`).join('')}
+    </div>`:''}
+
+    <!-- Birthdays -->
+    ${bdaySoon.length?`<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🎂 Birthdays this week</div>
+      ${bdaySoon.map(m=>{const d=daysUntil(birthdays[m.n]);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8">
+        <span style="font-size:13px;font-weight:500">${m.n}</span>
+        <span style="font-size:12px;color:#633806;font-weight:500">${d===0?'Today! 🎂':d===1?'Tomorrow':`In ${d} days`}</span>
+      </div>`;}).join('')}
+    </div>`:''}
+
+    <div style="text-align:center;font-size:11px;color:#aaa;padding-top:8px">Gidi GC · ${lastSess?lastSess.date:_sd.now}</div>
+  `;
+}
+
+function _renderMemberReport(){
+  const {lastSess,lastPresent,lastAbsent,lastRate,delta,bdaySoon,presentNonGuests,nonGuests}=_sd;
+  const presentCount=lastPresent.filter(m=>m.gc!=='Guest'&&!m.frozen).length;
+  const guestCount=lastPresent.filter(m=>m.gc==='Guest').length;
+
+  document.getElementById('summaryContent').innerHTML=`
+    <!-- Hero -->
+    <div style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);color:#fff;border-radius:12px;padding:22px;text-align:center;margin-bottom:14px">
+      <div style="font-size:32px;margin-bottom:8px">🙌</div>
+      <div style="font-size:20px;font-weight:700;font-family:'Playfair Display',serif;margin-bottom:4px">Great to see you!</div>
+      <div style="font-size:13px;opacity:.6">Gidi GC · ${lastSess?lastSess.date:'—'}</div>
+      <div style="margin-top:14px;background:rgba(255,255,255,.1);border-radius:10px;padding:12px 16px;display:inline-block">
+        <div style="font-size:34px;font-weight:700;color:#4ade80;line-height:1">${presentCount}</div>
+        <div style="font-size:12px;opacity:.7;margin-top:3px">people gathered today${guestCount?` (+ ${guestCount} guest${guestCount===1?'':'s'})`:''}</div>
+      </div>
+      ${delta!==0?`<div style="font-size:12px;opacity:.5;margin-top:8px">${delta>0?'↑':'↓'} ${Math.abs(delta)}% vs last week</div>`:''}
+    </div>
+
+    <!-- Who was here -->
+    <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Who was here 🎉</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${presentNonGuests.map(m=>`<span style="background:#e1f5ee;color:#085041;border-radius:20px;padding:4px 12px;font-size:13px;font-weight:500">${m.n.split(' ')[0]}</span>`).join('')}
+        ${lastPresent.filter(m=>m.gc==='Guest').map(m=>`<span style="background:#f1efe8;color:#888;border-radius:20px;padding:4px 12px;font-size:13px">${m.n.split(' ')[0]}</span>`).join('')}
+      </div>
+    </div>
+
+    <!-- Missed you -->
+    ${lastAbsent.length?`<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">We missed… (${lastAbsent.length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${lastAbsent.map(m=>`<span style="background:#f5f5f3;color:#888;border-radius:20px;padding:4px 12px;font-size:13px">${m.n.split(' ')[0]}</span>`).join('')}
+      </div>
+      <div style="font-size:12px;color:#888;margin-top:10px">If you know any of them, reach out 💛</div>
+    </div>`:'<div style="background:#e1f5ee;border-radius:10px;padding:14px;margin-bottom:12px;text-align:center"><div style="font-size:22px;margin-bottom:4px">🎉</div><div style="font-size:14px;font-weight:600;color:#085041">Everyone came today!</div></div>'}
+
+    <!-- Birthdays -->
+    ${bdaySoon.length?`<div style="background:#faeeda;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #ef9f27">
+      <div style="font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🎂 Upcoming birthdays</div>
+      ${bdaySoon.map(m=>{const d=daysUntil(birthdays[m.n]);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid rgba(0,0,0,.08)">
+        <span style="font-size:14px;font-weight:500;color:#633806">${m.n}</span>
+        <span style="font-size:12px;color:#8a5010;font-weight:500">${d===0?'Today! 🎂':d===1?'Tomorrow':`In ${d} days`}</span>
+      </div>`;}).join('')}
+    </div>`:''}
+
+    <div style="text-align:center;font-size:12px;color:#aaa;padding:12px 0 4px">Gidi GC · ${lastSess?lastSess.date:''} · See you next week! 🙏</div>
+  `;
+}
+
+function _renderFollowupQueue(){
+  const {lastSess,lastAbsent,followUp,lastAbsentGrouped,lastAbsentNone}=_sd;
+
+  const makeWaLink=(m,customMsg)=>{
+    const wa=getWaNumber(m.n);
+    if(!wa)return'';
+    const name=m.n.split(' ')[0];
+    const msg=customMsg||`Hey ${name}, missed you at GC${lastSess?' on '+lastSess.date:''}! Hope all is well 🙏`;
+    return`<a href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;text-decoration:none;flex-shrink:0">📱 WA</a>`;
+  };
+
+  document.getElementById('summaryContent').innerHTML=`
+    <div style="font-size:13px;color:#888;padding:4px 0 14px">Tap WA to open WhatsApp with a pre-filled message. You just hit send.</div>
+
+    <!-- Urgent: 3+ absences -->
+    ${followUp.filter(m=>m.curStreak>=3).length?`
+    <div style="background:#fcebeb;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #f09595">
+      <div style="font-size:11px;font-weight:700;color:#791f1f;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🔴 Urgent — 3+ in a row</div>
+      ${followUp.filter(m=>m.curStreak>=3).map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid rgba(0,0,0,.08);gap:8px">
+        <div>
+          <div style="font-size:14px;font-weight:600">${m.n}</div>
+          <div style="font-size:11px;color:#888">${m.gc} · ${m.curStreak} missed in a row</div>
+        </div>
+        ${makeWaLink(m,`Hey ${m.n.split(' ')[0]}, we've missed you at Gidi GC! Just checking in to see how you're doing 🙏`)}
+      </div>`).join('')}
+    </div>`:''}
+
+    <!-- Follow-up: 2 absences -->
+    ${followUp.filter(m=>m.curStreak===2).length?`
+    <div style="background:#faeeda;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #ef9f27">
+      <div style="font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🟡 Follow-up — 2 in a row</div>
+      ${followUp.filter(m=>m.curStreak===2).map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid rgba(0,0,0,.08);gap:8px">
+        <div>
+          <div style="font-size:14px;font-weight:600">${m.n}</div>
+          <div style="font-size:11px;color:#888">${m.gc}</div>
+        </div>
+        ${makeWaLink(m)}
+      </div>`).join('')}
+    </div>`:''}
+
+    <!-- Last session absent -->
+    ${lastSess&&lastAbsent.length?`
+    <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Absent last session — ${lastSess.date}</div>
+      ${[...Object.values(lastAbsentGrouped).flat(),...lastAbsentNone].sort(byFirstName).map(m=>{
+        const streak=calcMember(m.n).curStreak;
+        const reason=(absenceReasons[lastSess.key]||{})[m.n]||'';
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid #f0efe8;gap:8px">
+          <div>
+            <div style="font-size:13px;font-weight:500">${m.n}</div>
+            <div style="font-size:11px;color:#888">${reason||'No reason'} ${streak>=2?`· <span style="color:#a32d2d;font-weight:500">${streak} missed</span>`:''}</div>
+          </div>
+          ${makeWaLink(m)}
+        </div>`;
+      }).join('')}
+    </div>`:''}
+
+    ${!followUp.length&&!lastAbsent.length?`<div style="text-align:center;padding:2rem;color:#3b6d11;font-size:14px">✓ No follow-ups needed right now</div>`:''}
+  `;
+}
+
+function shareSummary(){
+  // Build member report as standalone HTML and open in new tab
+  _buildSummaryData();
+  const {lastSess,lastPresent,lastAbsent,lastRate,delta,bdaySoon,presentNonGuests,nonGuests}=_sd;
+  const presentCount=lastPresent.filter(m=>m.gc!=='Guest'&&!m.frozen).length;
+  const guestCount=lastPresent.filter(m=>m.gc==='Guest').length;
+
+  const htmlDoc=`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gidi GC — ${lastSess?lastSess.date:''}</title>
+<link href="https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Kumbh Sans',sans-serif;background:#f0f0eb;color:#1a1a1a;padding:16px 14px 40px;max-width:480px;margin:0 auto}.hero{background:linear-gradient(135deg,#1a1a1a,#2d2d2d);color:#fff;border-radius:14px;padding:24px;text-align:center;margin-bottom:14px}.card{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;border:0.5px solid #e0e0d8}.card-title{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}.chip{display:inline-block;border-radius:20px;padding:4px 12px;font-size:13px;font-weight:500;margin:2px}.row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8}.wa-btn{display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;text-decoration:none}</style></head>
+<body>
+<div class="hero">
+  <div style="font-size:32px;margin-bottom:8px">🙌</div>
+  <div style="font-size:20px;font-weight:700;font-family:'Playfair Display',serif">Great to see you!</div>
+  <div style="font-size:13px;opacity:.6;margin-top:4px">Gidi GC · ${lastSess?lastSess.date:''}</div>
+  <div style="margin-top:14px;background:rgba(255,255,255,.12);border-radius:10px;padding:12px;display:inline-block">
+    <div style="font-size:34px;font-weight:700;color:#4ade80">${presentCount}</div>
+    <div style="font-size:12px;opacity:.7;margin-top:2px">people gathered${guestCount?` + ${guestCount} guest${guestCount===1?'':'s'}`:''}</div>
+  </div>
+</div>
+<div class="card">
+  <div class="card-title">Who was here 🎉</div>
+  <div>${presentNonGuests.map(m=>`<span class="chip" style="background:#e1f5ee;color:#085041">${m.n.split(' ')[0]}</span>`).join('')}${lastPresent.filter(m=>m.gc==='Guest').map(m=>`<span class="chip" style="background:#f1efe8;color:#888">${m.n.split(' ')[0]}</span>`).join('')}</div>
+</div>
+${lastAbsent.length?`<div class="card">
+  <div class="card-title">We missed… (${lastAbsent.length})</div>
+  ${lastAbsent.map(m=>{const wa=getWaNumber(m.n);const name=m.n.split(' ')[0];const msg=encodeURIComponent(`Hey ${name}, missed you at GC on ${lastSess?lastSess.date:''}! Hope all is well 🙏`);return`<div class="row"><span style="font-size:13px;font-weight:500">${m.n}</span>${wa?`<a href="https://wa.me/${wa}?text=${msg}" class="wa-btn">📱 WA</a>`:''}</div>`;}).join('')}
+</div>`:''}
+${bdaySoon.length?`<div class="card" style="background:#faeeda;border-color:#ef9f27">
+  <div class="card-title" style="color:#633806">🎂 Birthdays coming up</div>
+  ${bdaySoon.map(m=>{const d=daysUntil(birthdays[m.n]);return`<div class="row"><span style="font-size:13px;font-weight:500;color:#633806">${m.n}</span><span style="font-size:12px;color:#8a5010;font-weight:500">${d===0?'Today!':d===1?'Tomorrow':`In ${d} days`}</span></div>`;}).join('')}
+</div>`:''}
+<div style="text-align:center;font-size:12px;color:#aaa;padding-top:12px">Gidi GC · See you next week 🙏</div>
+</body></html>`;
+
+  const blob=new Blob([htmlDoc],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  window.open(url,'_blank');
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
 function doPrint(){
   // Copy summary content into the printArea div, then print
   const content=document.getElementById('summaryContent').innerHTML;
@@ -3074,7 +3312,7 @@ function openWebSummary(){
   const recs=getRecordedSessions();
   const now=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
   const allCalc=MEMBERS.filter(m=>m.gc!=='Guest').map(m=>({...m,...calcMember(m.n)}));
-  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   const avg=recs.length?Math.round(recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return t;}).reduce((a,b)=>a+b,0)/recs.length):0;
   const gcC={Core:0,Frequent:0,Rare:0,Unresponsive:0,Guest:0};MEMBERS.forEach(m=>{if(gcC[m.gc]!==undefined)gcC[m.gc]++;});
   const sessTots=recs.map(s=>{let t=0;nonGuests.forEach(m=>{if(attendance[s.key]&&attendance[s.key][m.n]==='present')t++;});return{date:s.date,total:t};});
@@ -3311,6 +3549,17 @@ function recalcAll(){
   if(prayerBadge){prayerBadge.textContent=activePrayers;prayerBadge.style.display=activePrayers?'inline':'none';}
   // Update pending badge
   updatePendingBadge();
+  // Update care badge
+  const _careUrgent=MEMBERS.filter(m=>{if(m.gc==='Guest'||m.frozen)return false;const s=calcMember(m.n).curStreak;const today2=new Date().toISOString().split('T')[0];const allW=getClusterWeeks().filter(w=>w.key<=today2);const wb=allW.slice(-3).map(w=>(wellbeing[w.key]||{})[m.n]||'');const rF=wb.filter(v=>v==='red').length;const aF=wb.filter(v=>v==='red'||v==='amber').length;return s>=2||rF>=2||aF>=2;}).length;
+  const _careBadge=document.getElementById('careBadge');
+  if(_careBadge){_careBadge.textContent=_careUrgent;_careBadge.style.display=_careUrgent?'inline':'none';}
+  // Show wellbeing alerts panel if there are any
+  const wbPanel=document.getElementById('wellbeingAlertPanel');
+  if(wbPanel){
+    const alerts=getWellbeingAlerts();
+    wbPanel.style.display=alerts.length?'block':'none';
+    renderWellbeingAlerts();
+  }
   // Hide main notice (now shown inline in sidebar)
   const notice=document.getElementById('mainNotice');
   if(notice)notice.style.display='none';
@@ -3350,7 +3599,7 @@ function switchTab(id,el){
   if(el)el.classList.add('active');
   const sidebarItem=document.querySelector(`.nav-item[data-id="${id}"]`);
   if(sidebarItem)sidebarItem.classList.add('active');
-  const titles={overview:'Overview',members:'Members',guests:'Guests',record:'Record Attendance',absenteeism:'Absenteeism',trends:'Absence Trends',birthdays:'Birthdays',clusters:'Clusters',superclusters:'Superclusters',prayer:'Prayer Requests',archive:'Archive',recalc:'Settings & Admin'};
+  const titles={overview:'Overview',members:'Members',guests:'Guests',record:'Record Attendance',absenteeism:'Follow-up',trends:'Absence Trends',birthdays:'Birthdays',clusters:'Clusters',superclusters:'Superclusters',prayer:'Prayer Requests',archive:'Archive',recalc:'Settings & Admin',care:'Exception View'};
   const tb=document.getElementById('topbarTitle');
   if(tb)tb.textContent=titles[id]||id;
   document.querySelectorAll('.mob-nav-btn').forEach(b=>{b.classList.remove('active');if(b.dataset.tab===id)b.classList.add('active');});
@@ -3363,6 +3612,7 @@ function switchTab(id,el){
   if(id==='superclusters')renderSuperclusters();
   if(id==='archive'){renderArchive();renderTermComparison();}
   if(id==='prayer')renderPrayerRequests();
+  if(id==='care')renderCareView();
   const content=document.querySelector('.content');
   if(content)content.scrollTop=0;else window.scrollTo(0,0);
 }
@@ -3374,31 +3624,52 @@ function checkMagicLink(){
   const urlToken=params.get('token');
   if(!clusterId)return;
 
-  // Validate token if one exists in the system
-  // Load from Supabase first to get latest tokens
+  // Lock this session to this cluster only
+  _magicClusterId=clusterId;
+
+  // Unlock clusters and edit mode for magic link
+  sessionStorage.setItem(PIN_SESSION_KEY,'1');
+  sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
+  localStorage.setItem(TRUST_TOKEN_KEY,'magic_'+clusterId); // trust this device for this session
+
+  // Hide sidebar and topbar for cluster head view
+  document.querySelector('.sidebar')?.style.setProperty('display','none');
+  document.querySelector('.topbar-actions')?.style.setProperty('display','none');
+  document.body.classList.add('cluster-head-view');
+  applyMode();
+
+  let retries=0;
   const proceed=()=>{
+    // Validate token
     const storedToken=clusterTokens[clusterId];
-    // If we have a stored token, the URL must match it
     if(storedToken&&urlToken&&urlToken!==storedToken){
       alert('This link has been revoked. Please ask your GC leader for a new link.');
       return;
     }
-    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
+    // Find cluster — retry up to 10 times waiting for Supabase
+    const c=clusters.find(x=>x.id===clusterId);
+    if(!c){
+      retries++;
+      if(retries>10){
+        alert('Could not load cluster data. Please check your internet connection and try again.');
+        return;
+      }
+      setTimeout(proceed,800);
+      return;
+    }
+    // Switch to clusters tab
+    switchTab('clusters',document.querySelector('[data-id=clusters]'));
     setTimeout(()=>{
-      switchTab('clusters',document.querySelector('[data-id=clusters]'));
-      setTimeout(()=>{
-        const card=document.querySelector(`[data-cluster-id="${clusterId}"]`);
-        if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
-        const c=clusters.find(x=>x.id===clusterId);
-        if(c){
-          const choice=confirm(`Welcome, ${c.head}!\n\nWould you like to submit your weekly check-in?\n\nOK = Submit check-in\nCancel = View your cluster report`);
-          if(choice)openClusterHeadSubmission(clusterId);
-          else openClusterHeadReport(clusterId);
-        }
-      },400);
-    },800);
+      const card=document.querySelector(`[data-cluster-id="${clusterId}"]`);
+      if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
+      const choice=confirm(`Welcome, ${c.head}!\n\nWould you like to submit your weekly check-in?\n\nOK = Submit check-in\nCancel = Open cluster report`);
+      if(choice)openClusterHeadSubmission(clusterId);
+      else generateClusterHeadReport(clusterId);
+    },400);
   };
-  proceed();
+
+  // Start after a short delay to let Supabase load
+  setTimeout(proceed,1200);
 }
 
 // ── REVOCABLE MAGIC LINKS ────────────────────────────────────────────────────
@@ -3514,9 +3785,15 @@ function renderClusterGuestAlert(){
 }
 
 // ── RENDER CLUSTERS TAB ────────────────────────────────────────────────────────
+// Track which cluster this device accessed via magic link
+let _magicClusterId=null;
+
 function renderClusters(){
+  // If accessed via magic link, only show that cluster
+  const visibleClusters=_magicClusterId?clusters.filter(c=>c.id===_magicClusterId):clusters;
   populateClusterWeekPicker();
   renderClusterGuestAlert();
+  renderClusterHealth(weekKey);
   const recs=getRecordedSessions();
   const clusterRecs=getClusterSessions();
   const weekKey=document.getElementById('cluster-week-picker')?.value||'';
@@ -3540,7 +3817,7 @@ function renderClusters(){
   `;
 
   // Cluster cards
-  document.getElementById('cluster-cards').innerHTML=clusters.map(c=>{
+  document.getElementById('cluster-cards').innerHTML=visibleClusters.map(c=>{
     const members=getMembersInCluster(c.id).sort(byFirstName);
     const totalSess=clusterRecs.length;
 
@@ -3703,6 +3980,55 @@ function renderClusters(){
   }
 }
 
+
+// ── WELLBEING TREND ALERTS ────────────────────────────────────────────────────
+function getWellbeingAlerts(){
+  const today=new Date().toISOString().split('T')[0];
+  const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
+  const alerts=[];
+  nonGuests.forEach(m=>{
+    const recentWeeks=allWeeks.slice(-6); // last 6 weeks
+    const wbHistory=recentWeeks.map(w=>(wellbeing[w.key]||{})[m.n]||'');
+    const redStreak=[];
+    for(let i=wbHistory.length-1;i>=0;i--){
+      if(wbHistory[i]==='red')redStreak.unshift(wbHistory[i]);
+      else break;
+    }
+    const amberStreak=[];
+    for(let i=wbHistory.length-1;i>=0;i--){
+      if(wbHistory[i]==='amber'||wbHistory[i]==='red')amberStreak.unshift(wbHistory[i]);
+      else break;
+    }
+    if(redStreak.length>=2){
+      alerts.push({m,type:'red',weeks:redStreak.length,label:`🔴 ${redStreak.length} weeks urgent`});
+    } else if(amberStreak.length>=3){
+      alerts.push({m,type:'amber',weeks:amberStreak.length,label:`🟡 ${amberStreak.length} weeks needs support`});
+    }
+  });
+  return alerts.sort((a,b)=>b.weeks-a.weeks);
+}
+
+function renderWellbeingAlerts(){
+  const el=document.getElementById('wellbeingAlerts');
+  if(!el)return;
+  const alerts=getWellbeingAlerts();
+  if(!alerts.length){
+    el.innerHTML='<div style="font-size:13px;color:#3b6d11;padding:12px 0">✓ No sustained wellbeing concerns</div>';
+    return;
+  }
+  el.innerHTML=alerts.map(({m,type,label})=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8;gap:8px">
+      <div style="cursor:pointer" onclick="openProfile('${m.n.replace(/'/g,"\'")}')">
+        <div style="font-size:13px;font-weight:500">${m.n}</div>
+        <div style="font-size:11px;color:#888">${label} · ${m.gc}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        ${getWaNumber(m.n)?`<a href="https://wa.me/${getWaNumber(m.n)}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;text-decoration:none">WA</a>`:''}
+      </div>
+    </div>`).join('');
+}
+
 // ── CLUSTER LEADER ANALYTICS ──────────────────────────────────────────────────
 let _analyticsVisible=false;
 
@@ -3829,7 +4155,73 @@ function renderClusterAnalytics(){
     </div>
   `;
 }
-// ── CHECK-IN TOGGLE ───────────────────────────────────────────────────────────
+// ── CLUSTER HEALTH TABLE (admin only) ────────────────────────────────────────
+function renderClusterHealth(weekKey){
+  const el=document.getElementById('cluster-health-panel');
+  if(!el)return;
+
+  // Only show to admins (not cluster head magic link view)
+  if(!isEditMode()||_magicClusterId){el.style.display='none';return;}
+  if(!clusters.length){el.style.display='none';return;}
+
+  const clusterRecs=getClusterSessions();
+  const today=new Date().toISOString().split('T')[0];
+  const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
+  const thisWeek=weekKey?allWeeks.find(w=>w.key===weekKey):allWeeks[allWeeks.length-1];
+
+  const rows=clusters.map(c=>{
+    const members=getMembersInCluster(c.id);
+    let attRate=0;
+    if(clusterRecs.length&&members.length){
+      const tot=members.reduce((s,m)=>s+clusterRecs.filter(r=>attendance[r.key]&&attendance[r.key][m.n]==='present').length,0);
+      attRate=Math.round(tot/(members.length*clusterRecs.length)*100);
+    }
+    const fuCount=members.filter(m=>calcMember(m.n).curStreak>=2).length;
+    let ciDone=0,ciTotal=0;
+    if(thisWeek){
+      members.filter(m=>(clusterMembers[m.n]?.joinDate||'')<=thisWeek.key).forEach(m=>{
+        ciTotal++;if((checkIns[thisWeek.key]||{})[m.n]==='yes')ciDone++;
+      });
+    }
+    const attColor=attRate>=70?'#1D9E75':attRate>=50?'#EF9F27':'#E24B4A';
+    // Head's own attendance
+    const headAtt=calcMember(c.head).rate;
+    const headColor=headAtt>=70?'#1D9E75':headAtt>=50?'#EF9F27':'#E24B4A';
+
+    return`<tr>
+      <td style="padding:10px 14px;font-weight:500;font-size:13px">${c.name}</td>
+      <td style="padding:10px;font-size:12px;color:#888">${c.head.split(' ')[0]}</td>
+      <td style="padding:10px;text-align:center;font-size:12px">${members.length}</td>
+      <td style="padding:10px;text-align:center"><span style="font-weight:600;color:${attColor};font-size:13px">${clusterRecs.length?attRate+'%':'—'}</span></td>
+      <td style="padding:10px;text-align:center"><span style="font-weight:600;color:${headColor};font-size:12px">${clusterRecs.length?headAtt+'%':'—'}</span></td>
+      <td style="padding:10px;text-align:center;font-size:13px">${ciTotal?`${ciDone}/${ciTotal}`:'—'}</td>
+      <td style="padding:10px;text-align:center">${fuCount?`<span style="background:#fcebeb;color:#791f1f;border-radius:20px;padding:2px 7px;font-size:11px;font-weight:600">${fuCount}</span>`:'<span style="color:#1D9E75">✓</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  el.style.display='block';
+  el.innerHTML=`
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;overflow:hidden">
+      <div style="padding:10px 14px;border-bottom:0.5px solid #e0e0d8;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:13px;font-weight:600">Cluster health</div>
+        <div style="font-size:11px;color:#888">Admin only · ${clusterRecs.length} sessions tracked</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="background:#fafaf8">
+            <th style="padding:8px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8">Cluster</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8">Head</th>
+            <th style="padding:8px 10px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8">Members</th>
+            <th style="padding:8px 10px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8">Cluster att%</th>
+            <th style="padding:8px 10px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8">Head att%</th>
+            <th style="padding:8px 10px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8">Check-ins</th>
+            <th style="padding:8px 10px;text-align:center;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0e0d8">Follow-up</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
 function setCheckIn(weekKey,memberName,val){
   if(!checkIns[weekKey])checkIns[weekKey]={};
   checkIns[weekKey][memberName]=val;
@@ -4386,7 +4778,7 @@ function openClusterHeadReport(clusterId){
 function getDecliningMembers(){
   const recs=getRecordedSessions();
   if(recs.length<4)return[]; // need enough sessions to detect a trend
-  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   const declining=[];
   nonGuests.forEach(m=>{
     // Compare last 2 sessions vs previous 2 sessions
@@ -4414,7 +4806,7 @@ function renderTermComparison(){
   }
 
   const recs=getRecordedSessions();
-  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
 
   // Current term stats
   const currAvg=recs.length?Math.round(recs.reduce((s,r)=>{
@@ -4741,6 +5133,17 @@ async function confirmNewTerm(){
   switchTab('overview',document.querySelector('[data-id=overview]'));
 }
 
+
+// ── FREEZE GUESTS ─────────────────────────────────────────────────────────────
+function toggleFreeze(name){
+  if(!requireEdit())return;
+  const m=MEMBERS.find(x=>x.n===name);if(!m)return;
+  m.frozen=!m.frozen;
+  logChange(`${m.frozen?'Froze':'Unfroze'} guest ${name}`);
+  saveAll();renderGuests();renderMembers();
+  showToast(`${name} ${m.frozen?'frozen ❄ — excluded from tracking':'unfrozen ✓'}`,2500);
+}
+
 // ── PASTORAL CARE FUNCTIONS ───────────────────────────────────────────────────
 
 function setWellbeing(weekKey,memberName,val){
@@ -4921,7 +5324,7 @@ function saveDebriefAndClose(){
 
 function renderDebriefContent(){
   const sk=_debriefSession.key;
-  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   const absentees=nonGuests.filter(m=>{
     if(firstSession[m.n]&&firstSession[m.n]>sk)return false;
     return attendance[sk]?attendance[sk][m.n]!=='present':true;
@@ -5054,6 +5457,51 @@ function changeDebriefSession(key){
   renderDebriefContent();
 }
 
+
+// ── CLUSTER HEAD PERFORMANCE EMAIL ───────────────────────────────────────────
+async function sendClusterPerformanceEmail(){
+  if(!requireEdit())return;
+  if(typeof emailjs==='undefined'){showToast('Email service not loaded',3000);return;}
+  const recs=getClusterSessions();
+  if(!recs.length){showToast('No cluster sessions recorded yet',2500);return;}
+  const today=new Date().toISOString().split('T')[0];
+  const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
+
+  const lines=clusters.map(c=>{
+    const members=getMembersInCluster(c.id);
+    let attRate=0;
+    if(recs.length&&members.length){
+      const tot=members.reduce((s,m)=>s+recs.filter(r=>attendance[r.key]&&attendance[r.key][m.n]==='present').length,0);
+      attRate=Math.round(tot/(members.length*recs.length)*100);
+    }
+    let ciDone=0,ciTotal=0;
+    allWeeks.forEach(w=>{
+      members.filter(m=>(clusterMembers[m.n]?.joinDate||'')<=w.key).forEach(m=>{
+        ciTotal++;if((checkIns[w.key]||{})[m.n]==='yes')ciDone++;
+      });
+    });
+    const ciRate=ciTotal?Math.round(ciDone/ciTotal*100):0;
+    const followUp=members.filter(m=>calcMember(m.n).curStreak>=2).length;
+    return `${c.name} (${c.head}): Att ${attRate}% | Check-ins ${ciRate}% | Follow-up: ${followUp}`;
+  }).join('\n');
+
+  showToast('Sending cluster performance email...',4000);
+  try{
+    await emailjs.send('service_kq9iu09','template_82gx2h7',{
+      week:`Cluster Performance Report — ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}`,
+      present:clusters.length+' clusters',
+      absent:recs.length+' sessions tracked',
+      followup_list:lines,
+      checkin_summary:`Report covers ${allWeeks.length} weeks`,
+      birthdays:'See app for birthday details',
+      prayer_count:prayerRequests.filter(p=>p.status==='active').length
+    });
+    showToast('Cluster performance email sent ✓',3000);
+  }catch(e){
+    showToast('Email failed — check EmailJS',3500);
+  }
+}
+
 // ── WEEKLY EMAIL SUMMARY ──────────────────────────────────────────────────────
 async function sendWeeklySummary(){
   if(!requireEdit())return;
@@ -5063,7 +5511,7 @@ async function sendWeeklySummary(){
   const lastSess=recs.length?recs[recs.length-1]:null;
   if(!lastSess){showToast('No sessions recorded yet',2500);return;}
 
-  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest');
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   const sk=lastSess.key;
 
   // Present / absent
@@ -5231,10 +5679,7 @@ function buildProfileHTML(m){
       <textarea onchange="saveAbout('${nameEsc}',this.value)" placeholder="Notes about this member..." style="width:100%;font-size:13px;padding:7px 9px;border:0.5px solid #ccc;border-radius:6px;resize:vertical;font-family:inherit;min-height:60px">${about}</textarea>
     </div>
 
-    ${wbHistory?`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
-      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Wellbeing history</div>
-      ${wbHistory}
-    </div>`:''}
+    ${buildWellbeingTimeline(m.n)}
 
     ${noteHistory?`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
       <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Care notes</div>
@@ -5293,10 +5738,24 @@ function renderGuestFunnel(){
   const el=document.getElementById('guestFunnel');
   if(!el)return;
   el.innerHTML=`
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
-      <div style="background:#f5f5f3;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700">${newGuests.length}</div><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">New (1-2 visits)</div></div>
-      <div style="background:#faeeda;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#633806">${warmGuests.length}</div><div style="font-size:10px;color:#633806;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Warm (3+ visits)</div></div>
-      <div style="background:#e1f5ee;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#085041">${converted.length}</div><div style="font-size:10px;color:#085041;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">In cluster</div></div>
+    <!-- Funnel visualisation -->
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Guest conversion funnel</div>
+      ${[
+        {label:'Total guests',count:guests.length,bg:'#f5f5f3',col:'#1a1a1a'},
+        {label:'Returned (2+ visits)',count:[...newGuests,...warmGuests,...converted].filter(m=>recs.filter(s=>attendance[s.key]&&attendance[s.key][m.n]==='present').length>=2).length,bg:'#eeedfe',col:'#3c3489'},
+        {label:'Warm (3+ visits)',count:warmGuests.length+converted.length,bg:'#faeeda',col:'#633806'},
+        {label:'Ready for cluster',count:warmGuests.length,bg:'#fcebeb',col:'#791f1f'},
+        {label:'Assigned to cluster',count:converted.length,bg:'#e1f5ee',col:'#085041'},
+      ].map((s,i,arr)=>`
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:${i<arr.length-1?'4px':'0'}">
+          <div style="background:${s.bg};border-radius:8px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;flex:1">
+            <span style="font-size:13px;color:${s.col};font-weight:500">${s.label}</span>
+            <span style="font-size:18px;font-weight:700;color:${s.col}">${s.count}</span>
+          </div>
+        </div>
+        ${i<arr.length-1?`<div style="text-align:center;color:#ccc;font-size:16px;line-height:1;margin-bottom:4px">↓</div>`:''}
+      `).join('')}
     </div>
     ${warmGuests.length?`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden;margin-bottom:10px">
       <div style="padding:10px 12px;background:#faeeda;border-bottom:0.5px solid #e0d0a0;font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em">Ready to convert</div>
@@ -5596,6 +6055,20 @@ let _editingScId=null;
 function renderSuperclusters(){
   const el=document.getElementById('superclusterList');
   if(!el)return;
+
+  // Week picker
+  const today=new Date().toISOString().split('T')[0];
+  const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
+  const weekPickerEl=document.getElementById('sc-week-picker');
+  let weekKey='';
+  if(weekPickerEl){
+    // Populate if empty
+    if(!weekPickerEl.options.length||weekPickerEl.options[0].value===''){
+      weekPickerEl.innerHTML='<option value="">Select week...</option>'+[...allWeeks].reverse().map(w=>`<option value="${w.key}">${w.date}</option>`).join('');
+    }
+    weekKey=weekPickerEl.value;
+  }
+
   if(!superclusters.length){
     el.innerHTML=`<div style="text-align:center;padding:3rem;color:#888;font-size:13px">
       <div style="font-size:32px;margin-bottom:10px">&#127970;&#127970;</div>
@@ -5603,67 +6076,184 @@ function renderSuperclusters(){
     </div>`;
     return;
   }
+
+  const recs=getClusterSessions();
+
   el.innerHTML=superclusters.map(sc=>{
     const assignedClusters=clusters.filter(c=>sc.clusterIds&&sc.clusterIds.includes(c.id));
-    const specialMembers=(sc.specialMembers||[]).map(n=>MEMBERS.find(m=>m.n===n)).filter(Boolean);
-    const allMembers=[
-      ...assignedClusters.flatMap(c=>getMembersInCluster(c.id)),
-      ...specialMembers
-    ];
-    const uniqueMembers=[...new Map(allMembers.map(m=>[m.n,m])).values()];
-    const recs=getClusterSessions();
-    let attRate=0;
-    if(recs.length&&uniqueMembers.length){
-      const tot=uniqueMembers.reduce((s,m)=>s+recs.filter(r=>attendance[r.key]&&attendance[r.key][m.n]==='present').length,0);
-      attRate=Math.round(tot/(uniqueMembers.length*recs.length)*100);
-    }
-    const followUp=uniqueMembers.filter(m=>calcMember(m.n).curStreak>=2).length;
+    // Cluster heads as trackable people
+    const clusterHeads=assignedClusters.map(c=>({name:c.head,clusterId:c.id,clusterName:c.name,isHead:true}));
+    // Special attention members
+    const specialMembers=(sc.specialMembers||[]).map(n=>{
+      const m=MEMBERS.find(x=>x.n===n);
+      return m?{name:m.n,clusterId:'',clusterName:'Special attention',isHead:false,m}:null;
+    }).filter(Boolean);
 
-    return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden;margin-bottom:1rem">
+    // Combined people to track
+    const trackable=[...clusterHeads,...specialMembers];
+
+    // Overall cluster stats for this supercluster
+    const allClusterMembers=assignedClusters.flatMap(c=>getMembersInCluster(c.id));
+    let scAttRate=0;
+    if(recs.length&&allClusterMembers.length){
+      const tot=allClusterMembers.reduce((s,m)=>s+recs.filter(r=>attendance[r.key]&&attendance[r.key][m.n]==='present').length,0);
+      scAttRate=Math.round(tot/(allClusterMembers.length*recs.length)*100);
+    }
+
+    // Build cluster performance rows
+    const clusterPerfRows=assignedClusters.map(c=>{
+      const cm=getMembersInCluster(c.id);
+      const cRate=recs.length&&cm.length?Math.round(cm.reduce((s,m)=>s+recs.filter(r=>attendance[r.key]&&attendance[r.key][m.n]==='present').length,0)/(cm.length*recs.length)*100):0;
+      const cFollow=cm.filter(m=>calcMember(m.n).curStreak>=2).length;
+      let ciDone=0,ciTotal=0;
+      if(weekKey){
+        cm.filter(m=>(clusterMembers[m.n]?.joinDate||'')<=weekKey).forEach(m=>{
+          ciTotal++;if((checkIns[weekKey]||{})[m.n]==='yes')ciDone++;
+        });
+      }
+      // Head attendance
+      const headM=MEMBERS.find(m=>m.n===c.head);
+      const headAtt=headM?calcMember(c.head).rate:0;
+      return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:13px;font-weight:500">${c.name}</div>
+          <div style="font-size:11px;color:#888">${c.head} · ${cm.length} members${cFollow?` · <span style="color:#a32d2d">${cFollow} follow-up</span>`:''}</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-shrink:0">
+          ${recs.length?`<div style="text-align:center"><div style="font-size:13px;font-weight:600;color:${cRate>=70?'#1D9E75':cRate>=50?'#EF9F27':'#E24B4A'}">${cRate}%</div><div style="font-size:10px;color:#aaa">att</div></div>`:''}
+          ${weekKey&&ciTotal?`<div style="text-align:center"><div style="font-size:13px;font-weight:600">${ciDone}/${ciTotal}</div><div style="font-size:10px;color:#aaa">check-ins</div></div>`:''}
+          ${headM?`<div style="text-align:center"><div style="font-size:13px;font-weight:600;color:${headAtt>=70?'#1D9E75':headAtt>=50?'#EF9F27':'#E24B4A'}">${headAtt}%</div><div style="font-size:10px;color:#aaa">head att</div></div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+
+    // Build trackable people rows (cluster heads + special attention)
+    const trackableRows=weekKey?trackable.map(({name,clusterName,isHead})=>{
+      const nameEsc=name.replace(/'/g,"\\'");
+      const ciVal=(scCheckIns[weekKey]||{})[name]||'';
+      const wbVal=(scWellbeing[weekKey]||{})[name]||'';
+      const noteVal=(scCareNotes[weekKey]||{})[name]||'';
+      const about=scAbout[name]||'';
+      const m=MEMBERS.find(x=>x.n===name);
+      const attRate=m?calcMember(name).rate:0;
+      const streak=m?calcMember(name).curStreak:0;
+
+      return`<div style="border-bottom:0.5px solid #f0efe8">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;gap:8px;flex-wrap:wrap">
+          <div style="cursor:pointer;min-width:0" onclick="openProfile('${nameEsc}')">
+            <div style="font-size:13px;font-weight:600">${name}</div>
+            <div style="font-size:11px;color:#888">${isHead?`Cluster head · ${clusterName}`:'Special attention'}${streak>=2?` · <span style="color:#a32d2d">${streak} missed</span>`:''}</div>
+            ${m?`<div style="font-size:11px;color:${attRate>=70?'#1D9E75':attRate>=50?'#EF9F27':'#E24B4A'};font-weight:500">Attendance: ${attRate}%</div>`:''}
+          </div>
+          ${getWaNumber(name)?`<a href="https://wa.me/${getWaNumber(name)}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;text-decoration:none;flex-shrink:0">WhatsApp</a>`:''}
+        </div>
+        <div style="background:#f9f9f7;padding:10px 12px;display:grid;gap:8px">
+          <!-- Check-in -->
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:500">
+            <input type="checkbox" ${ciVal==='yes'?'checked':''} onchange="setScCheckIn('${weekKey}','${nameEsc}',this.checked?'yes':'no')" style="width:15px;height:15px">
+            Checked in on ${name.split(' ')[0]} this week
+          </label>
+          <!-- Wellbeing -->
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;color:#888;font-weight:500;min-width:70px">Wellbeing:</span>
+            <div style="display:flex;gap:6px">
+              ${['red','amber','green'].map(col=>{
+                const labels={red:'Needs urgent support',amber:'Needs support',green:'Doing well'};
+                const colors={red:'#E24B4A',amber:'#EF9F27',green:'#1D9E75'};
+                const sel=wbVal===col;
+                return`<button onclick="setScWellbeing('${weekKey}','${nameEsc}','${col}')" title="${labels[col]}" style="width:22px;height:22px;border-radius:50%;border:2px solid ${sel?colors[col]:'#e0e0d8'};background:${sel?colors[col]:'#fff'};cursor:pointer;transition:all .15s"></button>`;
+              }).join('')}
+              ${wbVal?`<button onclick="setScWellbeing('${weekKey}','${nameEsc}','')" style="font-size:10px;background:none;border:none;color:#aaa;cursor:pointer">✕</button>`:''}
+            </div>
+          </div>
+          <!-- Note -->
+          <div style="display:flex;align-items:flex-start;gap:8px">
+            <span style="font-size:12px;color:#888;font-weight:500;min-width:70px;padding-top:4px">Note:</span>
+            <textarea onchange="setScCareNote('${weekKey}','${nameEsc}',this.value)" placeholder="How are they doing?" style="flex:1;font-size:12px;padding:5px 8px;border:0.5px solid #ccc;border-radius:6px;resize:vertical;font-family:inherit;min-height:40px">${noteVal}</textarea>
+          </div>
+          <!-- About (persistent) -->
+          <div style="display:flex;align-items:flex-start;gap:8px">
+            <span style="font-size:12px;color:#888;font-weight:500;min-width:70px;padding-top:4px">About:</span>
+            <textarea onchange="setScAbout('${nameEsc}',this.value)" placeholder="Persistent notes about this person..." style="flex:1;font-size:12px;padding:5px 8px;border:0.5px solid #ccc;border-radius:6px;resize:vertical;font-family:inherit;min-height:36px">${about}</textarea>
+          </div>
+        </div>
+      </div>`;
+    }).join(''):trackable.map(({name,clusterName,isHead})=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:0.5px solid #f0efe8;gap:8px">
+        <div style="cursor:pointer" onclick="openProfile('${name.replace(/'/g,"\\'")}')">
+          <div style="font-size:13px;font-weight:500">${name}</div>
+          <div style="font-size:11px;color:#888">${isHead?`Cluster head · ${clusterName}`:'Special attention'}</div>
+        </div>
+        ${getWaNumber(name)?`<a href="https://wa.me/${getWaNumber(name)}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;text-decoration:none">WhatsApp</a>`:''}
+      </div>`).join('');
+
+    return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;overflow:hidden;margin-bottom:1rem">
+      <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:0.5px solid #e0e0d8;flex-wrap:wrap;gap:8px">
         <div>
           <div style="font-size:15px;font-weight:600;margin-bottom:2px">${sc.name}</div>
-          <div style="font-size:12px;color:#888">GC Leader: <strong>${sc.gcLeader||'Unassigned'}</strong> &middot; ${assignedClusters.length} clusters &middot; ${uniqueMembers.length} members</div>
+          <div style="font-size:12px;color:#888">GC Leader: <strong>${sc.gcLeader||'Unassigned'}</strong> · ${assignedClusters.length} clusters${recs.length?` · ${scAttRate}% avg attendance`:''}</div>
         </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-          ${followUp?`<span style="font-size:11px;background:#fcebeb;color:#791f1f;border-radius:20px;padding:2px 8px;font-weight:500">⚠ ${followUp} follow-up</span>`:''}
-          ${recs.length?`<span style="font-size:12px;font-weight:600;color:${attRate>=70?'#1D9E75':attRate>=50?'#ba7517':'#a32d2d'}">${attRate}% att.</span>`:''}
-          <button class="btn btn-sm" onclick="openSuperclusterModal('${sc.id}')">&#9998; Edit</button>
-        </div>
+        <button class="btn btn-sm" onclick="openSuperclusterModal('${sc.id}')">&#9998; Edit</button>
       </div>
-      ${assignedClusters.length?`
-      <div style="padding:10px 14px;border-bottom:0.5px solid #e0e0d8">
-        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Clusters</div>
-        ${assignedClusters.map(c=>{
-          const cm=getMembersInCluster(c.id);
-          const cRate=recs.length&&cm.length?Math.round(cm.reduce((s,m)=>s+recs.filter(r=>attendance[r.key]&&attendance[r.key][m.n]==='present').length,0)/(cm.length*recs.length)*100):0;
-          return`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid #f0efe8;font-size:13px;gap:8px">
-            <div><span style="font-weight:500">${c.name}</span> <span style="color:#888;font-size:11px">${c.head}</span></div>
-            <div style="display:flex;align-items:center;gap:8px">
-              ${recs.length?`<span style="font-size:12px;color:${cRate>=70?'#1D9E75':cRate>=50?'#ba7517':'#a32d2d'};font-weight:500">${cRate}%</span>`:''}
-              ${getWaNumber(c.head)?`<a href="https://wa.me/${getWaNumber(c.head)}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600;text-decoration:none">WhatsApp</a>`:''}
-            </div>
-          </div>`;
-        }).join('')}
+
+      <!-- Cluster performance -->
+      ${assignedClusters.length?`<div style="padding:10px 14px;border-bottom:0.5px solid #e0e0d8">
+        <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Cluster performance</div>
+        ${clusterPerfRows}
       </div>`:''}
-      ${specialMembers.length?`
-      <div style="padding:10px 14px">
-        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Special attention</div>
-        ${specialMembers.map(m=>{
-          const c2=calcMember(m.n);
-          return`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid #f0efe8;font-size:13px;gap:8px">
-            <div style="cursor:pointer" onclick="openProfile('${m.n.replace(/'/g,"\\'")}')">
-              <div style="font-weight:500">${m.n}</div>
-              <div style="font-size:11px;color:#888">${m.gc}${c2.curStreak>=2?` · <span style="color:#a32d2d">${c2.curStreak} missed in a row</span>`:''}</div>
-            </div>
-            <div style="display:flex;gap:6px;align-items:center">
-              ${getWaNumber(m.n)?`<a href="https://wa.me/${getWaNumber(m.n)}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600;text-decoration:none">WhatsApp</a>`:''}
-            </div>
-          </div>`;
-        }).join('')}
+
+      <!-- Flagged members across this supercluster -->
+      ${(()=>{
+        const today2=new Date().toISOString().split('T')[0];
+        const allW=getClusterWeeks().filter(w=>w.key<=today2);
+        const allSCMembers=[...clusterHeads.map(h=>MEMBERS.find(m=>m.n===h.name)).filter(Boolean),...specialMembers.map(x=>MEMBERS.find(m=>m.n===x.name)).filter(Boolean),...assignedClusters.flatMap(c=>getMembersInCluster(c.id))];
+        const uniqueSC=[...new Map(allSCMembers.map(m=>[m.n,m])).values()];
+        const flagged=uniqueSC.filter(m=>{
+          const s=calcMember(m.n).curStreak;
+          const wb=allW.slice(-3).map(w=>(wellbeing[w.key]||{})[m.n]||'');
+          return s>=2||wb.filter(v=>v==='red'||v==='amber').length>=2;
+        });
+        if(!flagged.length)return'';
+        return`<div style="padding:10px 14px;border-bottom:0.5px solid #e0e0d8;background:#fafaf8">
+          <div style="font-size:10px;font-weight:700;color:#791f1f;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">⚠ Needs attention across this supercluster</div>
+          ${flagged.map(m=>{const s=calcMember(m.n).curStreak;const wb=allW.slice(-3).map(w=>(wellbeing[w.key]||{})[m.n]||'');const isRed=s>=3||wb.filter(v=>v==='red').length>=2;return`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid #f0efe8;gap:8px;font-size:13px">
+            <div style="cursor:pointer" onclick="openProfile('${m.n.replace(/'/g,"\'")}')"><span style="font-weight:500">${m.n}</span> <span style="font-size:11px;color:${isRed?'#a32d2d':'#ba7517'};font-weight:500">${isRed?'🔴':'🟡'} ${s>=2?s+' missed':wb.filter(v=>v==='red'||v==='amber').length+'wk flagged'}</span></div>
+            ${getWaNumber(m.n)?`<a href="https://wa.me/${getWaNumber(m.n)}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600;text-decoration:none">WA</a>`:''}
+          </div>`;}).join('')}
+        </div>`;
+      })()}
+
+      <!-- Pastoral tracking section -->
+      ${trackable.length?`<div>
+        <div style="padding:8px 12px;border-bottom:0.5px solid #e0e0d8;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em">
+          ${weekKey?`Pastoral check-ins — week of ${allWeeks.find(w=>w.key===weekKey)?.date||weekKey}`:'Select a week above to log check-ins'}
+        </div>
+        ${trackableRows}
       </div>`:''}
     </div>`;
   }).join('');
+}
+
+// ── SUPERCLUSTER PASTORAL SETTERS ─────────────────────────────────────────────
+function setScCheckIn(weekKey,name,val){
+  if(!scCheckIns[weekKey])scCheckIns[weekKey]={};
+  if(val)scCheckIns[weekKey][name]=val;else delete scCheckIns[weekKey][name];
+  saveAll();
+}
+function setScWellbeing(weekKey,name,val){
+  if(!scWellbeing[weekKey])scWellbeing[weekKey]={};
+  if(val)scWellbeing[weekKey][name]=val;else delete scWellbeing[weekKey][name];
+  saveAll();renderSuperclusters();
+}
+function setScCareNote(weekKey,name,val){
+  if(!scCareNotes[weekKey])scCareNotes[weekKey]={};
+  if(val.trim())scCareNotes[weekKey][name]=val.trim();else delete scCareNotes[weekKey][name];
+  saveAll();
+}
+function setScAbout(name,val){
+  if(val.trim())scAbout[name]=val.trim();else delete scAbout[name];
+  saveAll();
 }
 
 function openSuperclusterModal(id){
@@ -5731,24 +6321,544 @@ function deleteSupercluster(){
   closeSuperclusterModal();saveAll();renderSuperclusters();showToast('Supercluster deleted');
 }
 
+// ── CARE / EXCEPTION VIEW ─────────────────────────────────────────────────────
+function renderCareView(){
+  const el=document.getElementById('careContent');
+  if(!el)return;
+  const today=new Date().toISOString().split('T')[0];
+  const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
+
+  // Wellbeing alerts
+  const urgent=[];
+  const needsSupport=[];
+  nonGuests.forEach(m=>{
+    const recentWeeks=allWeeks.slice(-6);
+    const wbHistory=recentWeeks.map(w=>(wellbeing[w.key]||{})[m.n]||'');
+    // Red streak
+    let redStreak=0;
+    for(let i=wbHistory.length-1;i>=0;i--){if(wbHistory[i]==='red')redStreak++;else break;}
+    // Amber streak
+    let amberStreak=0;
+    for(let i=wbHistory.length-1;i>=0;i--){if(wbHistory[i]==='amber'||wbHistory[i]==='red')amberStreak++;else break;}
+    const streak=calcMember(m.n).curStreak;
+    const clusterName=clusterMembers[m.n]?clusters.find(c=>c.id===clusterMembers[m.n].clusterId)?.name||'No cluster':'No cluster';
+    const head=clusterMembers[m.n]?clusters.find(c=>c.id===clusterMembers[m.n].clusterId)?.head||'':'';
+
+    if(redStreak>=2||streak>=3){
+      urgent.push({m,streak,redStreak,amberStreak,clusterName,head,reason:redStreak>=2?`🔴 ${redStreak} weeks urgent`:streak>=3?`Absent ${streak} in a row`:''});
+    } else if(amberStreak>=2||streak===2){
+      needsSupport.push({m,streak,redStreak,amberStreak,clusterName,head,reason:amberStreak>=2?`🟡 ${amberStreak} weeks needs support`:streak===2?`Absent ${streak} in a row`:''});
+    }
+  });
+
+  // Cluster head check-in status this week
+  const thisWeek=allWeeks.length?allWeeks[allWeeks.length-1]:null;
+  const clusterStatus=clusters.map(c=>{
+    const members=getMembersInCluster(c.id).filter(m=>(clusterMembers[m.n]?.joinDate||'')<=(thisWeek?.key||''));
+    const done=thisWeek?members.filter(m=>(checkIns[thisWeek.key]||{})[m.n]==='yes').length:0;
+    const submitted=pendingClusterSubmissions.some(s=>s.clusterId===c.id&&s.weekKey===thisWeek?.key);
+    return{c,done,total:members.length,submitted,pct:members.length?Math.round(done/members.length*100):0};
+  });
+  const behindClusters=clusterStatus.filter(x=>x.total>0&&x.pct<100);
+
+  // Update badge
+  const total=urgent.length+needsSupport.length;
+  const badge=document.getElementById('careBadge');
+  if(badge){badge.textContent=total;badge.style.display=total?'inline':'none';}
+
+  const makeWaBtn=(m,msg)=>{
+    const wa=getWaNumber(m.n);
+    if(!wa)return'';
+    return`<a href="https://wa.me/${wa}?text=${encodeURIComponent(msg||`Hey ${m.n.split(' ')[0]}, just checking in 🙏`)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;text-decoration:none;flex-shrink:0">📱 WA</a>`;
+  };
+
+  const personRow=(item,urgentStyle)=>{
+    const {m,streak,clusterName,head,reason}=item;
+    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid ${urgentStyle?'rgba(0,0,0,.07)':'#f0efe8'};gap:8px">
+      <div style="min-width:0;cursor:pointer;flex:1" onclick="openProfile('${m.n.replace(/'/g,"\\'")}')">
+        <div style="font-size:13px;font-weight:600;color:${urgentStyle?'#633806':'#1a1a1a'}">${m.n}</div>
+        <div style="font-size:11px;color:#888;margin-top:1px">${clusterName}${head?' · '+head.split(' ')[0]:''} · ${reason}</div>
+      </div>
+      ${makeWaBtn(m)}
+    </div>`;
+  };
+
+  el.innerHTML=`
+    ${urgent.length?`
+    <div style="background:#fcebeb;border:0.5px solid #f09595;border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#791f1f;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🔴 Urgent attention (${urgent.length})</div>
+      ${urgent.map(item=>personRow(item,true)).join('')}
+    </div>`:''}
+
+    ${needsSupport.length?`
+    <div style="background:#faeeda;border:0.5px solid #ef9f27;border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🟡 Needs support (${needsSupport.length})</div>
+      ${needsSupport.map(item=>personRow(item,false)).join('')}
+    </div>`:''}
+
+    ${pendingClusterSubmissions.length?`
+    <div style="background:#e6f1fb;border:0.5px solid #b3cfee;border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#0c447c;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">📨 Pending submissions (${pendingClusterSubmissions.length})</div>
+      ${pendingClusterSubmissions.map(s=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(0,0,0,.07);font-size:13px;gap:8px">
+        <div><div style="font-weight:500">${s.clusterName}</div><div style="font-size:11px;color:#888">${s.submittedBy} · ${new Date(s.submittedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div></div>
+        <button class="btn btn-primary btn-sm" onclick="openPendingModal()">Review</button>
+      </div>`).join('')}
+    </div>`:''}
+
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🙏 Active prayer requests (${prayerRequests.filter(p=>p.status==='active'&&!p.anonymous).length})</div>
+      ${prayerRequests.filter(p=>p.status==='active'&&!p.anonymous).length?
+        prayerRequests.filter(p=>p.status==='active'&&!p.anonymous).map(p=>`<div style="padding:8px 0;border-bottom:0.5px solid #f0efe8;font-size:13px">
+          <div style="font-weight:500">${p.memberId||'Anonymous'}</div>
+          <div style="font-size:11px;color:#888">${p.clusterName||''} · ${p.date}</div>
+        </div>`).join(''):
+        '<div style="font-size:13px;color:#888">No active prayer requests</div>'}
+    </div>
+
+    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">📊 Cluster check-in status — ${thisWeek?thisWeek.date:'No sessions yet'}</div>
+      ${clusterStatus.map(({c,done,total,pct,submitted})=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8;gap:8px">
+        <div>
+          <div style="font-size:13px;font-weight:500">${c.name}</div>
+          <div style="font-size:11px;color:#888">${c.head.split(' ')[0]} · ${done}/${total} checked in</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          ${submitted?'<span style="font-size:11px;background:#e1f5ee;color:#085041;border-radius:20px;padding:2px 7px;font-weight:600">Submitted ✓</span>':''}
+          <span style="font-size:13px;font-weight:700;color:${pct>=100?'#1D9E75':pct>=50?'#EF9F27':'#E24B4A'}">${total?pct+'%':'—'}</span>
+        </div>
+      </div>`).join('')}
+    </div>
+
+    ${!urgent.length&&!needsSupport.length?'<div style="text-align:center;padding:2rem;color:#3b6d11;font-size:14px;background:#f2fbf7;border-radius:12px">✓ No one needs urgent attention right now</div>':''}
+  `;
+}
+
+// ── WELLBEING DOT TIMELINE IN PROFILE ─────────────────────────────────────────
+function buildWellbeingTimeline(memberName){
+  const today=new Date().toISOString().split('T')[0];
+  const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
+  const joinDate=firstSession[memberName]||'2026-01-01';
+  const relevantWeeks=allWeeks.filter(w=>w.key>=joinDate.slice(0,10));
+  if(!relevantWeeks.length)return'';
+
+  const dots=relevantWeeks.map(w=>{
+    const v=(wellbeing[w.key]||{})[memberName]||'';
+    const bg=v==='red'?'#E24B4A':v==='amber'?'#EF9F27':v==='green'?'#1D9E75':'#e0e0d8';
+    const label=v==='red'?'Needs urgent support':v==='amber'?'Needs support':v==='green'?'Doing well':'No data';
+    return`<div style="width:12px;height:12px;border-radius:50%;background:${bg};flex-shrink:0;cursor:help" title="${w.date}: ${label}"></div>`;
+  }).join('');
+
+  // Also build a text summary of recent trend
+  const recent=relevantWeeks.slice(-4).map(w=>(wellbeing[w.key]||{})[memberName]||'');
+  const hasData=recent.some(v=>v);
+  if(!hasData)return'';
+
+  return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px;margin-bottom:10px">
+    <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Wellbeing timeline</div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${dots}</div>
+    <div style="font-size:10px;color:#aaa;display:flex;justify-content:space-between;margin-top:4px">
+      <span>${relevantWeeks[0]?.date||''}</span>
+      <span>← oldest · newest →</span>
+      <span>${relevantWeeks[relevantWeeks.length-1]?.date||''}</span>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px;font-size:11px;color:#888">
+      <span style="display:flex;align-items:center;gap:3px"><span style="width:9px;height:9px;border-radius:50%;background:#1D9E75;display:inline-block"></span> Doing well</span>
+      <span style="display:flex;align-items:center;gap:3px"><span style="width:9px;height:9px;border-radius:50%;background:#EF9F27;display:inline-block"></span> Needs support</span>
+      <span style="display:flex;align-items:center;gap:3px"><span style="width:9px;height:9px;border-radius:50%;background:#E24B4A;display:inline-block"></span> Urgent</span>
+    </div>
+  </div>`;
+}
+
+// ── CLUSTER HEAD REPORT (generated page) ──────────────────────────────────────
+function generateClusterHeadReport(clusterId){
+  const c=clusters.find(x=>x.id===clusterId);if(!c)return;
+  const members=getMembersInCluster(c.id).sort(byFirstName);
+  const recs=getClusterSessions();
+  const today=new Date().toISOString().split('T')[0];
+  const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
+  const lastSess=recs.length?recs[recs.length-1]:null;
+  const nextSess=SESSIONS_DEF.find(s=>s.key>today);
+
+  // Attendance for last 5 sessions per member
+  const last5=recs.slice(-5);
+
+  // Cluster attendance trend (last 5 sessions)
+  const trendData=last5.map(s=>({
+    key:s.key,date:s.date,
+    count:members.filter(m=>attendance[s.key]&&attendance[s.key][m.n]==='present').length
+  }));
+  const lastCount=trendData.length?trendData[trendData.length-1].count:0;
+  const prevCount=trendData.length>=2?trendData[trendData.length-2].count:0;
+  const delta=lastCount-prevCount;
+
+  // Sparkline SVG
+  const counts=trendData.map(d=>d.count);
+  const minC=Math.min(...counts,0);
+  const maxC=Math.max(...counts,1);
+  const range=maxC-minC||1;
+  const svgW=90,svgH=48;
+  const pts=counts.map((v,i)=>{
+    const x=i/(counts.length-1||1)*svgW;
+    const y=svgH-((v-minC)/range)*svgH;
+    return`${x},${y}`;
+  }).join(' ');
+  const areaPath=counts.map((v,i)=>{
+    const x=i/(counts.length-1||1)*svgW;
+    const y=svgH-((v-minC)/range)*svgH;
+    return(i===0?'M':'L')+x+','+y;
+  }).join(' ')+` L${svgW},${svgH} L0,${svgH} Z`;
+
+  const dotCircles=counts.map((v,i)=>{
+    const x=i/(counts.length-1||1)*svgW;
+    const y=svgH-((v-minC)/range)*svgH;
+    const isLast=i===counts.length-1;
+    const prev=i>0?counts[i-1]:v;
+    const col=isLast?'#fff':v>=prev?'#4ade80':'#f87171';
+    const stroke=isLast?'#4ade80':'none';
+    return`<circle cx="${x}" cy="${y}" r="${isLast?4:2.5}" fill="${col}" stroke="${stroke}" stroke-width="${isLast?2:0}"/>`;
+  }).join('');
+
+  const trendText=counts.map((v,i)=>{
+    const prev=i>0?counts[i-1]:v;
+    const col=i===0?'rgba(255,255,255,.4)':v>prev?'#4ade80':v<prev?'#f87171':'rgba(255,255,255,.6)';
+    const bold=i===counts.length-1?'font-weight:700;font-size:15px;color:#fff;':'';
+    return`<span style="color:${col};${bold}">${v}</span>`;
+  });
+
+  // Build member rows
+  const makeDots=(m,type)=>{
+    if(type==='att'){
+      return recs.map(s=>{
+        const join=clusterMembers[m.n]?.joinDate||'2026-09-09';
+        if(s.key<join)return`<div style="width:10px;height:10px;border-radius:2px;background:#e0e0d8;flex-shrink:0" title="${s.date}: Before joining"></div>`;
+        const st=attendance[s.key]?attendance[s.key][m.n]:'';
+        const bg=st==='present'?'#1D9E75':'#E24B4A';
+        return`<div style="width:10px;height:10px;border-radius:2px;background:${bg};flex-shrink:0" title="${s.date}: ${st||'Unknown'}"></div>`;
+      }).join('');
+    } else {
+      return allWeeks.map(w=>{
+        const v=(wellbeing[w.key]||{})[m.n]||'';
+        const bg=v==='red'?'#E24B4A':v==='amber'?'#EF9F27':v==='green'?'#1D9E75':'#e0e0d8';
+        return`<div style="width:9px;height:9px;border-radius:50%;background:${bg};flex-shrink:0" title="${w.date}: ${v||'No data'}"></div>`;
+      }).join('');
+    }
+  };
+
+  const memberRows=members.map(m=>{
+    const c2=calcMember(m.n);
+    const streak=c2.curStreak;
+    const isAbsent=lastSess&&attendance[lastSess.key]&&attendance[lastSess.key][m.n]!=='present';
+    const wbRecent=allWeeks.slice(-3).map(w=>(wellbeing[w.key]||{})[m.n]||'');
+    const wbFlag=wbRecent.filter(v=>v==='red'||v==='amber').length>=2;
+    const wa=getWaNumber(m.n);
+
+    // Priority tag
+    let tag='',tagStyle='',waBg='#1a1a1a',waMsg=`Hey ${m.n.split(' ')[0]}, just checking in from Gidi GC 🙏`;
+    if(streak>=3){
+      tag='🔴 High priority';tagStyle='background:#fcebeb;color:#791f1f;';waBg='#25D366';
+      waMsg=`Hey ${m.n.split(' ')[0]}, we've been missing you at Gidi GC! Just checking in to see how you're doing 🙏`;
+    } else if(streak>=2||wbFlag){
+      tag=streak>=2?'🟡 Follow up':'🟡 Check in';tagStyle='background:#faeeda;color:#633806;';waBg='#25D366';
+      waMsg=`Hey ${m.n.split(' ')[0]}, missed you at GC${streak>=2?' again':''} — hope all is well! 🙏`;
+    } else if(isAbsent){
+      tag='Absent';tagStyle='background:#f5f5f3;color:#888;';waBg='#25D366';
+      waMsg=`Hey ${m.n.split(' ')[0]}, missed you at GC this week! Hope all is well 🙏`;
+    }
+
+    const joinDate=clusterMembers[m.n]?.joinDate||'';
+    const joinNote=joinDate&&joinDate>'2026-09-08'?`<div style="font-size:10px;color:#aaa;margin-top:2px">Joined ${joinDate}</div>`:'';
+
+    return`<div style="padding:12px 0;border-bottom:0.5px solid #f0efe8">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <div style="min-width:0">
+          <div style="font-size:14px;font-weight:600;display:flex;align-items:center;flex-wrap:wrap;gap:5px">
+            ${m.n}
+            ${tag?`<span style="font-size:10px;font-weight:700;border-radius:20px;padding:2px 7px;${tagStyle}">${tag}</span>`:''}
+          </div>
+          <div style="font-size:11px;color:#888;margin-top:2px">${isAbsent?'Absent this session':'Present ✓'} · ${c2.rate}% overall</div>
+          ${joinNote}
+        </div>
+        ${wa?`<a href="https://wa.me/${wa}?text=${encodeURIComponent(waMsg)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:${waBg};color:#fff;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:600;text-decoration:none;flex-shrink:0">📱 WA</a>`:''}
+      </div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:3px">${makeDots(m,'att')}</div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap">${makeDots(m,'wb')}</div>
+    </div>`;
+  });
+
+  // Sort: high priority first, then follow-up, then others
+  const sortedMembers=[...members].sort((a,b)=>{
+    const priority=m=>{
+      const s=calcMember(m.n).curStreak;
+      const wbF=allWeeks.slice(-3).map(w=>(wellbeing[w.key]||{})[m.n]||'').filter(v=>v==='red'||v==='amber').length>=2;
+      if(s>=3)return 0;
+      if(s>=2||wbF)return 1;
+      const isAbs=lastSess&&attendance[lastSess.key]&&attendance[lastSess.key][m.n]!=='present';
+      if(isAbs)return 2;
+      return 3;
+    };
+    return priority(a)-priority(b)||byFirstName(a,b);
+  });
+
+  const sortedRows=sortedMembers.map(m=>memberRows[members.indexOf(m)]).join('');
+
+  const presentCount=lastSess?members.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length:0;
+  const absentCount=members.length-presentCount;
+  const clusterRate=members.length?Math.round(presentCount/members.length*100):0;
+
+  const htmlDoc=`<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>${c.name} — ${lastSess?lastSess.date:''}</title>
+<link href="https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Kumbh Sans',-apple-system,sans-serif;background:#f0f0eb;color:#1a1a1a;padding:16px 14px 40px;max-width:480px;margin:0 auto}
+.header{background:linear-gradient(135deg,#1a1a1a,#2d2d2d);color:#fff;border-radius:14px;padding:20px;margin-bottom:12px}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;border:0.5px solid #e0e0d8}
+.legend{display:flex;gap:10px;margin-bottom:10px;font-size:10px;color:#888;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:3px}
+.meta{display:flex;gap:0;margin-top:14px;padding-top:14px;border-top:0.5px solid rgba(255,255,255,.1)}
+.meta-item{text-align:center;flex:1}
+.meta-val{font-size:18px;font-weight:700;color:#fff}
+.meta-label{font-size:10px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.next{background:#1a1a1a;color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+footer{text-align:center;font-size:12px;color:#aaa;padding-top:8px}
+</style></head><body>
+
+<div class="header">
+  <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px">🏘 ${c.name} · ${lastSess?lastSess.date:''}</div>
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+    <div>
+      <div style="font-size:34px;font-weight:700;color:${delta>=0?'#4ade80':'#f87171'};line-height:1">${lastCount}</div>
+      <div style="font-size:13px;color:${delta>=0?'#4ade80':'#f87171'};font-weight:600;margin-top:4px">${delta>=0?'↑':'↓'} ${delta>=0?'+':''}${delta} from last session</div>
+      <div style="margin-top:10px;font-size:13px;color:rgba(255,255,255,.4);display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+        ${trendText.map((t,i)=>`${t}${i<trendText.length-1?'<span style="color:rgba(255,255,255,.2);margin:0 3px">→</span>':''}`).join('')}
+      </div>
+    </div>
+    <svg width="90" height="48" viewBox="0 0 90 48" style="flex-shrink:0">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#4ade80" stop-opacity=".2"/>
+        <stop offset="100%" stop-color="#4ade80" stop-opacity="0"/>
+      </linearGradient></defs>
+      <path d="${areaPath}" fill="url(#g)"/>
+      <polyline points="${pts}" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dotCircles}
+    </svg>
+  </div>
+  <div class="meta">
+    <div class="meta-item"><div class="meta-val">${members.length}</div><div class="meta-label">Members</div></div>
+    <div class="meta-item"><div class="meta-val" style="color:#4ade80">${presentCount}</div><div class="meta-label">Present</div></div>
+    <div class="meta-item"><div class="meta-val" style="color:#f87171">${absentCount}</div><div class="meta-label">Absent</div></div>
+    <div class="meta-item"><div class="meta-val">${clusterRate}%</div><div class="meta-label">Rate</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Reach out to everyone this week</div>
+  <div class="legend">
+    <div class="legend-item"><div style="width:10px;height:10px;border-radius:2px;background:#1D9E75"></div> Present</div>
+    <div class="legend-item"><div style="width:10px;height:10px;border-radius:2px;background:#E24B4A"></div> Absent</div>
+    <div class="legend-item"><div style="width:10px;height:10px;border-radius:2px;background:#e0e0d8"></div> Before joining</div>
+    <div class="legend-item"><div style="width:9px;height:9px;border-radius:50%;background:#1D9E75"></div> Doing well</div>
+    <div class="legend-item"><div style="width:9px;height:9px;border-radius:50%;background:#EF9F27"></div> Needs support</div>
+    <div class="legend-item"><div style="width:9px;height:9px;border-radius:50%;background:#E24B4A"></div> Urgent</div>
+  </div>
+  ${sortedRows}
+</div>
+
+${nextSess?`<div class="next">
+  <div>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.4);margin-bottom:4px">Next session</div>
+    <div style="font-size:16px;font-weight:600">Wednesday, ${nextSess.date}</div>
+  </div>
+  <div style="font-size:28px">📅</div>
+</div>`:''}
+
+<footer>${c.name} · Gidi GC · ${lastSess?lastSess.date:''}</footer>
+</body></html>`;
+
+  const blob=new Blob([htmlDoc],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  window.open(url,'_blank');
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
+// ── MEMBER REPORT (generated page) ────────────────────────────────────────────
+function generateMemberReport(){
+  const recs=getRecordedSessions();
+  const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
+  const lastSess=recs.length?recs[recs.length-1]:null;
+  const nextSess=SESSIONS_DEF.find(s=>s.key>new Date().toISOString().split('T')[0]);
+  if(!lastSess){showToast('No sessions recorded yet',2500);return;}
+
+  // Last 5 sessions trend
+  const last5=recs.slice(-5);
+  const counts=last5.map(s=>nonGuests.filter(m=>attendance[s.key]&&attendance[s.key][m.n]==='present').length);
+  const lastCount=counts[counts.length-1]||0;
+  const prevCount=counts.length>=2?counts[counts.length-2]:0;
+  const delta=lastCount-prevCount;
+
+  // Sparkline
+  const minC=Math.min(...counts,0),maxC=Math.max(...counts,1),range=maxC-minC||1;
+  const svgW=90,svgH=48;
+  const pts=counts.map((v,i)=>`${i/(counts.length-1||1)*svgW},${svgH-((v-minC)/range)*svgH}`).join(' ');
+  const areaPath=counts.map((v,i)=>(i===0?'M':'L')+`${i/(counts.length-1||1)*svgW},${svgH-((v-minC)/range)*svgH}`).join(' ')+` L${svgW},${svgH} L0,${svgH} Z`;
+  const dotCircles=counts.map((v,i)=>{
+    const x=i/(counts.length-1||1)*svgW;
+    const y=svgH-((v-minC)/range)*svgH;
+    const isLast=i===counts.length-1;
+    const prev=i>0?counts[i-1]:v;
+    return`<circle cx="${x}" cy="${y}" r="${isLast?4:2.5}" fill="${isLast?'#fff':v>=prev?'#4ade80':'#f87171'}" stroke="${isLast?'#4ade80':'none'}" stroke-width="${isLast?2:0}"/>`;
+  }).join('');
+  const trendSpans=counts.map((v,i)=>{
+    const prev=i>0?counts[i-1]:v;
+    const col=i===0?'rgba(255,255,255,.4)':v>prev?'#4ade80':v<prev?'#f87171':'rgba(255,255,255,.6)';
+    const bold=i===counts.length-1?'font-weight:700;font-size:15px;color:#fff;':'';
+    return`<span style="color:${col};${bold}">${v}</span>${i<counts.length-1?'<span style="color:rgba(255,255,255,.2);margin:0 3px">→</span>':''}`;
+  }).join('');
+
+  // Absent members
+  const lastAbsent=nonGuests.filter(m=>{
+    if(firstSession[m.n]&&firstSession[m.n]>lastSess.key)return false;
+    return attendance[lastSess.key]?attendance[lastSess.key][m.n]!=='present':true;
+  }).sort(byFirstName);
+
+  // Follow-up (2+ sessions)
+  const followUp=nonGuests.map(m=>({...m,...calcMember(m.n)})).filter(m=>m.curStreak>=2).sort((a,b)=>b.curStreak-a.curStreak);
+
+  // Birthdays next 14 days
+  const bdaySoon=[];
+  const today=new Date();
+  const BMOS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  MEMBERS.forEach(m=>{
+    const b=birthdays[m.n];if(!b)return;
+    try{const [d,mo]=b.split('/').map(Number);let bd=new Date(today.getFullYear(),mo-1,d);if(bd<today)bd=new Date(today.getFullYear()+1,mo-1,d);const diff=Math.round((bd-today)/86400000);if(diff<=14)bdaySoon.push({m,diff,label:`${d} ${BMOS[mo-1]}`});}catch(e){}
+  });
+  bdaySoon.sort((a,b)=>a.diff-b.diff);
+
+  // Public prayer requests
+  const publicPrayers=prayerRequests.filter(p=>p.status==='active'&&!p.anonymous);
+
+  const makeWaBtn=(m,msg,style='')=>{
+    const wa=getWaNumber(m.n);
+    if(!wa)return'<span style="font-size:11px;color:#aaa;flex-shrink:0">No number</span>';
+    return`<a href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:600;text-decoration:none;flex-shrink:0;${style}">📱 WA</a>`;
+  };
+
+  const htmlDoc=`<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Gidi GC — ${lastSess.date}</title>
+<link href="https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Kumbh Sans',-apple-system,sans-serif;background:#f0f0eb;color:#1a1a1a;padding:16px 14px 40px;max-width:480px;margin:0 auto}
+.header{background:linear-gradient(135deg,#1a1a1a,#2d2d2d);color:#fff;border-radius:14px;padding:20px;margin-bottom:12px}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;border:0.5px solid #e0e0d8}
+.card-urgent{background:#faeeda;border-color:#ef9f27}
+.card-bday{background:#fff;border-color:#e0e0d8}
+.card-prayer{background:#f0f0ff;border-color:#c5c5ee}
+.card-next{background:#1a1a1a;color:#fff;border-color:transparent;display:flex;align-items:center;justify-content:space-between}
+.sec{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+.row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid #f0efe8;gap:10px}
+.row:last-child{border-bottom:none;padding-bottom:0}
+.row-urgent{border-bottom-color:rgba(0,0,0,.07)}
+footer{text-align:center;font-size:12px;color:#aaa;padding-top:8px}
+</style></head><body>
+
+<div class="header">
+  <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px">📋 Gidi GC · ${lastSess.date}</div>
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+    <div>
+      <div style="font-size:34px;font-weight:700;color:${delta>=0?'#4ade80':'#f87171'};line-height:1">${lastCount}</div>
+      <div style="font-size:13px;color:${delta>=0?'#4ade80':'#f87171'};font-weight:600;margin-top:4px">${delta>=0?'↑ +':'↓ '}${delta} from last session</div>
+      <div style="margin-top:10px;font-size:13px;color:rgba(255,255,255,.4);display:flex;align-items:center;gap:5px;flex-wrap:wrap">${trendSpans}</div>
+    </div>
+    <svg width="90" height="48" viewBox="0 0 90 48" style="flex-shrink:0">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#4ade80" stop-opacity=".2"/>
+        <stop offset="100%" stop-color="#4ade80" stop-opacity="0"/>
+      </linearGradient></defs>
+      <path d="${areaPath}" fill="url(#g)"/>
+      <polyline points="${pts}" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dotCircles}
+    </svg>
+  </div>
+  <div style="font-size:12px;color:rgba(255,255,255,.4);margin-top:10px">people gathered · great to see everyone 🙌</div>
+</div>
+
+<div class="card">
+  <div class="sec">💛 We missed you this week (${lastAbsent.length})</div>
+  ${lastAbsent.map(m=>{
+    const streak=calcMember(m.n).curStreak;
+    const isUrgent=streak>=3;
+    const msg=isUrgent?`Hey ${m.n.split(' ')[0]}, we've been missing you at Gidi GC! Just checking in 🙏`:`Hey ${m.n.split(' ')[0]}, missed you at GC this week! Hope all is well 🙏`;
+    return`<div class="row">
+      <div>
+        <div style="font-size:14px;font-weight:500">${m.n}${isUrgent?' <span style="font-size:10px;background:#fcebeb;color:#791f1f;border-radius:20px;padding:2px 6px;font-weight:700">🔴 HIGH PRIORITY</span>':''}</div>
+        ${streak>=2?`<div style="font-size:11px;color:#888;margin-top:2px">${streak} sessions away</div>`:''}
+      </div>
+      ${makeWaBtn(m,msg)}
+    </div>`;
+  }).join('')}
+</div>
+
+${bdaySoon.length?`<div class="card card-bday">
+  <div class="sec">🎂 Birthdays this week</div>
+  ${bdaySoon.map(({m,diff,label})=>`<div class="row">
+    <div>
+      <div style="font-size:14px;font-weight:500">${m.n}</div>
+      <div style="font-size:12px;color:#888;margin-top:2px">${diff===0?'Today! 🎂':diff===1?'Tomorrow':label+' · in '+diff+' days'}</div>
+    </div>
+    ${makeWaBtn(m,`Happy Birthday ${m.n.split(' ')[0]}! 🎂🎉 Wishing you a wonderful day!`)}
+  </div>`).join('')}
+</div>`:''}
+
+${publicPrayers.length?`<div class="card card-prayer">
+  <div class="sec" style="color:#3c3489">🙏 Pray for these people this week</div>
+  <div style="font-size:14px;color:#3c3489;font-weight:500;line-height:1.9">${publicPrayers.map(p=>p.memberId||'Someone').join(' · ')}</div>
+  <div style="font-size:12px;color:#888;margin-top:8px;font-style:italic">They've shared something they'd appreciate prayer for. Reach out if you know them 💛</div>
+</div>`:''}
+
+${nextSess?`<div class="card card-next">
+  <div>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.4);margin-bottom:4px">Next session</div>
+    <div style="font-size:16px;font-weight:600">Wednesday, ${nextSess.date}</div>
+  </div>
+  <div style="font-size:28px">📅</div>
+</div>`:''}
+
+<footer>Gidi GC · ${lastSess.date}</footer>
+</body></html>`;
+
+  const blob=new Blob([htmlDoc],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  window.open(url,'_blank');
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 initSeedData();
 loadSaved();
 applyPhoneNumbers();
 recalcAll();
 applyMode();
+// Check magic link immediately — before anything else
+checkMagicLink();
 setSyncStatus(isOnline()?'amber':'red',isOnline()?'Loading...':'Offline');
 if(!isOnline())showOfflineBanner(true);
 // Supabase loads silently in background
 setTimeout(async()=>{
   try{
     const ok=await loadFromSupabase();
-    if(ok){recalcAll();setSyncStatus('green',`Synced ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`);showToast('Up to date ✓',2000);}
-    else setSyncStatus('grey','');
+    if(ok){
+      recalcAll();
+      setSyncStatus('green',`Synced ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`);
+      showToast('Up to date ✓',2000);
+      // Re-check magic link after data loads in case clusters weren't ready
+      if(new URLSearchParams(window.location.search).get('cluster'))checkMagicLink();
+    } else setSyncStatus('grey','');
   }catch(e){console.error('Boot sync error:',e);setSyncStatus('red','Sync failed');}
 },500);
-// Check for magic link (cluster leader direct access)
-setTimeout(checkMagicLink,1200);
 updatePendingBadge();
 </script>
 </body>
