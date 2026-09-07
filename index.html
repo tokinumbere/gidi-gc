@@ -6998,8 +6998,12 @@ async function publishMemberReport(){
   btn.disabled=true;
 
   try{
-    // Generate the report HTML
+    // Build summary data fresh
     _buildSummaryData();
+    if(!_sd.lastSess){
+      throw new Error('No sessions recorded yet. Record attendance first.');
+    }
+    // Generate the report HTML
     const reportHtml=_buildMemberReportHtml();
 
     // Get current file SHA (needed for update)
@@ -7038,6 +7042,7 @@ async function publishMemberReport(){
 
 function _buildMemberReportHtml(){
   const {lastSess,lastPresent,lastAbsent,lastRate,delta,bdaySoon,nonGuests}=_sd;
+  if(!lastSess||!nonGuests)return'<html><body>No session data available.</body></html>';
   const recs=getRecordedSessions();
   const nextSess=SESSIONS_DEF.find(s=>s.key>new Date().toISOString().split('T')[0]);
   const presentCount=lastPresent.filter(m=>m.gc!=='Guest'&&!m.frozen).length;
@@ -7096,7 +7101,7 @@ function _buildMemberReportHtml(){
 
 <div class="card">
   <div class="sec">💛 We missed you this week (${lastAbsent.length})</div>
-  ${lastAbsent.map(m=>{
+  ${lastAbsent.filter(m=>m&&m.n).map(m=>{
     const streak=calcMember(m.n).curStreak;const isUrgent=streak>=3;
     const msg=isUrgent?`Hey ${m.n.split(' ')[0]}, we've been missing you at Gidi GC! Just checking in 🙏`:`Hey ${m.n.split(' ')[0]}, missed you at GC this week! Hope all is well 🙏`;
     return`<div class="row"><div><div style="font-size:14px;font-weight:500">${m.n}${isUrgent?' <span style="font-size:10px;background:#fcebeb;color:#791f1f;border-radius:20px;padding:2px 6px;font-weight:700">🔴 HIGH PRIORITY</span>':''}</div>${streak>=2?`<div style="font-size:11px;color:#888;margin-top:2px">${streak} sessions away</div>`:''}</div>${makeWaBtn(m,msg)}</div>`;
