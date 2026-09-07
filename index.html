@@ -7037,10 +7037,11 @@ async function publishMemberReport(){
 
     if(pushRes.ok){
       btn.innerHTML='✓ Published!';
-      showToast('Report published ✓ — live at gidiatcity.com/report.html in ~60 seconds',5000);
-      // Copy link to clipboard
-      await navigator.clipboard.writeText('https://gidiatcity.com/report.html');
+      const reportUrl='https://gidiatcity.com/report.html';
+      showToast('Report published ✓ — live in ~60 seconds',4000);
       setTimeout(()=>{btn.innerHTML=origText;btn.disabled=false;},3000);
+      // Show the link prominently
+      alert('Report published! ✓\n\nShare this link with your members:\nhttps://gidiatcity.com/report.html\n\n(Live in about 60 seconds)');
     } else {
       const err=await pushRes.json();
       throw new Error(err.message||'Push failed');
