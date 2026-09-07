@@ -16,14 +16,15 @@
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Kumbh Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f0eb;color:#1a1a1a;font-size:14px;height:100vh;overflow:hidden}
+body{font-family:'Kumbh Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f0eb;color:#1a1a1a;font-size:14px;height:100%;overflow:hidden}
 h1{font-size:18px;font-weight:700;color:#1a1a1a;font-family:'Playfair Display',serif;letter-spacing:-.01em}
 
 /* ── SHELL LAYOUT ── */
-.shell{display:flex;height:100vh;overflow:hidden}
+html{height:100%}
+.shell{display:flex;height:100vh;height:100dvh;overflow:hidden}
 
 /* ── SIDEBAR ── */
-.sidebar{width:220px;flex-shrink:0;background:#1a1a1a;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.sidebar{width:220px;flex-shrink:0;background:#1a1a1a;display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
 .sidebar-brand{padding:20px 16px 16px;border-bottom:1px solid rgba(255,255,255,.1)}
 .sidebar-brand h1{color:#fff;font-size:16px}
 .sidebar-sub{font-size:11px;color:rgba(255,255,255,.45);margin-top:3px}
@@ -1353,10 +1354,11 @@ async function sbPost(table,rows){
 
 async function loadFromSupabase(){
   try{
-    const [mems,att,ar,bd,fs,cl,cm,ci,cr]=await Promise.all([
+    const [mems,att,ar,bd,fs,cl,cm,ci,cr,sc]=await Promise.all([
       sbGet('members'),sbGet('attendance'),sbGet('absence_reasons'),
       sbGet('birthdays'),sbGet('first_session'),sbGet('clusters'),
-      sbGet('cluster_members'),sbGet('check_ins'),sbGet('custom_reasons')
+      sbGet('cluster_members'),sbGet('check_ins'),sbGet('custom_reasons'),
+      sbGet('superclusters')
     ]);
     if(!mems.length&&!att.length)return false; // nothing in DB yet
     mems.forEach(row=>{let m=MEMBERS.find(x=>x.n===row.name);if(!m){m={n:row.name,gc:row.gc,gcOrig:row.gc_orig||row.gc,city:row.city||'Attendee',g:row.gender||'Female',phone:row.phone||'',email:row.email||''};MEMBERS.push(m);}else{m.gc=row.gc;m.gcOrig=row.gc_orig||row.gc;if(row.city)m.city=row.city;if(row.gender)m.g=row.gender;if(row.phone)m.phone=row.phone;if(row.email)m.email=row.email;}});
@@ -1368,6 +1370,7 @@ async function loadFromSupabase(){
     cm.forEach(row=>{clusterMembers[row.member_name]={clusterId:row.cluster_id,joinDate:row.join_date};});
     ci.forEach(row=>{if(!checkIns[row.week_key])checkIns[row.week_key]={};checkIns[row.week_key][row.member_name]=row.status;});
     cr.forEach(row=>{if(!REASONS.includes(row.reason))REASONS.push(row.reason);});
+    if(sc&&sc.length)superclusters.splice(0,superclusters.length,...sc.map(r=>({id:r.id,name:r.name||'',gcLeader:r.gc_leader||'',clusterIds:JSON.parse(r.cluster_ids||'[]'),specialMembers:JSON.parse(r.special_members||'[]')})));
     applyPhoneNumbers();
     return true;
   }catch(e){console.error('loadFromSupabase',e);return false;}
@@ -1413,6 +1416,7 @@ async function saveAll(){
     // Prayer requests
     if(prayerRequests.length)await sbPost('prayer_requests',prayerRequests.map(p=>({id:p.id,member_id:p.memberId||'',cluster_name:p.clusterName||'',request:p.request,anonymous:p.anonymous,date:p.date,status:p.status})));
     if(pendingClusterSubmissions.length)await sbPost('pending_submissions',pendingClusterSubmissions.map(s=>({id:s.id,cluster_id:s.clusterId,cluster_name:s.clusterName,submitted_by:s.submittedBy,week_key:s.weekKey,data:JSON.stringify(s.data),submitted_at:s.submittedAt})));
+    if(superclusters.length)await sbPost('superclusters',superclusters.map(s=>({id:s.id,name:s.name||'',gc_leader:s.gcLeader||'',cluster_ids:JSON.stringify(s.clusterIds||[]),special_members:JSON.stringify(s.specialMembers||[]),updated_at:new Date().toISOString()})));
     showToast('Saved \u2713',2000);
     const _t=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
     setSyncStatus('green',`Synced ${_t}`);
