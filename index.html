@@ -308,15 +308,18 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 
     <div class="nav-section">Attendance</div>
     <button class="nav-item" data-id="record" onclick="switchTab('record',this)"><span class="nav-icon">&#9989;</span>Record</button>
-    <button class="nav-item" data-id="absenteeism" onclick="switchTab('absenteeism',this)"><span class="nav-icon">&#128202;</span>Absenteeism</button>
+    <button class="nav-item" data-id="absenteeism" onclick="switchTab('absenteeism',this)"><span class="nav-icon">&#128202;</span>Follow-up</button>
     <button class="nav-item" data-id="trends" onclick="switchTab('trends',this)"><span class="nav-icon">&#128200;</span>Trends</button>
 
     <div class="nav-section">Groups</div>
     <button class="nav-item" data-id="clusters" onclick="switchTab('clusters',this)"><span class="nav-icon">&#127970;</span>Clusters</button>
     <button class="nav-item" data-id="superclusters" onclick="switchTab('superclusters',this)"><span class="nav-icon">&#11835;</span>Superclusters</button>
 
-    <div class="nav-section">Reports</div>
+    <div class="nav-section">Care</div>
+    <button class="nav-item" data-id="care" onclick="switchTab('care',this)"><span class="nav-icon">&#10084;</span>Exception view <span class="nav-badge" id="careBadge" style="display:none">0</span></button>
     <button class="nav-item" data-id="prayer" onclick="switchTab('prayer',this)"><span class="nav-icon">&#128591;</span>Prayer <span class="nav-badge" id="prayerBadge" style="display:none">0</span></button>
+
+    <div class="nav-section">Reports</div>
     <button class="nav-item" data-id="archive" onclick="switchTab('archive',this)"><span class="nav-icon">&#128190;</span>Archive</button>
 
     <div class="nav-section">Admin</div>
@@ -2117,37 +2120,51 @@ function renderGuests(){
   const frozenGuests=MEMBERS.filter(m=>m.gc==='Guest'&&m.frozen&&(!search||m.n.toLowerCase().includes(search))).sort(bySurname);
   const recs=getRecordedSessions();
   const body=document.getElementById('gBody');
-  body.innerHTML=guests.map(m=>{
+
+  const makeRow=(m,isFrozen)=>{
     const c=calcMember(m.n);
     const fsKey=firstSession[m.n];
     const fsDate=fsKey?recs.find(s=>s.key===fsKey)?.date.replace(' 2026',''):'';
     const nameEsc=m.n.replace(/'/g,"\\'");
-    const dots=recs.map(s=>{
-      const st=attendance[s.key]?attendance[s.key][m.n]:'unknown';
-      return`<div class="dot ${st==='present'?'dot-y':'dot-n'}" title="${s.date.replace(' 2026','')}"></div>`;
-    }).join('');
-    return`<tr>
-      <td style="font-weight:500;font-size:12px;cursor:pointer" onclick="openProfile('${nameEsc}')">${m.n}</td>
+    const wa=getWaNumber(m.n);
+    const waMsg=encodeURIComponent(`Hey ${m.n.split(' ')[0]}, great to have you at Gidi GC! 😊`);
+    return`<tr style="${isFrozen?'opacity:.5':''}">
+      <td style="font-weight:500;font-size:12px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="cursor:pointer" onclick="openProfile('${nameEsc}')">${m.n}</span>
+          ${isFrozen?'<span style="font-size:10px;background:#e8e8e8;color:#888;border-radius:20px;padding:1px 6px">❄ Frozen</span>':''}
+          ${wa?`<a href="https://wa.me/${wa}?text=${waMsg}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:600;text-decoration:none;flex-shrink:0">WA</a>`:''}
+        </div>
+      </td>
       <td>${cityBadge(m.city)}</td>
       <td style="font-size:12px;color:#888">${m.g}</td>
       <td style="font-size:12px">${fsDate?`<span style="background:#eeedfe;color:#3c3489;border-radius:4px;padding:1px 6px;font-size:11px">${fsDate}</span>`:'<span style="color:#ccc;font-size:11px">not set</span>'}</td>
       <td><span style="font-size:13px;font-weight:500;color:#3c3489">${c.present}</span><span style="font-size:11px;color:#888"> session${c.present===1?'':'s'}</span></td>
       <td style="display:flex;gap:4px;align-items:center">
         <button onclick="openProfile('${nameEsc}')" title="View profile" style="background:none;border:none;cursor:pointer;font-size:14px;color:#888;padding:2px 4px">&#128100;</button>
-        <button onclick="openMemberModal('${nameEsc}')" title="Edit" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px">&#9998;</button>
-        <button onclick="toggleFreeze('${nameEsc}')" title="${m.frozen?'Unfreeze guest':'Freeze guest (exclude from tracking)'}" style="background:none;border:none;cursor:pointer;font-size:13px;color:${m.frozen?'#0c447c':'#aaa'};padding:2px 4px" class="edit-only">&#10052;</button>
+        <button onclick="openMemberModal('${nameEsc}')" title="Edit" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px" class="edit-only">&#9998;</button>
+        <button onclick="toggleFreeze('${nameEsc}')" title="${isFrozen?'Unfreeze — restore to active tracking':'Freeze — exclude from follow-up and tracking'}" style="background:none;border:none;cursor:pointer;font-size:13px;color:${isFrozen?'#0c447c':'#aaa'};padding:2px 4px" class="edit-only">&#10052;</button>
       </td>
     </tr>`;
-  }).join('');
-  if(!guests.length) body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">No guests yet. Add guests using the button above.</td></tr>`;
+  };
+
+  let rows=guests.map(m=>makeRow(m,false));
+  if(frozenGuests.length){
+    rows.push(`<tr><td colspan="6" style="padding:8px 0;font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.05em;border-top:1px solid #e0e0d8">❄ Frozen guests — excluded from tracking</td></tr>`);
+    rows=rows.concat(frozenGuests.map(m=>makeRow(m,true)));
+  }
+  body.innerHTML=rows.join('');
+  if(!guests.length&&!frozenGuests.length) body.innerHTML=`<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">No guests yet.</td></tr>`;
 
   // Guest metrics
-  const totalGuests=MEMBERS.filter(m=>m.gc==='Guest').length;
-  const returning=MEMBERS.filter(m=>m.gc==='Guest'&&calcMember(m.n).present>1).length;
+  const totalGuests=MEMBERS.filter(m=>m.gc==='Guest'&&!m.frozen).length;
+  const returning=MEMBERS.filter(m=>m.gc==='Guest'&&!m.frozen&&calcMember(m.n).present>1).length;
+  const frozenCount=MEMBERS.filter(m=>m.gc==='Guest'&&m.frozen).length;
   document.getElementById('guest-metrics').innerHTML=`
-    <div class="metric"><div class="metric-label">Total guests</div><div class="metric-val">${totalGuests}</div></div>
+    <div class="metric"><div class="metric-label">Active guests</div><div class="metric-val">${totalGuests}</div></div>
     <div class="metric"><div class="metric-label">Visited 2+ times</div><div class="metric-val">${returning}</div><div class="metric-sub">potential regulars</div></div>
     <div class="metric"><div class="metric-label">One-time only</div><div class="metric-val">${totalGuests-returning}</div></div>
+    ${frozenCount?`<div class="metric"><div class="metric-label">Frozen</div><div class="metric-val">${frozenCount}</div><div class="metric-sub">excluded from tracking</div></div>`:''}
   `;
 }
 
