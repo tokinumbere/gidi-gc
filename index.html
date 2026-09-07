@@ -3804,10 +3804,10 @@ function renderClusters(){
   const visibleClusters=_magicClusterId?clusters.filter(c=>c.id===_magicClusterId):clusters;
   populateClusterWeekPicker();
   renderClusterGuestAlert();
-  renderClusterHealth(weekKey);
   const recs=getRecordedSessions();
   const clusterRecs=getClusterSessions();
   const weekKey=document.getElementById('cluster-week-picker')?.value||'';
+  renderClusterHealth(weekKey);
 
   // Metrics
   const assigned=MEMBERS.filter(m=>m.gc!=='Guest'&&clusterMembers[m.n]).length;
