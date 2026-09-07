@@ -1777,7 +1777,7 @@ function renderOverview(){
           ${bdaysUpcoming.map(({m,diff,label})=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid #f0efe8;gap:8px">
             <div style="font-size:13px;font-weight:500">${m.n}</div>
             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-              <span style="font-size:12px;color:${diff===0?'#085041':diff<=7?'#633806':'#888'};font-weight:${diff<=7?'600':'400'}">${diff===0?'🎂 Today!':diff===1?'Tomorrow':`${label} · in ${diff} days`}</span>
+              <span style="font-size:12px;color:${diff===0?'#085041':diff<=7?'#633806':'#888'};font-weight:${diff<=7?'600':'400'}">${diff===0?'🎂 Today!':diff===1?'Tomorrow':label+' · in '+diff+' days'}</span>
               ${getWaNumber(m.n)?`<a href="https://wa.me/${getWaNumber(m.n)}?text=Happy%20Birthday%20${encodeURIComponent(m.n.split(' ')[0])}!%20%F0%9F%8E%82" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;text-decoration:none">WA</a>`:''}
             </div>
           </div>`).join('')}
@@ -1884,7 +1884,7 @@ function renderOverview(){
         ${bdaySoon.map(({m,diff})=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:13px">
           <span style="font-weight:500">${m.n}</span>
           <div style="display:flex;align-items:center;gap:8px">
-            <span style="color:#633806;font-size:12px;font-weight:500">${diff===0?'Today!':diff===1?'Tomorrow':`In ${diff} days`}</span>
+            <span style="color:#633806;font-size:12px;font-weight:500">${diff===0?'Today!':diff===1?'Tomorrow':'In '+diff+' days'}</span>
             ${getWaNumber(m.n)?`<a href="https://wa.me/${getWaNumber(m.n)}?text=Happy%20Birthday%20${encodeURIComponent(m.n.split(' ')[0])}!%20%F0%9F%8E%82" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;text-decoration:none">WA</a>`:''}
           </div>
         </div>`).join('')}
@@ -3060,7 +3060,18 @@ function _buildSummaryData(){
   const allCalc=nonGuests.map(m=>({...m,...calcMember(m.n)}));
   const followUp=allCalc.filter(m=>m.curStreak>=2).sort((a,b)=>b.curStreak-a.curStreak||byFirstName(a,b));
 
-  const bdaySoon=MEMBERS.filter(m=>{const d=daysUntil(birthdays[m.n]);return d!==null&&d<=14;}).sort((a,b)=>daysUntil(birthdays[a.n])-daysUntil(birthdays[b.n]));
+  const bdaySoon=[];
+  const _today=new Date();
+  MEMBERS.filter(m=>birthdays[m.n]).forEach(m=>{
+    try{
+      const [d,mo]=birthdays[m.n].split('/').map(Number);
+      let bd=new Date(_today.getFullYear(),mo-1,d);
+      if(bd<_today)bd=new Date(_today.getFullYear()+1,mo-1,d);
+      const diff=Math.round((bd-_today)/86400000);
+      if(diff<=14)bdaySoon.push({m,diff});
+    }catch(e){}
+  });
+  bdaySoon.sort((a,b)=>a.diff-b.diff);
 
   const lastAbsentGrouped={};
   const lastAbsentNone=[];
@@ -3169,10 +3180,10 @@ function _renderLeaderSummary(){
     <!-- Birthdays -->
     ${bdaySoon.length?`<div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #e0e0d8">
       <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🎂 Birthdays this week</div>
-      ${bdaySoon.map(m=>{const d=daysUntil(birthdays[m.n]);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8">
+      ${bdaySoon.filter(({m})=>m&&m.n).map(({m,diff})=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid #f0efe8">
         <span style="font-size:13px;font-weight:500">${m.n}</span>
-        <span style="font-size:12px;color:#633806;font-weight:500">${d===0?'Today! 🎂':d===1?'Tomorrow':`In ${d} days`}</span>
-      </div>`;}).join('')}
+        <span style="font-size:12px;color:#633806;font-weight:500">${diff===0?'Today! 🎂':diff===1?'Tomorrow':'In '+diff+' days'}</span>
+      </div>`).join('')}
     </div>`:''}
 
     <div style="text-align:center;font-size:11px;color:#aaa;padding-top:8px">Gidi GC · ${lastSess?lastSess.date:_sd.now}</div>
@@ -3216,13 +3227,7 @@ function _renderMemberReport(){
     </div>`:'<div style="background:#e1f5ee;border-radius:10px;padding:14px;margin-bottom:12px;text-align:center"><div style="font-size:22px;margin-bottom:4px">🎉</div><div style="font-size:14px;font-weight:600;color:#085041">Everyone came today!</div></div>'}
 
     <!-- Birthdays -->
-    ${bdaySoon.length?`<div style="background:#faeeda;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #ef9f27">
-      <div style="font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🎂 Upcoming birthdays</div>
-      ${bdaySoon.map(m=>{const d=daysUntil(birthdays[m.n]);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid rgba(0,0,0,.08)">
-        <span style="font-size:14px;font-weight:500;color:#633806">${m.n}</span>
-        <span style="font-size:12px;color:#8a5010;font-weight:500">${d===0?'Today! 🎂':d===1?'Tomorrow':`In ${d} days`}</span>
-      </div>`;}).join('')}
-    </div>`:''}
+    ${bdaySoon.length?('<div style="background:#faeeda;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #ef9f27"><div style="font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🎂 Upcoming birthdays</div>'+bdaySoon.filter(x=>x.m&&x.m.n).map(({m,diff})=>'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid rgba(0,0,0,.08)"><span style="font-size:14px;font-weight:500;color:#633806">'+m.n+'</span><span style="font-size:12px;color:#8a5010;font-weight:500">'+(diff===0?'Today! 🎂':diff===1?'Tomorrow':'In '+diff+' days')+'</span></div>').join('')+'</div>'):''}
 
     <div style="text-align:center;font-size:12px;color:#aaa;padding:12px 0 4px">Gidi GC · ${lastSess?lastSess.date:''} · See you next week! 🙏</div>
   `;
@@ -3319,7 +3324,7 @@ ${lastAbsent.length?`<div class="card">
 </div>`:''}
 ${bdaySoon.length?`<div class="card" style="background:#faeeda;border-color:#ef9f27">
   <div class="card-title" style="color:#633806">🎂 Birthdays coming up</div>
-  ${bdaySoon.map(m=>{const d=daysUntil(birthdays[m.n]);return`<div class="row"><span style="font-size:13px;font-weight:500;color:#633806">${m.n}</span><span style="font-size:12px;color:#8a5010;font-weight:500">${d===0?'Today!':d===1?'Tomorrow':`In ${d} days`}</span></div>`;}).join('')}
+  ${bdaySoon.filter(({m})=>m&&m.n).map(({m,diff})=>`<div class="row"><span style="font-size:13px;font-weight:500;color:#633806">${m.n}</span><span style="font-size:12px;color:#8a5010;font-weight:500">${diff===0?'Today!':diff===1?'Tomorrow':'In '+diff+' days'}</span></div>`).join('')}
 </div>`:''}
 <div style="text-align:center;font-size:12px;color:#aaa;padding-top:12px">Gidi GC · See you next week 🙏</div>
 </body></html>`;
@@ -3482,11 +3487,11 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <!-- BIRTHDAYS -->
   <div class="card">
     <div class="card-title">&#127874; Birthdays in the next 30 days</div>
-    ${bdaySoon.map(m=>{
-      const d=daysUntil(birthdays[m.n]);const b=parseBday(birthdays[m.n]);
-      const badge=d===0?'&#127874; Today!':d<=7?`In ${d} day${d===1?'':'s'}`:`${MONTHS[b.mo]} ${b.d} &middot; ${d}d`;
-      const badgeColor=d===0?'#085041':d<=7?'#633806':'#888';
-      const badgeBg=d===0?'#e1f5ee':d<=7?'#faeeda':'#f5f5f3';
+    ${bdaySoon.filter(({m})=>m&&m.n).map(({m,diff})=>{
+      const b=parseBday(birthdays[m.n]);
+      const badge=diff===0?'&#127874; Today!':diff<=7?`In ${diff} day${diff===1?'':'s'}`:`${b?MONTHS[b.mo]+' '+b.d:''}`;
+      const badgeColor=diff===0?'#085041':diff<=7?'#633806':'#888';
+      const badgeBg=diff===0?'#e1f5ee':diff<=7?'#faeeda':'#f5f5f3';
       return`<div class="row"><div><div class="row-name">${m.n}</div><span class="badge" style="background:${gcColors[m.gc]?.[0]||'#f1efe8'};color:${gcColors[m.gc]?.[1]||'#444'};margin-top:4px">${m.gc}</span></div><span class="badge" style="background:${badgeBg};color:${badgeColor};font-size:12px">${badge}</span></div>`;
     }).join('')}
   </div>`:''}
@@ -7110,7 +7115,7 @@ function _buildMemberReportHtml(){
 
 ${bdaySoon.length?`<div class="card card-bday">
   <div class="sec" style="color:#633806">🎂 Birthdays this week</div>
-  ${bdaySoon.map(({m,diff})=>`<div class="row"><div><div style="font-size:14px;font-weight:500;color:#633806">${m.n}</div><div style="font-size:12px;color:#8a5010;margin-top:2px">${diff===0?'Today! 🎂':diff===1?'Tomorrow':`In ${diff} days`}</div></div>${makeWaBtn(m,`Happy Birthday ${m.n.split(' ')[0]}! 🎂🎉 Wishing you a wonderful day!`)}</div>`).join('')}
+  ${bdaySoon.filter(({m})=>m&&m.n).map(({m,diff})=>`<div class="row"><div><div style="font-size:14px;font-weight:500;color:#633806">${m.n}</div><div style="font-size:12px;color:#8a5010;margin-top:2px">${diff===0?'Today! 🎂':diff===1?'Tomorrow':'In '+diff+' days'}</div></div>${makeWaBtn(m,`Happy Birthday ${m.n.split(' ')[0]}! 🎂🎉 Wishing you a wonderful day!`)}</div>`).join('')}
 </div>`:''}
 
 ${publicPrayers.length?`<div class="card card-prayer">
