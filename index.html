@@ -7630,7 +7630,7 @@ function generateMemberReport(){
   bdaySoon.sort((a,b)=>a.diff-b.diff);
 
   // Public prayer requests
-  const publicPrayers=prayerRequests.filter(p=>p.status==='active'&&!p.anonymous);
+  const publicPrayers=prayerRequests.filter(p=>p.status==='active'&&!p.anonymous&&!p.hidden&&p.visibility!=='anonymous'&&p.memberId);
 
   const makeWaBtn=(m,msg,style='')=>{
     const wa=getWaNumber(m.n);
@@ -7709,9 +7709,8 @@ ${bdaySoon.length?`<div class="card card-bday">
 </div>`:''}
 
 ${publicPrayers.length?`<div class="card card-prayer">
-  <div class="sec" style="color:#3c3489">🙏 Pray for these people this week</div>
-  <div style="font-size:14px;color:#3c3489;font-weight:500;line-height:1.9">${publicPrayers.map(p=>p.memberId||'Someone').join(' · ')}</div>
-  <div style="font-size:12px;color:#888;margin-top:8px;font-style:italic">They've shared something they'd appreciate prayer for. Reach out if you know them 💛</div>
+  <div class="sec" style="color:#3c3489">🙏 This week's prayer requests</div>
+  <div style="font-size:14px;color:#3c3489;font-weight:500;line-height:1.9">${[...publicPrayers].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5).map(p=>p.memberId||'Someone').join(', ')}${publicPrayers.length>5?' and '+(publicPrayers.length-5)+' other active request'+(publicPrayers.length-5===1?'':'s'):''}</div>
 </div>`:''}
 
 ${nextSess?`<div class="card card-next">
@@ -7913,7 +7912,7 @@ function _buildMemberReportHtml(){
     return`<span style="color:${col};${bold}">${v}</span>${i<counts.length-1?'<span style="color:rgba(255,255,255,.2);margin:0 3px">→</span>':''}`;
   }).join('');
 
-  const publicPrayers=prayerRequests.filter(p=>p.status==='active'&&!p.anonymous);
+  const publicPrayers=prayerRequests.filter(p=>p.status==='active'&&!p.anonymous&&!p.hidden&&p.visibility!=='anonymous'&&p.memberId);
   const followUp2=nonGuests.map(m=>({...m,...calcMember(m.n)})).filter(m=>m.curStreak>=3);
 
   const makeWaBtn=(m,msg)=>{
@@ -7954,18 +7953,21 @@ function _buildMemberReportHtml(){
   }).join('')}
 </div>
 
-${publicPrayers.length?`<div class="card card-prayer">
-  <div class="sec" style="color:#3c3489">🙏 Pray for these people this week</div>
-  <div style="font-size:14px;color:#3c3489;font-weight:500;line-height:1.9;margin-bottom:8px">${publicPrayers.map(p=>p.memberId||'Someone').join(' · ')}</div>
-  <div style="font-size:12px;color:#888;font-style:italic;margin-bottom:10px">They've shared something they'd appreciate prayer for 💛</div>
-  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#3c3489;color:#fff;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center;margin-bottom:6px">🙏 See all requests and pray for someone</a>
-  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#f0f0ff;color:#3c3489;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center">✍️ Submit your own prayer request</a>
+${(()=>{
+  const shown=[...publicPrayers].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  const more=publicPrayers.length>5?` and ${publicPrayers.length-5} other active request${publicPrayers.length-5===1?'':'s'}`:'';
+  return publicPrayers.length?`<div class="card card-prayer">
+  <div class="sec" style="color:#3c3489">🙏 This week's prayer requests</div>
+  <div style="font-size:14px;color:#3c3489;font-weight:500;line-height:1.9;margin-bottom:8px">Pray for: ${shown.map(p=>p.memberId||'Someone').join(', ')}${more}</div>
+  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#3c3489;color:#fff;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center;margin-bottom:6px">See full prayer list</a>
+  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#f0f0ff;color:#3c3489;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center">Submit a prayer request</a>
 </div>`:`<div class="card card-prayer">
   <div class="sec" style="color:#3c3489">🙏 Prayer</div>
   <div style="font-size:13px;color:#3c3489;margin-bottom:10px">Got something you'd like the GC to pray for?</div>
-  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#3c3489;color:#fff;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center;margin-bottom:6px">🙏 See prayer requests</a>
-  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#f0f0ff;color:#3c3489;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center">✍️ Submit a prayer request</a>
-</div>`}
+  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#3c3489;color:#fff;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center;margin-bottom:6px">See prayer requests</a>
+  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#f0f0ff;color:#3c3489;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center">Submit a prayer request</a>
+</div>`;
+})()}
 ${nextSess?`<div class="card card-next">
   <div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.4);margin-bottom:4px">Next session</div><div style="font-size:16px;font-weight:600">Wednesday, ${nextSess.date}</div></div>
   <div style="font-size:28px">📅</div>
