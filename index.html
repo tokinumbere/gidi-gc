@@ -1633,11 +1633,18 @@ function isActiveGuest(m){
 }
 
 function applyPhoneNumbers(){
+  // First apply hardcoded PHONES
   Object.entries(PHONES).forEach(([n,p])=>{
     if(!p.phone)return;
-    // Try exact match first, then trimmed
     let m=MEMBERS.find(x=>x.n===n)||MEMBERS.find(x=>x.n.trim()===n.trim());
-    if(m){m.phone=m.phone||p.phone;m.wa=p.wa;}
+    if(m){m.phone=m.phone||p.phone;m.wa=m.wa||p.wa;}
+  });
+  // Then derive m.wa from m.phone for anyone who has a phone but no wa
+  MEMBERS.forEach(m=>{
+    if(m.phone&&!m.wa){
+      const p=m.phone.replace(/\D/g,'');
+      m.wa=p.startsWith('234')?p:p.startsWith('0')&&p.length===11?'234'+p.slice(1):p;
+    }
   });
 }
 
@@ -2587,13 +2594,17 @@ function saveMember(){
     }
 
     m.n=name;m.g=gender;m.city=city;m.gc=gc;m.gcOrig=m.gcOrig||gc;m.phone=phone;m.email=email;
+    // Update WA number from phone
+    if(phone){const p=phone.replace(/\D/g,'');m.wa=p.startsWith('234')?p:p.startsWith('0')&&p.length===11?'234'+p.slice(1):p;}
+    else{m.wa='';}
     if(bday)birthdays[name]=bday;else delete birthdays[name];
     if(fsKey)firstSession[name]=fsKey;else delete firstSession[name];
     showToast('Member updated');
   } else {
     // New member
     if(MEMBERS.find(x=>x.n===name)){err.textContent='A member with this name already exists.';err.style.display='block';return;}
-    MEMBERS.push({n:name,g:gender,city,gc,gcOrig:gc,phone,email});
+    const wa=(()=>{if(!phone)return'';const p=phone.replace(/\D/g,'');return p.startsWith('234')?p:p.startsWith('0')&&p.length===11?'234'+p.slice(1):p;})();
+    MEMBERS.push({n:name,g:gender,city,gc,gcOrig:gc,phone,email,wa});
     if(bday)birthdays[name]=bday;
     if(fsKey)firstSession[name]=fsKey;
     // Initialise as absent for all existing recorded sessions
@@ -5968,6 +5979,15 @@ function waLink(m){
 }
 
 function getWaNumber(name){
+  const m=MEMBERS.find(x=>x.n===name||x.n===name?.trim());
+  if(m?.wa)return m.wa;
+  if(m?.phone){
+    // Format phone to WA number
+    const p=m.phone.replace(/\D/g,'');
+    if(p.startsWith('0')&&p.length===11)return'234'+p.slice(1);
+    if(p.startsWith('234'))return p;
+    return p;
+  }
   return PHONES[name]?.wa||PHONES[name?.trim()]?.wa||'';
 }
 
