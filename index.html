@@ -614,6 +614,27 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <div id="ghTokenStatus" style="font-size:12px;color:#888"></div>
   </div>
 
+  <!-- Guest access tokens -->
+  <div style="margin-top:1rem;background:#f5f5f3;border-radius:10px;padding:12px">
+    <p class="sec-title" style="margin-bottom:6px">Guest access</p>
+    <div style="font-size:12px;color:#888;margin-bottom:10px">Generate a temporary PIN for someone who needs access to the dashboard. Expires automatically — you can also revoke it early.</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <input class="form-input" id="guestLabel" type="text" placeholder="Who is this for? (e.g. Pastor Ada)" style="flex:1;margin-bottom:0;min-width:140px">
+      <select class="form-input" id="guestExpiry" style="margin-bottom:0;width:auto">
+        <option value="24">24 hours</option>
+        <option value="48" selected>48 hours</option>
+        <option value="168">7 days</option>
+      </select>
+      <button class="btn btn-success btn-sm" onclick="generateGuestToken()">Generate</button>
+    </div>
+    <div id="guestTokenResult" style="display:none;background:#e1f5ee;border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="font-size:12px;color:#888;margin-bottom:4px">Share this PIN:</div>
+      <div style="font-size:28px;font-weight:700;letter-spacing:4px;color:#085041;font-family:monospace" id="guestTokenCode"></div>
+      <div style="font-size:12px;color:#888;margin-top:4px" id="guestTokenExpiry"></div>
+    </div>
+    <div id="guestTokenList" style="font-size:13px;color:#888">Loading active guest tokens...</div>
+  </div>
+
   <!-- Device nickname -->
   <div style="margin-top:1rem;background:#f5f5f3;border-radius:10px;padding:12px">
     <p class="sec-title" style="margin-bottom:8px">Change log identity</p>
@@ -1081,9 +1102,14 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
     <div>
       <p class="sec-title" style="margin-bottom:2px">Prayer requests</p>
-      <div style="font-size:12px;color:#888">Anonymous requests visible with edit PIN only.</div>
+      <div style="font-size:12px;color:#888">Public page: <a href="https://gidiatcity.com/prayer.html" target="_blank" style="color:#3c3489">gidiatcity.com/prayer.html</a></div>
     </div>
-    <button class="btn btn-success btn-sm" onclick="openPrayerForm()">+ Add request</button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="exportPrayerExcel()">&#128202; Export Excel</button>
+      <button class="btn btn-sm" onclick="exportPrayerPDF()">&#128196; Export PDF</button>
+      <button class="btn btn-sm edit-only" style="background:#1a1a1a;color:#fff;border-color:#1a1a1a" onclick="publishPrayerPage()">&#128228; Publish page</button>
+      <button class="btn btn-success btn-sm edit-only" onclick="openPrayerForm()">+ Add request</button>
+    </div>
   </div>
   <div class="filters" style="margin-bottom:1rem">
     <select id="prayer-filter" onchange="renderPrayerRequests()">
@@ -1123,10 +1149,24 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
         <label class="form-label">Prayer request *</label>
         <textarea class="form-input" id="pr-text" rows="4" placeholder="What should we be praying for?" style="resize:vertical"></textarea>
       </div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer">
-        <input type="checkbox" id="pr-anon" style="width:16px;height:16px">
-        <span>Mark as anonymous <span style="color:#888;font-size:12px">(only visible with edit PIN)</span></span>
-      </label>
+      <div class="form-row">
+        <label class="form-label">Visibility</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="radio" name="pr-visibility" value="public" checked style="width:14px;height:14px">
+            <span>🌐 Share name and request publicly</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="radio" name="pr-visibility" value="name_only" style="width:14px;height:14px">
+            <span>👤 Share name only (request hidden from public)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="radio" name="pr-visibility" value="anonymous" style="width:14px;height:14px">
+            <span>🔒 Fully anonymous (no name stored anywhere)</span>
+          </label>
+        </div>
+      </div>
+      <div id="pr-anon" style="display:none"></div>
       <div id="pr-error" style="display:none;background:#fcebeb;color:#791f1f;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px"></div>
       <div style="display:flex;justify-content:flex-end;gap:8px">
         <button class="btn btn-sm" onclick="closePrayerForm()">Cancel</button>
@@ -1318,6 +1358,7 @@ let memberAbout={};
 let superclusters=[];
 // clusterTokens: {clusterId: tokenString} — for revocable magic links
 let clusterTokens={};
+let clusterMessages={}; // {clusterId: {defaultMsg, weekMsg}}
 // scCheckIns: {weekKey: {memberName: 'yes'|'no'}} — GC leader check-ins on cluster heads & special attention members
 let scCheckIns={};
 // scWellbeing: {weekKey: {memberName: 'green'|'amber'|'red'}}
@@ -1354,13 +1395,13 @@ async function sbPost(table,rows){
 
 async function loadFromSupabase(){
   try{
-    const [mems,att,ar,bd,fs,cl,cm,ci,cr,sc,sci,swb,scn,sa,ma,ta]=await Promise.all([
+    const [mems,att,ar,bd,fs,cl,cm,ci,cr,sc,sci,swb,scn,sa,ma,ta,pr,cms]=await Promise.all([
       sbGet('members'),sbGet('attendance'),sbGet('absence_reasons'),
       sbGet('birthdays'),sbGet('first_session'),sbGet('clusters'),
       sbGet('cluster_members'),sbGet('check_ins'),sbGet('custom_reasons'),
       sbGet('superclusters'),sbGet('sc_check_ins'),sbGet('sc_wellbeing'),
       sbGet('sc_care_notes'),sbGet('sc_about'),sbGet('member_about'),
-      sbGet('term_archive')
+      sbGet('term_archive'),sbGet('prayer_requests'),sbGet('cluster_messages')
     ]);
     if(!mems.length&&!att.length)return false;
     mems.forEach(row=>{let m=MEMBERS.find(x=>x.n===row.name);if(!m){m={n:row.name,gc:row.gc,gcOrig:row.gc_orig||row.gc,city:row.city||'Attendee',g:row.gender||'Female',phone:row.phone||'',email:row.email||''};MEMBERS.push(m);}else{m.gc=row.gc;m.gcOrig=row.gc_orig||row.gc;if(row.city)m.city=row.city;if(row.gender)m.g=row.gender;if(row.phone)m.phone=row.phone;if(row.email)m.email=row.email;}});
@@ -1379,6 +1420,8 @@ async function loadFromSupabase(){
     sa.forEach(row=>{scAbout[row.member_name]=row.about;});
     ma.forEach(row=>{memberAbout[row.member_name]=row.about;});
     if(ta&&ta.length)termArchive.splice(0,termArchive.length,...ta.map(r=>({id:r.id,name:r.name,savedAt:r.saved_at,data:JSON.parse(r.data||'{}')})));
+    if(pr&&pr.length)prayerRequests.splice(0,prayerRequests.length,...pr.map(r=>({id:r.id,memberId:r.member_id,clusterName:r.cluster_name,request:r.request,anonymous:r.anonymous,visibility:r.visibility||'public',hidden:r.hidden||false,date:r.date,status:r.status})));
+    if(cms&&cms.length)cms.forEach(r=>{clusterMessages[r.cluster_id]={defaultMsg:r.default_msg||'',weekMsg:r.week_msg||''};});
     applyPhoneNumbers();
     return true;
   }catch(e){console.error('loadFromSupabase',e);return false;}
@@ -1386,7 +1429,7 @@ async function loadFromSupabase(){
 
 async function saveAll(){
   // Always save to localStorage first
-  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||'',frozen:m.frozen||false})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,wellbeing,careNotes,prayerRequests,memberAbout,pendingClusterSubmissions,superclusters,changeLog,clusterTokens,scCheckIns,scWellbeing,scCareNotes,scAbout,savedAt:new Date().toISOString()}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||'',frozen:m.frozen||false})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,wellbeing,careNotes,prayerRequests,memberAbout,pendingClusterSubmissions,superclusters,changeLog,clusterTokens,clusterMessages,scCheckIns,scWellbeing,scCareNotes,scAbout,savedAt:new Date().toISOString()}));}catch(e){}
   if(!isOnline()){
     showOfflineBanner(true);
     setSyncStatus('red','Offline — saved locally');
@@ -1422,9 +1465,11 @@ async function saveAll(){
     const cnR=[];Object.entries(careNotes).forEach(([wk,r])=>Object.entries(r).forEach(([mn,v])=>{if(v)cnR.push({week_key:wk,member_name:mn,note:v});}));
     if(cnR.length)await sbPost('care_notes',cnR);
     // Prayer requests
-    if(prayerRequests.length)await sbPost('prayer_requests',prayerRequests.map(p=>({id:p.id,member_id:p.memberId||'',cluster_name:p.clusterName||'',request:p.request,anonymous:p.anonymous,date:p.date,status:p.status})));
+    if(prayerRequests.length)await sbPost('prayer_requests',prayerRequests.map(p=>({id:p.id,member_id:p.memberId||'',cluster_name:p.clusterName||'',request:p.request,anonymous:p.anonymous,visibility:p.visibility||'public',hidden:p.hidden||false,date:p.date,status:p.status})));
     if(pendingClusterSubmissions.length)await sbPost('pending_submissions',pendingClusterSubmissions.map(s=>({id:s.id,cluster_id:s.clusterId,cluster_name:s.clusterName,submitted_by:s.submittedBy,week_key:s.weekKey,data:JSON.stringify(s.data),submitted_at:s.submittedAt})));
     if(superclusters.length)await sbPost('superclusters',superclusters.map(s=>({id:s.id,name:s.name||'',gc_leader:s.gcLeader||'',cluster_ids:JSON.stringify(s.clusterIds||[]),special_members:JSON.stringify(s.specialMembers||[]),updated_at:new Date().toISOString()})));
+    const cmR=Object.entries(clusterMessages).map(([cid,v])=>({cluster_id:cid,default_msg:v.defaultMsg||'',week_msg:v.weekMsg||'',updated_at:new Date().toISOString()}));
+    if(cmR.length)await sbPost('cluster_messages',cmR);
     showToast('Saved \u2713',2000);
     const _t=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
     setSyncStatus('green',`Synced ${_t}`);
@@ -1451,6 +1496,7 @@ function loadSaved(){
     if(d.wellbeing)Object.assign(wellbeing,d.wellbeing);
     if(d.careNotes)Object.assign(careNotes,d.careNotes);
     if(d.prayerRequests)prayerRequests.splice(0,prayerRequests.length,...d.prayerRequests);
+    if(d.clusterMessages)Object.assign(clusterMessages,d.clusterMessages);
     return true;
   }catch(e){return false;}
 }
@@ -1469,7 +1515,7 @@ function exportData(){
     attendance,absenceReasons,birthdays,firstSession,
     clusters,clusterMembers,checkIns,
     customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),
-    termArchive,wellbeing,careNotes,prayerRequests,superclusters,changeLog,clusterTokens,scCheckIns,scWellbeing,scCareNotes,scAbout
+    termArchive,wellbeing,careNotes,prayerRequests,superclusters,changeLog,clusterTokens,clusterMessages:_cm,scCheckIns,scWellbeing,scCareNotes,scAbout
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -3251,8 +3297,9 @@ function _renderFollowupQueue(){
   const makeWaLink=(m,customMsg)=>{
     const wa=getWaNumber(m.n);
     if(!wa)return'';
-    const name=m.n.split(' ')[0];
-    const msg=customMsg||`Hey ${name}, missed you at GC${lastSess?' on '+lastSess.date:''}! Hope all is well 🙏`;
+    const cId=clusterMembers[m.n]?.clusterId||'';
+    const streak=calcMember(m.n).curStreak;
+    const msg=customMsg||getClusterMsg(cId,m.n,streak);
     return`<a href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;text-decoration:none;flex-shrink:0">📱 WA</a>`;
   };
 
@@ -3303,6 +3350,22 @@ function _renderFollowupQueue(){
     </div>`:''}
 
     ${!followUp.length&&!lastAbsent.length?`<div style="text-align:center;padding:2rem;color:#3b6d11;font-size:14px">✓ No follow-ups needed right now</div>`:''}
+
+    <!-- Send report link to present members -->
+    ${lastSess&&_sd.presentNonGuests&&_sd.presentNonGuests.length?`
+    <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:0.5px solid #e0e0d8">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">📨 Send report link — ${lastSess.date}</div>
+      <div style="font-size:12px;color:#888;margin-bottom:10px">Share this week's member report with everyone who attended.</div>
+      ${_sd.presentNonGuests.map(m=>{
+        const wa=getWaNumber(m.n);
+        const firstName=m.n.split(' ')[0];
+        const msg=`Hey ${firstName}! Thanks for coming to Gidi GC this week — so glad you were there 🙏\n\nHere's this week's attendance summary:\n👉 https://gidiatcity.com/report.html\n\nThree things you can do from the link:\n1. Check on someone who wasn't there\n2. Pray for someone who needs it\n3. Submit your own prayer request`;
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8;gap:8px">
+          <div style="font-size:13px;font-weight:500">${m.n}</div>
+          ${wa?`<a href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;text-decoration:none;flex-shrink:0">📱 WA</a>`:'<span style="font-size:11px;color:#aaa">No number</span>'}
+        </div>`;
+      }).join('')}
+    </div>`:''}
   `;
 }
 
@@ -3475,6 +3538,22 @@ body.view-only input[type=date]:not(.view-allow),
 body.view-only select#absSessionPicker { pointer-events:none; opacity:0.4; }
 body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 
+/* Hide protected nav items in view-only mode */
+body.view-only .nav-item[data-id="members"],
+body.view-only .nav-item[data-id="guests"],
+body.view-only .nav-item[data-id="record"],
+body.view-only .nav-item[data-id="absenteeism"],
+body.view-only .nav-item[data-id="trends"],
+body.view-only .nav-item[data-id="clusters"],
+body.view-only .nav-item[data-id="superclusters"],
+body.view-only .nav-item[data-id="care"],
+body.view-only .nav-item[data-id="archive"],
+body.view-only .nav-item[data-id="recalc"]{display:none!important}
+body.view-only .mob-nav-btn[data-tab="members"],
+body.view-only .mob-nav-btn[data-tab="record"],
+body.view-only .mob-nav-btn[data-tab="clusters"]{display:none!important}
+body.view-only .topbar-actions .btn:not(#lockBtn){display:none!important}
+
 </style>
 </head>
 <body>
@@ -3635,9 +3714,17 @@ function toggleMobMore(){
 function closeMobMore(){document.getElementById('mobMore').style.display='none';}
 
 function openClusterPinModal(onSuccess){
+  // Trusted device — unlock immediately
+  if(localStorage.getItem(TRUST_TOKEN_KEY)){
+    sessionStorage.setItem(PIN_SESSION_KEY,'1');
+    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
+    applyMode();
+    if(onSuccess)onSuccess();
+    return;
+  }
   const m=document.getElementById('pinModal');
-  document.querySelector('#pinModal .pin-title').textContent='Clusters access';
-  document.querySelector('#pinModal .pin-subtitle').textContent='Enter PIN 1234 to view clusters, or GIDI for full edit';
+  document.querySelector('#pinModal .pin-title').textContent='Access required';
+  document.querySelector('#pinModal .pin-subtitle').textContent='Enter your PIN to continue';
   m.style.display='flex';
   m._onSuccess=onSuccess;
   document.getElementById('pinInput').value='';
@@ -3646,8 +3733,9 @@ function openClusterPinModal(onSuccess){
 }
 
 function switchTab(id,el){
-  if(id==='clusters'&&!isClusterUnlocked()){
-    openClusterPinModal(()=>switchTab('clusters',el));
+  const publicTabs=['overview','prayer'];
+  if(!publicTabs.includes(id)&&!isClusterUnlocked()){
+    openClusterPinModal(()=>switchTab(id,el));
     return;
   }
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
@@ -3661,7 +3749,7 @@ function switchTab(id,el){
   if(tb)tb.textContent=titles[id]||id;
   document.querySelectorAll('.mob-nav-btn').forEach(b=>{b.classList.remove('active');if(b.dataset.tab===id)b.classList.add('active');});
   if(id==='trends')populateTrendSelect();
-  if(id==='recalc'){previewRecalc();renderChangeLog();}
+  if(id==='recalc'){previewRecalc();renderChangeLog();loadGuestTokens();}
   if(id==='birthdays')renderBirthdays();
   if(id==='guests')renderGuests();
   if(id==='record')renderSessionList();
@@ -3713,12 +3801,8 @@ function checkMagicLink(){
     console.log('[MagicLink] switching to clusters tab');
     switchTab('clusters',document.querySelector('[data-id=clusters]'));
     setTimeout(()=>{
-      const card=document.querySelector(`[data-cluster-id="${clusterId}"]`);
-      console.log('[MagicLink] card found=',!!card);
-      if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
-      const choice=confirm(`Welcome, ${c.head}!\n\nWould you like to submit your weekly check-in?\n\nOK = Submit check-in\nCancel = Open cluster report`);
-      if(choice)openClusterHeadSubmission(clusterId);
-      else generateClusterHeadReport(clusterId);
+      // Open the cluster head mini-dashboard instead of a dialog
+      openClusterHeadDashboard(clusterId);
     },400);
   };
 
@@ -3825,8 +3909,8 @@ function populateClusterWeekPicker(){
   const weeks=getClusterWeeks();
   const today=new Date().toISOString().split('T')[0];
   const cur=sel.value||weeks.filter(w=>w.key<=today).slice(-1)[0]?.key||'';
-  // Only repopulate if empty
-  if(!sel.options.length||sel.options[0].value===''){
+  // Only repopulate if no week options loaded yet
+  if(sel.options.length<=1){
     sel.innerHTML='<option value="">Select week for check-ins...</option>'+[...weeks].reverse().map(s=>`<option value="${s.key}"${s.key===cur?' selected':''}>${s.date}</option>`).join('');
   }
   if(!sel.value&&cur){sel.value=cur;}
@@ -4583,12 +4667,12 @@ const TRUST_TOKEN_KEY='gidi_trust_token';
 function generateToken(){return Math.random().toString(36).slice(2)+Date.now().toString(36);}
 
 function isEditMode(){
-  // Persistent trusted device token OR session-only flag
-  return !!localStorage.getItem(TRUST_TOKEN_KEY)||sessionStorage.getItem(PIN_SESSION_KEY)==='1';
+  // Session-only — must enter PIN each session (localStorage trust token is kept for auto-fill UX only)
+  return sessionStorage.getItem(PIN_SESSION_KEY)==='1';
 }
 
 function isClusterUnlocked(){
-  return isEditMode()||sessionStorage.getItem(CLUSTER_SESSION_KEY)==='1';
+  return sessionStorage.getItem(PIN_SESSION_KEY)==='1'||sessionStorage.getItem(CLUSTER_SESSION_KEY)==='1';
 }
 
 function trustThisDevice(){
@@ -4608,6 +4692,13 @@ function applyMode(){
 }
 
 function openPinModal(){
+  // If this is a trusted device, unlock immediately without showing prompt
+  if(localStorage.getItem(TRUST_TOKEN_KEY)){
+    sessionStorage.setItem(PIN_SESSION_KEY,'1');
+    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
+    applyMode();
+    return;
+  }
   const m=document.getElementById('pinModal');
   document.querySelector('#pinModal .pin-title').textContent='Unlock';
   document.querySelector('#pinModal .pin-subtitle').textContent='Enter PIN — this device will stay unlocked';
@@ -4619,10 +4710,13 @@ function openPinModal(){
 
 function closePinModal(){document.getElementById('pinModal').style.display='none';}
 
-function checkPin(){
-  const raw=document.getElementById('pinInput').value.replace(/\s/g,'');
+async function checkPin(){
+  const raw=document.getElementById('pinInput').value.replace(/\s/g,'').toUpperCase();
   const m=document.getElementById('pinModal');
-  if(raw===CORRECT_PIN){
+  const err=document.getElementById('pinError');
+
+  // Check main PIN first (sync)
+  if(raw===CORRECT_PIN||raw===CORRECT_PIN.toUpperCase()){
     trustThisDevice();
     if(!localStorage.getItem('gidi_user_nick')){
       const nick=prompt('What name should we use for your change log? (e.g. Toki)');
@@ -4633,7 +4727,20 @@ function checkPin(){
     if(m._onSuccess){m._onSuccess();m._onSuccess=null;}
     return;
   }
-  const err=document.getElementById('pinError');
+
+  // Check guest token (async)
+  err.textContent='Checking...';err.style.display='block';
+  const valid=await isGuestTokenValid(raw);
+  if(valid){
+    // Grant cluster-level access (not edit mode) for this session
+    sessionStorage.setItem(PIN_SESSION_KEY,'1');
+    sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
+    closePinModal();applyMode();
+    showToast('Guest access granted 🔓',2500);
+    if(m._onSuccess){m._onSuccess();m._onSuccess=null;}
+    return;
+  }
+
   err.textContent='Incorrect. Try again.';
   err.style.display='block';
   document.getElementById('pinInput').value='';
@@ -5249,7 +5356,8 @@ function openPrayerForm(memberName){
     cSel.value=clusterMembers[memberName].clusterId;
   }
   document.getElementById('pr-text').value='';
-  document.getElementById('pr-anon').checked=false;
+  const radios=document.querySelectorAll('input[name="pr-visibility"]');
+  if(radios.length)radios[0].checked=true;
   document.getElementById('pr-error').style.display='none';
   document.getElementById('prayerModal').className='member-modal open';
 }
@@ -5262,7 +5370,8 @@ function savePrayerRequest(){
   const member=document.getElementById('pr-member').value;
   const clusterId=document.getElementById('pr-cluster').value;
   const text=document.getElementById('pr-text').value.trim();
-  const anon=document.getElementById('pr-anon').checked;
+  const vis=document.querySelector('input[name="pr-visibility"]:checked')?.value||'public';
+  const anon=vis==='anonymous';
   const err=document.getElementById('pr-error');
   if(!text){err.textContent='Please enter a prayer request.';err.style.display='block';return;}
   prayerRequests.push({
@@ -5271,6 +5380,8 @@ function savePrayerRequest(){
     clusterName:clusterId?clusters.find(c=>c.id===clusterId)?.name||'':'',
     request:text,
     anonymous:anon,
+    visibility:vis,
+    hidden:false,
     date:new Date().toISOString().split('T')[0],
     status:'active'
   });
@@ -5285,49 +5396,218 @@ function renderPrayerRequests(){
   if(!el)return;
   const filter=document.getElementById('prayer-filter')?.value||'active';
   const clusterFilter=document.getElementById('prayer-cluster-filter')?.value||'';
-
-  // Populate cluster filter dropdown
-  const cSel=document.getElementById('prayer-cluster-filter');
-  if(cSel){
-    const cur=cSel.value;
-    cSel.innerHTML='<option value="">All clusters</option>'+clusters.map(c=>`<option value="${c.name}"${c.name===cur?' selected':''}>${c.name}</option>`).join('');
-  }
-
   const editMode=isEditMode();
+
+  const cSel=document.getElementById('prayer-cluster-filter');
+  if(cSel){const cur=cSel.value;cSel.innerHTML='<option value="">All clusters</option>'+clusters.map(c=>`<option value="${c.name}"${c.name===cur?' selected':''}>${c.name}</option>`).join('');}
+
   const visible=prayerRequests.filter(p=>{
     if(filter!=='all'&&p.status!==filter)return false;
     if(clusterFilter&&p.clusterName!==clusterFilter)return false;
-    if(p.anonymous&&!editMode)return false; // anon only visible to GIDI
     return true;
   }).sort((a,b)=>b.date.localeCompare(a.date));
 
-  if(!visible.length){
-    el.innerHTML=`<div style="text-align:center;padding:2rem;color:#888;font-size:13px">No ${filter} prayer requests${!editMode?' (anonymous requests hidden)':''}.</div>`;
-    return;
-  }
+  if(!visible.length){el.innerHTML=`<div style="text-align:center;padding:2rem;color:#888;font-size:13px">No ${filter} prayer requests.</div>`;return;}
 
   const statusColors={active:'#e1f5ee',answered:'#e6f1fb',archived:'#f5f5f3'};
-  const statusText={active:'Active',answered:'Answered',archived:'Archived'};
+  const statusText={active:'Active',answered:'Answered ✓',archived:'Archived'};
+  const visIcons={public:'🌐',name_only:'👤',anonymous:'🔒'};
 
-  el.innerHTML=visible.map(p=>`
-    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:14px;margin-bottom:10px">
+  el.innerHTML=visible.map(p=>{
+    const isHidden=p.hidden||false;
+    const vis=p.visibility||(p.anonymous?'anonymous':'public');
+    const nameDisplay=vis==='anonymous'?'<span style="background:#f5f5f3;color:#888;border-radius:4px;padding:1px 6px;font-size:11px">🔒 Anonymous</span>':p.memberId?`<span style="font-weight:600">${p.memberId}</span>`:'<span style="color:#888">—</span>';
+    const requestDisplay=vis==='name_only'&&!editMode?'<span style="color:#aaa;font-style:italic">Request private</span>':p.request;
+    return`<div style="background:${isHidden?'#f5f5f3':'#fff'};border:0.5px solid ${isHidden?'#ddd':'#e0e0d8'};border-radius:10px;padding:14px;margin-bottom:10px;opacity:${isHidden?.6:1}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap">
         <div>
-          <div style="font-size:13px;font-weight:600;margin-bottom:2px">
-            ${p.anonymous?'<span style="background:#f5f5f3;color:#888;border-radius:4px;padding:1px 6px;font-size:11px">Anonymous</span>':p.memberId?p.memberId:'<span style="color:#888">No member</span>'}
+          <div style="font-size:13px;margin-bottom:2px;display:flex;align-items:center;gap:6px">
+            ${nameDisplay}
+            <span style="font-size:11px;color:#aaa">${visIcons[vis]||'🌐'}</span>
+            ${isHidden?'<span style="font-size:10px;background:#f5f5f3;color:#aaa;border-radius:4px;padding:1px 6px">Hidden from public</span>':''}
           </div>
-          <div style="font-size:11px;color:#888">${p.clusterName||'No cluster'} &middot; ${p.date}</div>
+          <div style="font-size:11px;color:#888">${p.clusterName||'No cluster'} · ${p.date}</div>
         </div>
-        <span style="padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;background:${statusColors[p.status]};flex-shrink:0">${statusText[p.status]}</span>
+        <span style="padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;background:${statusColors[p.status]||'#f5f5f3'};flex-shrink:0">${statusText[p.status]||p.status}</span>
       </div>
-      <div style="font-size:14px;color:#1a1a1a;line-height:1.6;margin-bottom:10px">${p.request}</div>
-      ${isEditMode()||isClusterUnlocked()?`<div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${p.status==='active'?`<button class="btn btn-success btn-sm" onclick="updatePrayerStatus('${p.id}','answered')">&#10003; Mark answered</button>`:''}
+      <div style="font-size:14px;color:#1a1a1a;line-height:1.6;margin-bottom:10px">${requestDisplay}</div>
+      ${editMode?`<div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${p.status==='active'?`<button class="btn btn-success btn-sm" onclick="updatePrayerStatus('${p.id}','answered')">✓ Answered</button>`:''}
         ${p.status!=='archived'?`<button class="btn btn-sm" onclick="updatePrayerStatus('${p.id}','archived')">Archive</button>`:''}
-        ${isEditMode()?`<button class="btn btn-danger btn-sm" onclick="deletePrayerRequest('${p.id}')">Delete</button>`:''}
+        <button class="btn btn-sm" onclick="togglePrayerHidden('${p.id}')">${isHidden?'👁 Show':'🙈 Hide'} from public</button>
+        <button class="btn btn-sm" onclick="editPrayerRequest('${p.id}')">✏ Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deletePrayerRequest('${p.id}')">Delete</button>
+      </div>`:isClusterUnlocked()?`<div style="display:flex;gap:6px">
+        ${p.status==='active'?`<button class="btn btn-success btn-sm" onclick="updatePrayerStatus('${p.id}','answered')">✓ Answered</button>`:''}
       </div>`:''}
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+}
+
+function togglePrayerHidden(id){
+  const p=prayerRequests.find(x=>x.id===id);
+  if(p){p.hidden=!p.hidden;saveAll();renderPrayerRequests();showToast(p.hidden?'Hidden from public page':'Visible on public page',2000);}
+}
+
+function editPrayerRequest(id){
+  const p=prayerRequests.find(x=>x.id===id);
+  if(!p)return;
+  const newText=prompt('Edit prayer request:',p.request);
+  if(newText!==null&&newText.trim()){p.request=newText.trim();saveAll();renderPrayerRequests();showToast('Updated',1500);}
+}
+
+function exportPrayerExcel(){
+  const rows=[['Prayer Request','Name','Status','Date','Cluster','Visibility']];
+  prayerRequests.forEach(p=>{
+    const vis=p.visibility||(p.anonymous?'anonymous':'public');
+    rows.push([p.request,vis==='anonymous'?'Anonymous':p.memberId||'—',p.status,p.date,p.clusterName||'—',vis]);
+  });
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`GidiGC_PrayerRequests_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+}
+
+function exportPrayerPDF(){
+  const rows=prayerRequests.map(p=>{
+    const vis=p.visibility||(p.anonymous?'anonymous':'public');
+    return`<tr><td>${p.request}</td><td>${vis==='anonymous'?'Anonymous':p.memberId||'—'}</td><td>${p.status}</td><td>${p.date}</td><td>${p.clusterName||'—'}</td></tr>`;
+  }).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prayer Requests</title>
+  <style>body{font-family:sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:8px;text-align:left;font-size:12px}th{background:#1a1a1a;color:#fff}tr:nth-child(even){background:#f9f9f7}h2{margin-bottom:16px}</style></head>
+  <body><h2>Gidi GC Prayer Requests</h2><table><thead><tr><th>Prayer Request</th><th>Name</th><th>Status</th><th>Date</th><th>Cluster</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  const blob=new Blob([html],{type:'text/html'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`GidiGC_PrayerRequests_${new Date().toISOString().split('T')[0]}.html`;
+  a.click();
+  showToast('Open downloaded file → Print → Save as PDF',4000);
+}
+
+async function publishPrayerPage(){
+  const token=getGhToken();
+  if(!token){alert('No GitHub token. Go to Settings and add your token first.');return;}
+  const btn=event.target;btn.innerHTML='Publishing...';btn.disabled=true;
+  try{
+    const html=buildPrayerPageHtml();
+    const shaRes=await fetch(`https://api.github.com/repos/${GH_REPO}/contents/prayer.html?ref=${GH_BRANCH}`,{headers:{Authorization:`token ${token}`,Accept:'application/vnd.github.v3+json'}});
+    let sha='';if(shaRes.ok){const d=await shaRes.json();sha=d.sha;}
+    const body={message:`Update prayer page — ${new Date().toLocaleDateString('en-GB')}`,content:btoa(unescape(encodeURIComponent(html))),branch:GH_BRANCH};
+    if(sha)body.sha=sha;
+    const pushRes=await fetch(`https://api.github.com/repos/${GH_REPO}/contents/prayer.html`,{method:'PUT',headers:{Authorization:`token ${token}`,Accept:'application/vnd.github.v3+json','Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(pushRes.ok){btn.innerHTML='✓ Published!';showToast('Prayer page published ✓ — live in ~60 seconds',4000);setTimeout(()=>{btn.innerHTML='📨 Publish page';btn.disabled=false;},3000);}
+    else throw new Error((await pushRes.json()).message||'Push failed');
+  }catch(e){btn.innerHTML='📨 Publish page';btn.disabled=false;alert('Publish failed: '+e.message);}
+}
+
+function buildPrayerPageHtml(){
+  const SUPA_URL='https://rgmdtjfkffwoayvzqrks.supabase.co';
+  const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWR0amZrZmZ3b2F5dnpxcmtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NDA1NzQsImV4cCI6MjEwNDAxNjU3NH0.ZtsXCmqLCmmIsIgMsLFAqfW04RKwWZO5s0lrry04CbI';
+  return`<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gidi GC — Prayer Requests</title>
+<link href="https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Kumbh Sans',sans-serif;background:#f0f0eb;color:#1a1a1a;padding:20px 16px 60px;max-width:560px;margin:0 auto}
+.header{background:#1a1a1a;color:#fff;border-radius:14px;padding:20px;margin-bottom:16px;text-align:center}
+.header h1{font-family:'Playfair Display',serif;font-size:22px;margin-bottom:4px}
+.header p{font-size:13px;color:rgba(255,255,255,.5)}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:10px;border:0.5px solid #e0e0d8}
+.card.answered{opacity:.65}
+.req-name{font-size:13px;font-weight:600;margin-bottom:4px}
+.req-text{font-size:14px;line-height:1.6;margin-bottom:8px;color:#1a1a1a}
+.req-meta{font-size:11px;color:#aaa}
+.badge{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-active{background:#e1f5ee;color:#085041}
+.badge-answered{background:#e6f1fb;color:#0c447c}
+.form-section{background:#fff;border-radius:12px;padding:20px;margin-top:20px;border:0.5px solid #e0e0d8}
+.form-section h2{font-size:15px;font-weight:600;margin-bottom:14px}
+label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:4px;margin-top:12px}
+input,textarea,select{width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:14px;font-family:inherit}
+textarea{resize:vertical;min-height:80px}
+.vis-option{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:0.5px solid #e0e0d8;border-radius:8px;margin-bottom:6px;cursor:pointer}
+.vis-option input{width:16px;height:16px;flex-shrink:0;margin-top:2px}
+.vis-option-label{font-size:13px;font-weight:500}
+.vis-option-sub{font-size:11px;color:#888;margin-top:1px}
+.submit-btn{width:100%;padding:12px;background:#1a1a1a;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-top:14px;font-family:inherit}
+.submit-btn:disabled{opacity:.5}
+.success{background:#e1f5ee;color:#085041;border-radius:8px;padding:12px;text-align:center;font-weight:600;display:none}
+.sec{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+</style></head><body>
+<div class="header">
+  <h1>🙏 Prayer Requests</h1>
+  <p>Gidi GC · City Church Lagos</p>
+</div>
+<div id="prayerList"><div style="text-align:center;padding:2rem;color:#888">Loading...</div></div>
+<div class="form-section">
+  <h2>Add a prayer request</h2>
+  <label>Your name <span style="color:#888;font-weight:400">(optional)</span></label>
+  <input type="text" id="pub-name" placeholder="Your name">
+  <label>Prayer request *</label>
+  <textarea id="pub-request" placeholder="What should we be praying for?"></textarea>
+  <label style="margin-top:12px">Who can see this?</label>
+  <label class="vis-option"><input type="radio" name="pub-vis" value="public" checked>
+    <div><div class="vis-option-label">🌐 Share name and request</div><div class="vis-option-sub">Everyone with this link can see your name and request</div></div></label>
+  <label class="vis-option"><input type="radio" name="pub-vis" value="name_only">
+    <div><div class="vis-option-label">👤 Share name only</div><div class="vis-option-sub">Your name shows, but the request is kept private</div></div></label>
+  <label class="vis-option"><input type="radio" name="pub-vis" value="anonymous">
+    <div><div class="vis-option-label">🔒 Fully anonymous</div><div class="vis-option-sub">No name stored anywhere — not even privately</div></div></label>
+  <div id="pub-error" style="display:none;color:#791f1f;font-size:13px;margin-top:8px"></div>
+  <div id="pub-success" class="success">✓ Submitted! We'll be praying for you 🙏</div>
+  <button class="submit-btn" id="pub-submit" onclick="submitPublicPrayer()">Submit prayer request</button>
+</div>
+<script>
+const SB='${SUPA_URL}',KEY='${SUPA_KEY}';
+const H={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'};
+
+async function loadPrayers(){
+  try{
+    const r=await fetch(SB+'/rest/v1/prayer_requests?select=*&order=date.desc',{headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});
+    const data=await r.json();
+    const list=document.getElementById('prayerList');
+    const active=data.filter(p=>!p.hidden&&p.status!=='archived');
+    if(!active.length){list.innerHTML='<div style="text-align:center;padding:2rem;color:#888;font-size:14px">No active prayer requests right now.</div>';return;}
+    list.innerHTML='<div class="sec">Praying for this week</div>'+active.map(function(p){
+      var vis=p.visibility||(p.anonymous?'anonymous':'public');
+      var name=vis==='anonymous'?'<span style="color:#aaa">Anonymous</span>':p.member_id||'<span style="color:#aaa">Anonymous</span>';
+      var req=vis==='name_only'?'<span style="color:#aaa;font-style:italic">Details kept private</span>':p.request;
+      var answered=p.status==='answered';
+      return '<div class="card '+(answered?'answered':'')+'">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'+
+        '<div class="req-name">'+name+'</div>'+
+        '<span class="badge '+(answered?'badge-answered':'badge-active')+'">'+(answered?'Answered ✓':'Active')+'</span>'+
+        '</div>'+
+        '<div class="req-text">'+req+'</div>'+
+        '<div class="req-meta">'+(p.cluster_name||'')+(p.cluster_name&&p.date?' · ':'')+(p.date||'')+'</div>'+
+        '</div>';
+    }).join('');
+  }catch(e){document.getElementById('prayerList').innerHTML='<div style="color:#888;text-align:center;padding:2rem">Could not load requests.</div>';}
+}
+
+async function submitPublicPrayer(){
+  const name=document.getElementById('pub-name').value.trim();
+  const req=document.getElementById('pub-request').value.trim();
+  const vis=document.querySelector('input[name="pub-vis"]:checked')?.value||'public';
+  const err=document.getElementById('pub-error');
+  err.style.display='none';
+  if(!req){err.textContent='Please enter a prayer request.';err.style.display='block';return;}
+  const btn=document.getElementById('pub-submit');btn.disabled=true;btn.textContent='Submitting...';
+  const row={id:'pr_pub_'+Date.now(),member_id:vis==='anonymous'?'':name,cluster_name:'',request:req,anonymous:vis==='anonymous',visibility:vis,hidden:false,date:new Date().toISOString().split('T')[0],status:'active'};
+  try{
+    const r=await fetch(SB+'/rest/v1/prayer_requests',{method:'POST',headers:H,body:JSON.stringify(row)});
+    if(r.ok||r.status===201||r.status===200){
+      document.getElementById('pub-success').style.display='block';
+      document.getElementById('pub-name').value='';
+      document.getElementById('pub-request').value='';
+      document.querySelector('input[name="pub-vis"]').checked=true;
+      btn.textContent='Submit prayer request';btn.disabled=false;
+      setTimeout(loadPrayers,1000);
+    }else throw new Error('Failed');
+  }catch(e){err.textContent='Could not submit. Please try again.';err.style.display='block';btn.disabled=false;btn.textContent='Submit prayer request';}
+}
+loadPrayers();
+<\/script></body></html>`;
 }
 
 function updatePrayerStatus(id,status){
@@ -5341,7 +5621,26 @@ function deletePrayerRequest(id){
   if(idx>=0){prayerRequests.splice(idx,1);saveAll();renderPrayerRequests();}
 }
 
-// ── SESSION DEBRIEF ───────────────────────────────────────────────────────────
+// ── CLUSTER MESSAGE CUSTOMIZATION ────────────────────────────────────────────
+function getClusterMsg(clusterId,memberName,streak){
+  const msgs=clusterMessages[clusterId]||{};
+  const weekMsg=msgs.weekMsg||'';
+  const defaultMsg=msgs.defaultMsg||'';
+  const firstName=memberName.split(' ')[0];
+  // Priority: weekMsg > defaultMsg > hardcoded by streak
+  const template=weekMsg||defaultMsg||(
+    streak>=3?`Hey [name], we've been missing you at Gidi GC! Just checking in 🙏`:
+    streak>=2?`Hey [name], missed you at GC — hope all is well! 🙏`:
+    `Hey [name], just checking in from Gidi GC 🙏`
+  );
+  return template.replace(/\[name\]/gi,firstName);
+}
+
+function setClusterMsg(clusterId,field,val){
+  if(!clusterMessages[clusterId])clusterMessages[clusterId]={defaultMsg:'',weekMsg:''};
+  clusterMessages[clusterId][field]=val;
+  saveAll();
+}
 let _debriefSession=null;
 let _debriefData={}; // {memberName: {reason, wellbeing, note, checkedIn}}
 
@@ -5904,7 +6203,11 @@ function openClusterHeadSubmission(clusterId){
         </div>
         <div>
           <div style="font-size:11px;color:#888;font-weight:500;margin-bottom:4px">Prayer request (optional)</div>
-          <input type="text" onchange="submissionData_${clusterId}['${mEsc}'].prayerRequest=this.value" placeholder="Any prayer points?" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid #ccc;border-radius:6px;font-family:inherit">
+          <input type="text" onchange="submissionData_${clusterId}['${mEsc}'].prayerRequest=this.value" placeholder="Any prayer points?" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid #ccc;border-radius:6px;font-family:inherit;margin-bottom:4px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#888;cursor:pointer">
+            <input type="checkbox" onchange="submissionData_${clusterId}['${mEsc}'].prayerAnon=this.checked" style="width:12px;height:12px">
+            Keep anonymous (no name attached)
+          </label>
         </div>
       </div>`;
     }).join('')}
@@ -5935,7 +6238,39 @@ async function submitClusterForm(clusterId,headName,weekKey){
   pendingClusterSubmissions.push(sub);
   await saveAll();
   closeClusterSubmit();
-  showToast('Check-in submitted ✓ The GC leader will review it.',3000);
+  showToast('Check-in submitted ✓',2000);
+
+  // Build WhatsApp summary to GC leader
+  const sc=superclusters.find(x=>x.clusterIds&&x.clusterIds.includes(clusterId));
+  const gcLeaderName=sc?.gcLeader||'';
+  const gcLeaderWa=gcLeaderName?getWaNumber(gcLeaderName):'';
+
+  if(gcLeaderWa){
+    const memberCount=Object.keys(data).length;
+    const checkedIn=Object.values(data).filter(d=>d.checkedIn).length;
+    const urgent=Object.entries(data).filter(([,d])=>d.wellbeing==='red').map(([n])=>n.split(' ')[0]);
+    const amber=Object.entries(data).filter(([,d])=>d.wellbeing==='amber').map(([n])=>n.split(' ')[0]);
+    const notes=Object.entries(data).filter(([,d])=>d.note).map(([n,d])=>`${n.split(' ')[0]}: ${d.note}`);
+    const prayers=Object.values(data).filter(d=>d.prayerRequest).length;
+
+    const msg=[
+      `Hi ${gcLeaderName.split(' ')[0]}! Here's my weekly update for ${c?.name}:`,
+      ``,
+      `✅ Check-ins: ${checkedIn}/${memberCount} done`,
+      urgent.length?`🔴 Urgent: ${urgent.join(', ')}`:'',
+      amber.length?`🟡 Needs support: ${amber.join(', ')}`:'',
+      notes.length?`📝 Notes: ${notes.join(' | ')}`:'',
+      prayers?`🙏 ${prayers} prayer request${prayers>1?'s':''} logged`:'',
+      ``,
+      `Week: ${weekKey}`,
+    ].filter(Boolean).join('\n');
+
+    setTimeout(()=>{
+      window.open(`https://wa.me/${gcLeaderWa}?text=${encodeURIComponent(msg)}`,'_blank');
+    },1500);
+  } else {
+    showToast('Check-in submitted ✓ The GC leader will review it.',3000);
+  }
 
   // Send email notification
   try{
@@ -6003,7 +6338,7 @@ async function approveSubmission(id){
     if(d.wellbeing){if(!wellbeing[wk])wellbeing[wk]={};wellbeing[wk][mn]=d.wellbeing;}
     if(d.note){if(!careNotes[wk])careNotes[wk]={};careNotes[wk][mn]=d.note;}
     if(d.prayerRequest){
-      prayerRequests.push({id:'pr_'+Date.now()+'_'+mn,memberId:mn,clusterName:sub.clusterName,request:d.prayerRequest,anonymous:false,date:sub.weekKey,status:'active'});
+      prayerRequests.push({id:'pr_'+Date.now()+'_'+mn,memberId:d.prayerAnon?'':mn,clusterName:sub.clusterName,request:d.prayerRequest,anonymous:d.prayerAnon||false,visibility:'public',hidden:false,date:sub.weekKey,status:'active'});
     }
   });
   // Remove from pending
@@ -6146,7 +6481,8 @@ function renderSuperclusters(){
   if(weekPickerEl){
     const autoWeek=allWeeks.slice(-1)[0]?.key||'';
     const cur=weekPickerEl.value||autoWeek;
-    if(!weekPickerEl.options.length||weekPickerEl.options[0].value===''){
+    // Only repopulate if no week options loaded yet (more than just the placeholder)
+    if(weekPickerEl.options.length<=1){
       weekPickerEl.innerHTML='<option value="">Select week...</option>'+[...allWeeks].reverse().map(w=>`<option value="${w.key}"${w.key===cur?' selected':''}>${w.date}</option>`).join('');
     }
     if(!weekPickerEl.value&&cur)weekPickerEl.value=cur;
@@ -6621,17 +6957,353 @@ function buildWellbeingTimeline(memberName){
 }
 
 // ── CLUSTER HEAD REPORT (generated page) ──────────────────────────────────────
-function generateClusterHeadReport(clusterId){
+function openClusterHeadDashboard(clusterId){
   const c=clusters.find(x=>x.id===clusterId);if(!c)return;
-  const members=getMembersInCluster(c.id).sort(byFirstName);
+  const members=getMembersInCluster(clusterId).sort(byFirstName);
   const recs=getClusterSessions();
   const today=new Date().toISOString().split('T')[0];
   const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
+  const thisWeek=allWeeks.length?allWeeks[allWeeks.length-1]:null;
   const lastSess=recs.length?recs[recs.length-1]:null;
   const nextSess=SESSIONS_DEF.find(s=>s.key>today);
-
-  // Attendance for last 5 sessions per member
   const last5=recs.slice(-5);
+
+  // Attendance stats
+  const presentCount=lastSess?members.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length:0;
+  const absentMembers=lastSess?members.filter(m=>!attendance[lastSess.key]||attendance[lastSess.key][m.n]!=='present'):[];
+  const clusterRate=members.length&&recs.length?Math.round(members.reduce((s,m)=>s+recs.filter(r=>attendance[r.key]&&attendance[r.key][m.n]==='present').length,0)/(members.length*recs.length)*100):0;
+
+  // Check if already submitted this week
+  const alreadySubmitted=thisWeek&&pendingClusterSubmissions.some(s=>s.clusterId===clusterId&&s.weekKey===thisWeek.key);
+
+  // GC leader info
+  const sc=superclusters.find(x=>x.clusterIds&&x.clusterIds.includes(clusterId));
+  const gcLeaderName=sc?.gcLeader||'';
+  const gcLeaderWa=gcLeaderName?getWaNumber(gcLeaderName):'';
+
+  // Messages
+  const msgs=clusterMessages[clusterId]||{};
+
+  // Trend sparkline
+  const trendData=last5.map(s=>({
+    date:s.date.replace(' 2026',''),
+    present:members.filter(m=>attendance[s.key]&&attendance[s.key][m.n]==='present').length,
+    rate:members.length?Math.round(members.filter(m=>attendance[s.key]&&attendance[s.key][m.n]==='present').length/members.length*100):0
+  }));
+
+  // Submission data store
+  const submissionData={};
+  members.forEach(m=>submissionData[m.n]={checkedIn:false,wellbeing:'',note:'',prayerRequest:'',prayerAnon:false});
+
+  const SUPA_URL='https://rgmdtjfkffwoayvzqrks.supabase.co';
+  const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWR0amZrZmZ3b2F5dnpxcmtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NDA1NzQsImV4cCI6MjEwNDAxNjU3NH0.ZtsXCmqLCmmIsIgMsLFAqfW04RKwWZO5s0lrry04CbI';
+
+  const memberRows=members.map(m=>{
+    const streak=calcMember(m.n).curStreak;
+    const isAbsent=lastSess&&(!attendance[lastSess.key]||attendance[lastSess.key][m.n]!=='present');
+    const wbRecent=allWeeks.slice(-3).map(w=>(wellbeing[w.key]||{})[m.n]||'');
+    const wbFlag=wbRecent.filter(v=>v==='red'||v==='amber').length>=2;
+    const wa=getWaNumber(m.n);
+    const waMsg=getClusterMsg(clusterId,m.n,streak);
+    const mId=m.n.replace(/[^a-zA-Z]/g,'_');
+
+    let priority='';
+    if(streak>=3)priority='<span style="font-size:10px;background:#fcebeb;color:#791f1f;border-radius:20px;padding:2px 7px;font-weight:700">🔴 urgent</span>';
+    else if(streak>=2||wbFlag)priority='<span style="font-size:10px;background:#faeeda;color:#633806;border-radius:20px;padding:2px 7px;font-weight:700">🟡 follow up</span>';
+
+    const dots=last5.map(s=>{
+      const st=attendance[s.key]?attendance[s.key][m.n]:'';
+      const col=st==='present'?'#1D9E75':st==='absent'?'#E24B4A':'#e0e0d8';
+      return`<div style="width:8px;height:8px;border-radius:2px;background:${col}" title="${s.date.replace(' 2026','')}"></div>`;
+    }).join('');
+
+    return`<div style="background:#fff;border:0.5px solid ${isAbsent?'#f09595':'#e0e0d8'};border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${m.n} ${priority}</div>
+          <div style="display:flex;gap:3px;margin-top:5px">${dots}</div>
+        </div>
+        ${wa?`<a href="https://wa.me/${wa}?text=${encodeURIComponent(waMsg)}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:600;text-decoration:none;flex-shrink:0">📱 Message</a>`:''}
+      </div>
+      <!-- Check-in form -->
+      <div style="border-top:0.5px solid #f0efe8;padding-top:10px;display:grid;gap:8px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500">
+          <input type="checkbox" id="ci_${mId}" style="width:15px;height:15px" onchange="sd_${mId}.checkedIn=this.checked">
+          Checked in on ${m.n.split(' ')[0]} this week
+        </label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:#888;font-weight:500;min-width:80px">Wellbeing:</span>
+          <div style="display:flex;gap:6px">
+            ${['red','amber','green'].map(col=>{
+              const colors={red:'#E24B4A',amber:'#EF9F27',green:'#1D9E75'};
+              const labels={red:'Urgent',amber:'Needs support',green:'Doing well'};
+              return`<button onclick="document.querySelectorAll('.wb_${mId}').forEach(b=>b.style.opacity='.4');this.style.opacity='1';sd_${mId}.wellbeing='${col}'" class="wb_${mId}" title="${labels[col]}" style="width:24px;height:24px;border-radius:50%;border:2px solid ${colors[col]};background:${colors[col]};cursor:pointer;opacity:.4;transition:opacity .15s"></button>`;
+            }).join('')}
+          </div>
+        </div>
+        <textarea placeholder="Notes for your GC leader..." id="note_${mId}" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid #e0e0d8;border-radius:8px;resize:none;font-family:inherit;min-height:36px" onchange="sd_${mId}.note=this.value"></textarea>
+        <div>
+          <input type="text" placeholder="Prayer request (optional)" id="pr_${mId}" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid #e0e0d8;border-radius:8px;font-family:inherit;margin-bottom:4px" onchange="sd_${mId}.prayerRequest=this.value">
+          <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#888;cursor:pointer">
+            <input type="checkbox" onchange="sd_${mId}.prayerAnon=this.checked" style="width:12px;height:12px"> Keep anonymous
+          </label>
+        </div>
+      </div>
+      <script>var sd_${mId}={checkedIn:false,wellbeing:'',note:'',prayerRequest:'',prayerAnon:false};<\/script>
+    </div>`;
+  }).join('');
+
+  const trendBars=trendData.map(d=>`
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+      <div style="font-size:11px;font-weight:700;color:${d.rate>=70?'#1D9E75':d.rate>=50?'#EF9F27':'#E24B4A'}">${d.rate}%</div>
+      <div style="width:100%;background:${d.rate>=70?'#e1f5ee':d.rate>=50?'#faeeda':'#fcebeb'};border-radius:4px;height:${Math.max(d.rate/100*48,4)}px"></div>
+      <div style="font-size:10px;color:#aaa;text-align:center">${d.date}</div>
+    </div>`).join('');
+
+  const htmlDoc=`<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>${c.name} — Gidi GC</title>
+<link href="https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Kumbh Sans',sans-serif;background:#f0f0eb;color:#1a1a1a;padding:0 0 60px;max-width:520px;margin:0 auto}
+.header{background:#1a1a1a;color:#fff;padding:20px 16px;margin-bottom:0}
+.header h1{font-family:'Playfair Display',serif;font-size:20px;margin-bottom:2px}
+.header p{font-size:13px;color:rgba(255,255,255,.5)}
+.tabs{display:flex;background:#fff;border-bottom:0.5px solid #e0e0d8;position:sticky;top:0;z-index:50}
+.tab{flex:1;padding:12px 8px;text-align:center;font-size:13px;font-weight:500;color:#888;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit}
+.tab.active{color:#1a1a1a;border-bottom-color:#1a1a1a;font-weight:600}
+.section{display:none;padding:16px}
+.section.active{display:block}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;border:0.5px solid #e0e0d8}
+.sec{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+.stat{text-align:center}
+.stat-val{font-size:28px;font-weight:700}
+.stat-lbl{font-size:11px;color:#888;margin-top:2px}
+.submit-btn{width:100%;padding:14px;background:#1a1a1a;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px}
+.submit-btn:disabled{opacity:.5}
+textarea,input{font-family:inherit}
+</style></head><body>
+
+<div class="header">
+  <div style="font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🏘 ${c.name}</div>
+  <h1>Hey ${c.head.split(' ')[0]}! 👋</h1>
+  <p>Gidi GC · ${lastSess?lastSess.date:'No sessions yet'}</p>
+  <div style="display:flex;gap:16px;margin-top:14px">
+    <div class="stat"><div class="stat-val" style="color:${presentCount/members.length>=.7?'#4ade80':'#f87171'}">${presentCount}</div><div class="stat-lbl" style="color:rgba(255,255,255,.4)">present</div></div>
+    <div class="stat"><div class="stat-val" style="color:#f87171">${absentMembers.length}</div><div class="stat-lbl" style="color:rgba(255,255,255,.4)">absent</div></div>
+    <div class="stat"><div class="stat-val" style="color:${clusterRate>=70?'#4ade80':clusterRate>=50?'#facc15':'#f87171'}">${clusterRate}%</div><div class="stat-lbl" style="color:rgba(255,255,255,.4)">overall</div></div>
+    <div class="stat"><div class="stat-val">${members.length}</div><div class="stat-lbl" style="color:rgba(255,255,255,.4)">members</div></div>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('checkin')">✅ Check-in</button>
+  <button class="tab" onclick="showTab('members')">👥 Members</button>
+  <button class="tab" onclick="showTab('trend')">📊 Trend</button>
+  <button class="tab" onclick="showTab('messages')">✏️ Messages</button>
+</div>
+
+<!-- TAB: CHECK-IN -->
+<div id="tab-checkin" class="section active">
+  ${alreadySubmitted?`<div style="background:#e1f5ee;border-radius:10px;padding:14px;margin-bottom:12px;text-align:center">
+    <div style="font-size:20px;margin-bottom:4px">✅</div>
+    <div style="font-size:14px;font-weight:600;color:#085041">Check-in submitted for ${thisWeek?thisWeek.date:'this week'}</div>
+    <div style="font-size:12px;color:#888;margin-top:4px">Your GC leader has been notified</div>
+  </div>`:`<div style="background:#e6f1fb;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:#0c447c">
+    Fill in what you know for each member. Tap Submit when done.
+  </div>`}
+  ${memberRows}
+  ${!alreadySubmitted?`<button class="submit-btn" id="submitBtn" onclick="doSubmit()">Submit weekly check-in →</button>`:''}
+  <div id="submitStatus" style="text-align:center;font-size:13px;margin-top:10px;display:none"></div>
+</div>
+
+<!-- TAB: MEMBERS -->
+<div id="tab-members" class="section">
+  <div class="sec" style="margin-bottom:8px">All members (${members.length})</div>
+  ${members.map(m=>{
+    const streak=calcMember(m.n).curStreak;
+    const wa=getWaNumber(m.n);
+    const waMsg=getClusterMsg(clusterId,m.n,streak);
+    const dots=last5.map(s=>{
+      const st=attendance[s.key]?attendance[s.key][m.n]:'';
+      return`<div style="width:8px;height:8px;border-radius:2px;background:${st==='present'?'#1D9E75':st==='absent'?'#E24B4A':'#e0e0d8'}" title="${s.date.replace(' 2026','')}"></div>`;
+    }).join('');
+    const wbVal=thisWeek?(wellbeing[thisWeek.key]||{})[m.n]||'':'';
+    const wbColor={red:'#E24B4A',amber:'#EF9F27',green:'#1D9E75'}[wbVal]||'transparent';
+    return`<div style="background:#fff;border-radius:10px;padding:12px;margin-bottom:8px;border:0.5px solid #e0e0d8;display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div>
+        <div style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px">
+          ${m.n}
+          ${wbVal?`<span style="width:8px;height:8px;border-radius:50%;background:${wbColor};display:inline-block"></span>`:''}
+          ${streak>=3?'<span style="font-size:10px;color:#791f1f">🔴</span>':streak>=2?'<span style="font-size:10px;color:#633806">🟡</span>':''}
+        </div>
+        <div style="display:flex;gap:3px;margin-top:5px">${dots}</div>
+      </div>
+      ${wa?`<a href="https://wa.me/${wa}?text=${encodeURIComponent(waMsg)}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:5px 10px;font-size:11px;font-weight:600;text-decoration:none;flex-shrink:0">📱 WA</a>`:''}
+    </div>`;
+  }).join('')}
+</div>
+
+<!-- TAB: TREND -->
+<div id="tab-trend" class="section">
+  <div class="card">
+    <div class="sec">Attendance trend — last ${trendData.length} sessions</div>
+    <div style="display:flex;gap:6px;align-items:flex-end;height:80px">${trendBars}</div>
+  </div>
+  <div class="card">
+    <div class="sec">Members at a glance</div>
+    ${members.map(m=>{
+      const c2=calcMember(m.n);
+      const bar=Math.round(c2.rate);
+      return`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f0efe8">
+        <div style="font-size:12px;min-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.n.split(' ')[0]}</div>
+        <div style="flex:1;background:#f0f0eb;border-radius:4px;height:8px;overflow:hidden"><div style="width:${bar}%;height:100%;background:${bar>=70?'#1D9E75':bar>=50?'#EF9F27':'#E24B4A'};border-radius:4px"></div></div>
+        <div style="font-size:12px;font-weight:600;color:${bar>=70?'#1D9E75':bar>=50?'#EF9F27':'#E24B4A'};min-width:32px;text-align:right">${bar}%</div>
+      </div>`;
+    }).join('')}
+  </div>
+</div>
+
+<!-- TAB: MESSAGES -->
+<div id="tab-messages" class="section">
+  <div class="card">
+    <div class="sec">Your WhatsApp messages</div>
+    <p style="font-size:13px;color:#888;margin-bottom:14px">Use <strong>[name]</strong> as a placeholder — it gets replaced with each person's first name when you tap WA.</p>
+    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">This week's message <span style="font-weight:400;color:#888">(overrides default)</span></label>
+    <textarea id="msgWeek" style="width:100%;font-size:13px;padding:8px;border:0.5px solid #ccc;border-radius:8px;resize:vertical;font-family:inherit;min-height:70px;margin-bottom:12px">${msgs.weekMsg||''}</textarea>
+    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Default message</label>
+    <textarea id="msgDefault" style="width:100%;font-size:13px;padding:8px;border:0.5px solid #ccc;border-radius:8px;resize:vertical;font-family:inherit;min-height:70px;margin-bottom:12px">${msgs.defaultMsg||''}</textarea>
+    <button onclick="saveMsgs()" style="background:#1a1a1a;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Save messages</button>
+    <span id="msgSaved" style="font-size:12px;color:#1D9E75;font-weight:600;margin-left:10px;opacity:0;transition:opacity .3s">Saved ✓</span>
+  </div>
+  ${gcLeaderWa?`<div class="card">
+    <div class="sec">Send summary to your GC leader</div>
+    <p style="font-size:13px;color:#888;margin-bottom:10px">Send ${gcLeaderName.split(' ')[0]} a quick update on how your cluster is doing.</p>
+    <button onclick="sendGcSummary()" style="background:#25D366;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;width:100%">📱 Send summary to ${gcLeaderName.split(' ')[0]}</button>
+  </div>`:''}
+</div>
+
+<script>
+// Tab switching
+function showTab(id){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// Supabase
+const SB='${SUPA_URL}',KEY='${SUPA_KEY}';
+const H={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'};
+
+// Submit check-in
+async function doSubmit(){
+  const btn=document.getElementById('submitBtn');
+  const status=document.getElementById('submitStatus');
+  btn.disabled=true;btn.textContent='Submitting...';
+  status.style.display='none';
+
+  // Collect all member data from the sd_ variables
+  const data={};
+  ${members.map(m=>{
+    const mId=m.n.replace(/[^a-zA-Z]/g,'_');
+    return`data['${m.n.replace(/'/g,"\\'")}']={...sd_${mId}};`;
+  }).join('')}
+
+  const sub={
+    id:'sub_'+Date.now(),
+    cluster_id:'${clusterId}',
+    cluster_name:'${c.name.replace(/'/g,"\\'")}',
+    submitted_by:'${c.head.replace(/'/g,"\\'")}',
+    week_key:'${thisWeek?.key||''}',
+    data:JSON.stringify(data),
+    submitted_at:new Date().toISOString()
+  };
+
+  try{
+    await fetch(SB+'/rest/v1/pending_submissions',{method:'POST',headers:H,body:JSON.stringify(sub)});
+
+    // Add prayer requests
+    const prayers=Object.entries(data).filter(([,d])=>d.prayerRequest);
+    for(const [name,d] of prayers){
+      await fetch(SB+'/rest/v1/prayer_requests',{method:'POST',headers:H,body:JSON.stringify({
+        id:'pr_'+Date.now()+'_'+name.replace(/\\s/g,''),
+        member_id:d.prayerAnon?'':name,
+        cluster_name:'${c.name.replace(/'/g,"\\'")}',
+        request:d.prayerRequest,
+        anonymous:d.prayerAnon||false,
+        visibility:'public',
+        hidden:false,
+        date:'${thisWeek?.key||new Date().toISOString().split('T')[0]}',
+        status:'active'
+      })});
+    }
+
+    btn.textContent='✓ Submitted!';
+    status.innerHTML='<span style="color:#1D9E75;font-weight:600">✓ Submitted! Your GC leader will review it.</span>';
+    status.style.display='block';
+
+    // Open WhatsApp to GC leader
+    ${gcLeaderWa?`
+    const urgent=Object.entries(data).filter(([,d])=>d.wellbeing==='red').map(([n])=>n.split(' ')[0]);
+    const amber=Object.entries(data).filter(([,d])=>d.wellbeing==='amber').map(([n])=>n.split(' ')[0]);
+    const checkedIn=Object.values(data).filter(d=>d.checkedIn).length;
+    const msg=[
+      'Hi ${gcLeaderName.split(' ')[0]}! Here is my weekly update for ${c.name.replace(/'/g,"\\'")}:',
+      '',
+      '✅ Check-ins: '+checkedIn+'/${members.length} done',
+      urgent.length?'🔴 Urgent: '+urgent.join(', '):'',
+      amber.length?'🟡 Needs support: '+amber.join(', '):'',
+      prayers.length?'🙏 '+prayers.length+' prayer request'+(prayers.length>1?'s':'')+' logged':'',
+      '',
+      'Week: ${thisWeek?.key||''}'
+    ].filter(Boolean).join('\\n');
+    setTimeout(()=>window.open('https://wa.me/${gcLeaderWa}?text='+encodeURIComponent(msg),'_blank'),1500);
+    `:''}
+  }catch(e){
+    btn.disabled=false;btn.textContent='Submit weekly check-in →';
+    status.innerHTML='<span style="color:#791f1f">Could not submit. Check your connection and try again.</span>';
+    status.style.display='block';
+  }
+}
+
+// Save messages
+async function saveMsgs(){
+  const weekMsg=document.getElementById('msgWeek').value.trim();
+  const defaultMsg=document.getElementById('msgDefault').value.trim();
+  try{
+    await fetch(SB+'/rest/v1/cluster_messages',{method:'POST',headers:H,body:JSON.stringify({cluster_id:'${clusterId}',default_msg:defaultMsg,week_msg:weekMsg,updated_at:new Date().toISOString()})});
+    const s=document.getElementById('msgSaved');s.style.opacity='1';setTimeout(()=>s.style.opacity='0',2000);
+  }catch(e){alert('Could not save. Try again.');}
+}
+
+// GC leader summary
+function sendGcSummary(){
+  const total=${members.length};
+  const msg=[
+    'Hi ${gcLeaderName.split(' ')[0]}! Here is a quick update on ${c.name.replace(/'/g,"\\'")}:',
+    '',
+    '📊 Overall attendance: ${clusterRate}%',
+    '👥 Members: '+total,
+    ${lastSess?`'Last session (${lastSess.date.replace(/'/g,"\\'")}): ${presentCount}/${members.length} present',`:''}
+    '',
+    '${nextSess?'Next session: '+nextSess.date:''}'
+  ].filter(Boolean).join('\\n');
+  window.open('https://wa.me/${gcLeaderWa}?text='+encodeURIComponent(msg),'_blank');
+}
+<\/script>
+</body></html>`;
+
+  const blob=new Blob([htmlDoc],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  window.open(url,'_blank');
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+
+
+function generateClusterHeadReport(clusterId){
+  const c=clusters.find(x=>x.id===clusterId);if(!c)return;
 
   // Cluster attendance trend (last 5 sessions)
   const trendData=last5.map(s=>({
@@ -6704,17 +7376,15 @@ function generateClusterHeadReport(clusterId){
     const wa=getWaNumber(m.n);
 
     // Priority tag
-    let tag='',tagStyle='',waBg='#1a1a1a',waMsg=`Hey ${m.n.split(' ')[0]}, just checking in from Gidi GC 🙏`;
+    let tag='',tagStyle='',waBg='#1a1a1a';
     if(streak>=3){
       tag='🔴 High priority';tagStyle='background:#fcebeb;color:#791f1f;';waBg='#25D366';
-      waMsg=`Hey ${m.n.split(' ')[0]}, we've been missing you at Gidi GC! Just checking in to see how you're doing 🙏`;
     } else if(streak>=2||wbFlag){
       tag=streak>=2?'🟡 Follow up':'🟡 Check in';tagStyle='background:#faeeda;color:#633806;';waBg='#25D366';
-      waMsg=`Hey ${m.n.split(' ')[0]}, missed you at GC${streak>=2?' again':''} — hope all is well! 🙏`;
     } else if(isAbsent){
       tag='Absent';tagStyle='background:#f5f5f3;color:#888;';waBg='#25D366';
-      waMsg=`Hey ${m.n.split(' ')[0]}, missed you at GC this week! Hope all is well 🙏`;
     }
+    const waMsg=getClusterMsg(clusterId,m.n,streak);
 
     const joinDate=clusterMembers[m.n]?.joinDate||'';
     const joinNote=joinDate&&joinDate>'2026-09-08'?`<div style="font-size:10px;color:#aaa;margin-top:2px">Joined ${joinDate}</div>`:'';
@@ -6816,6 +7486,21 @@ footer{text-align:center;font-size:12px;color:#aaa;padding-top:8px}
   ${sortedRows}
 </div>
 
+<div class="card" style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;padding:16px;margin-bottom:12px">
+  <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">✏️ Customise your WhatsApp messages</div>
+  <div style="font-size:12px;color:#888;margin-bottom:10px">Use <strong>[name]</strong> as a placeholder — it'll be replaced with each person's first name.</div>
+  <div style="margin-bottom:10px">
+    <div style="font-size:12px;font-weight:600;margin-bottom:4px">This week's message <span style="font-weight:400;color:#888">(overrides your default)</span></div>
+    <textarea id="msg-week" placeholder="Hey [name], missed you at GC this week! Hope all is well 🙏" style="width:100%;font-size:13px;padding:8px;border:0.5px solid #ccc;border-radius:8px;resize:vertical;font-family:inherit;min-height:60px">${(clusterMessages[clusterId]||{}).weekMsg||''}</textarea>
+  </div>
+  <div style="margin-bottom:10px">
+    <div style="font-size:12px;font-weight:600;margin-bottom:4px">Default message <span style="font-weight:400;color:#888">(used when no weekly message is set)</span></div>
+    <textarea id="msg-default" placeholder="Hey [name], just checking in from Gidi GC 🙏" style="width:100%;font-size:13px;padding:8px;border:0.5px solid #ccc;border-radius:8px;resize:vertical;font-family:inherit;min-height:60px">${(clusterMessages[clusterId]||{}).defaultMsg||''}</textarea>
+  </div>
+  <button onclick="saveClusterMsgs('${clusterId}')" style="background:#1a1a1a;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Save messages</button>
+  <span id="msg-saved" style="font-size:12px;color:#1D9E75;font-weight:600;margin-left:10px;opacity:0;transition:opacity .3s">Saved ✓</span>
+</div>
+
 ${nextSess?`<div class="next">
   <div>
     <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.4);margin-bottom:4px">Next session</div>
@@ -6865,6 +7550,24 @@ ${(()=>{
 })()}
 
 <footer>${c.name} · Gidi GC · ${lastSess?lastSess.date:''}</footer>
+<script>
+const _SUPA_URL='https://rgmdtjfkffwoayvzqrks.supabase.co';
+const _SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWR0amZrZmZ3b2F5dnpxcmtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NDA1NzQsImV4cCI6MjEwNDAxNjU3NH0.ZtsXCmqLCmmIsIgMsLFAqfW04RKwWZO5s0lrry04CbI';
+async function saveClusterMsgs(clusterId){
+  const weekMsg=document.getElementById('msg-week').value.trim();
+  const defaultMsg=document.getElementById('msg-default').value.trim();
+  try{
+    await fetch(_SUPA_URL+'/rest/v1/cluster_messages',{
+      method:'POST',
+      headers:{'apikey':_SUPA_KEY,'Authorization':'Bearer '+_SUPA_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({cluster_id:clusterId,default_msg:defaultMsg,week_msg:weekMsg,updated_at:new Date().toISOString()})
+    });
+    // Reload WA buttons with new messages
+    const saved=document.getElementById('msg-saved');
+    saved.style.opacity='1';setTimeout(()=>saved.style.opacity='0',2000);
+  }catch(e){alert('Could not save. Please try again.');}
+}
+<\/script>
 </body></html>`;
 
   const blob=new Blob([htmlDoc],{type:'text/html'});
@@ -6977,11 +7680,13 @@ footer{text-align:center;font-size:12px;color:#aaa;padding-top:8px}
 </div>
 
 <div class="card">
-  <div class="sec">💛 We missed you this week (${lastAbsent.length})</div>
-  ${lastAbsent.map(m=>{
+  <div class="sec">💛 Check on someone — they weren't here this week</div>
+  <div style="font-size:12px;color:#888;margin-bottom:10px">Tap WhatsApp to send them a message. It only takes a second 🙏</div>
+  ${lastAbsent.filter(m=>m&&m.n).map(m=>{
     const streak=calcMember(m.n).curStreak;
     const isUrgent=streak>=3;
-    const msg=isUrgent?`Hey ${m.n.split(' ')[0]}, we've been missing you at Gidi GC! Just checking in 🙏`:`Hey ${m.n.split(' ')[0]}, missed you at GC this week! Hope all is well 🙏`;
+    const cId=clusterMembers[m.n]?.clusterId||'';
+    const msg=getClusterMsg(cId,m.n,streak);
     return`<div class="row">
       <div>
         <div style="font-size:14px;font-weight:500">${m.n}${isUrgent?' <span style="font-size:10px;background:#fcebeb;color:#791f1f;border-radius:20px;padding:2px 6px;font-weight:700">🔴 HIGH PRIORITY</span>':''}</div>
@@ -7026,7 +7731,80 @@ ${nextSess?`<div class="card card-next">
   setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 
-// ── GITHUB REPORT PUBLISHING ──────────────────────────────────────────────────
+// ── GUEST ACCESS TOKENS ───────────────────────────────────────────────────────
+function generateGuestToken(){
+  const label=document.getElementById('guestLabel').value.trim()||'Guest';
+  const hours=parseInt(document.getElementById('guestExpiry').value)||48;
+  // Generate a readable 6-char code
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let token='';for(let i=0;i<6;i++)token+=chars[Math.floor(Math.random()*chars.length)];
+  const expiresAt=new Date(Date.now()+hours*3600000).toISOString();
+
+  // Save to Supabase
+  fetch(`${SB_URL}/rest/v1/guest_tokens`,{
+    method:'POST',
+    headers:{...SBH,'Prefer':'resolution=merge-duplicates,return=minimal'},
+    body:JSON.stringify({token,label,expires_at:expiresAt,created_at:new Date().toISOString()})
+  }).then(r=>{
+    if(r.ok||r.status===201){
+      document.getElementById('guestTokenResult').style.display='block';
+      document.getElementById('guestTokenCode').textContent=token;
+      document.getElementById('guestTokenExpiry').textContent=
+        `For: ${label} · Expires: ${new Date(expiresAt).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`;
+      document.getElementById('guestLabel').value='';
+      loadGuestTokens();
+    }else{showToast('Could not save token',2500);}
+  }).catch(()=>showToast('Could not save token',2500));
+}
+
+async function loadGuestTokens(){
+  const el=document.getElementById('guestTokenList');
+  if(!el)return;
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/guest_tokens?select=*&order=expires_at.asc`,{headers:SBH});
+    const tokens=await r.json();
+    const now=new Date();
+    const active=tokens.filter(t=>new Date(t.expires_at)>now);
+    const expired=tokens.filter(t=>new Date(t.expires_at)<=now);
+
+    // Clean up expired ones silently
+    for(const t of expired){
+      fetch(`${SB_URL}/rest/v1/guest_tokens?token=eq.${t.token}`,{method:'DELETE',headers:SBH});
+    }
+
+    if(!active.length){el.innerHTML='<div style="color:#aaa;font-size:13px">No active guest tokens.</div>';return;}
+    el.innerHTML=active.map(t=>{
+      const exp=new Date(t.expires_at);
+      const hoursLeft=Math.round((exp-now)/3600000);
+      const expStr=hoursLeft<24?`${hoursLeft}h left`:`${Math.round(hoursLeft/24)}d left`;
+      return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #e0e0d8;gap:8px">
+        <div>
+          <div style="font-size:13px;font-weight:600;font-family:monospace;letter-spacing:2px">${t.token}</div>
+          <div style="font-size:11px;color:#888">${t.label||'Guest'} · ${expStr}</div>
+        </div>
+        <button onclick="revokeGuestToken('${t.token}')" style="background:none;border:0.5px solid #e0e0d8;border-radius:6px;padding:4px 8px;font-size:11px;color:#888;cursor:pointer">Revoke</button>
+      </div>`;
+    }).join('');
+  }catch(e){el.innerHTML='<div style="color:#aaa;font-size:12px">Could not load tokens.</div>';}
+}
+
+async function revokeGuestToken(token){
+  if(!confirm(`Revoke token ${token}? It will stop working immediately.`))return;
+  await fetch(`${SB_URL}/rest/v1/guest_tokens?token=eq.${token}`,{method:'DELETE',headers:SBH});
+  showToast('Token revoked',2000);
+  loadGuestTokens();
+}
+
+async function isGuestTokenValid(pin){
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/guest_tokens?token=eq.${pin.toUpperCase()}&select=*`,{headers:SBH});
+    const tokens=await r.json();
+    if(!tokens.length)return false;
+    return new Date(tokens[0].expires_at)>new Date();
+  }catch(e){return false;}
+}
+
+
 const GH_TOKEN_KEY='gidi_gh_token';
 const GH_REPO='tokinumbere/gidi-gc';
 const GH_BRANCH='main';
@@ -7166,25 +7944,28 @@ function _buildMemberReportHtml(){
 </div>
 
 <div class="card">
-  <div class="sec">💛 We missed you this week (${lastAbsent.length})</div>
+  <div class="sec">💛 Check on someone — they weren't here this week</div>
+  <div style="font-size:12px;color:#888;margin-bottom:10px">Tap WhatsApp to reach out. It only takes a second 🙏</div>
   ${lastAbsent.filter(m=>m&&m.n).map(m=>{
     const streak=calcMember(m.n).curStreak;const isUrgent=streak>=3;
-    const msg=isUrgent?`Hey ${m.n.split(' ')[0]}, we've been missing you at Gidi GC! Just checking in 🙏`:`Hey ${m.n.split(' ')[0]}, missed you at GC this week! Hope all is well 🙏`;
+    const cId=clusterMembers[m.n]?.clusterId||'';
+    const msg=getClusterMsg(cId,m.n,streak);
     return`<div class="row"><div><div style="font-size:14px;font-weight:500">${m.n}${isUrgent?' <span style="font-size:10px;background:#fcebeb;color:#791f1f;border-radius:20px;padding:2px 6px;font-weight:700">🔴 HIGH PRIORITY</span>':''}</div>${streak>=2?`<div style="font-size:11px;color:#888;margin-top:2px">${streak} sessions away</div>`:''}</div>${makeWaBtn(m,msg)}</div>`;
   }).join('')}
 </div>
 
-${bdaySoon.length?`<div class="card card-bday">
-  <div class="sec" style="color:#633806">🎂 Birthdays this week</div>
-  ${bdaySoon.filter(({m})=>m&&m.n).map(({m,diff})=>`<div class="row"><div><div style="font-size:14px;font-weight:500;color:#633806">${m.n}</div><div style="font-size:12px;color:#8a5010;margin-top:2px">${diff===0?'Today! 🎂':diff===1?'Tomorrow':'In '+diff+' days'}</div></div>${makeWaBtn(m,`Happy Birthday ${m.n.split(' ')[0]}! 🎂🎉 Wishing you a wonderful day!`)}</div>`).join('')}
-</div>`:''}
-
 ${publicPrayers.length?`<div class="card card-prayer">
   <div class="sec" style="color:#3c3489">🙏 Pray for these people this week</div>
-  <div style="font-size:14px;color:#3c3489;font-weight:500;line-height:1.9">${publicPrayers.map(p=>p.memberId||'Someone').join(' · ')}</div>
-  <div style="font-size:12px;color:#888;margin-top:8px;font-style:italic">They've shared something they'd appreciate prayer for 💛</div>
-</div>`:''}
-
+  <div style="font-size:14px;color:#3c3489;font-weight:500;line-height:1.9;margin-bottom:8px">${publicPrayers.map(p=>p.memberId||'Someone').join(' · ')}</div>
+  <div style="font-size:12px;color:#888;font-style:italic;margin-bottom:10px">They've shared something they'd appreciate prayer for 💛</div>
+  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#3c3489;color:#fff;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center;margin-bottom:6px">🙏 See all requests and pray for someone</a>
+  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#f0f0ff;color:#3c3489;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center">✍️ Submit your own prayer request</a>
+</div>`:`<div class="card card-prayer">
+  <div class="sec" style="color:#3c3489">🙏 Prayer</div>
+  <div style="font-size:13px;color:#3c3489;margin-bottom:10px">Got something you'd like the GC to pray for?</div>
+  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#3c3489;color:#fff;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center;margin-bottom:6px">🙏 See prayer requests</a>
+  <a href="https://gidiatcity.com/prayer.html" target="_blank" style="display:block;background:#f0f0ff;color:#3c3489;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;text-align:center">✍️ Submit a prayer request</a>
+</div>`}
 ${nextSess?`<div class="card card-next">
   <div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.4);margin-bottom:4px">Next session</div><div style="font-size:16px;font-weight:600">Wednesday, ${nextSess.date}</div></div>
   <div style="font-size:28px">📅</div>
