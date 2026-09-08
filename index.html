@@ -156,15 +156,30 @@ tr:hover td{background:#fafaf8}
   .content{padding:12px 12px 80px}
   .topbar{padding:10px 12px;position:sticky;top:0;z-index:50}
   .topbar-title{font-size:14px}
-  .topbar-actions .btn{font-size:11px;padding:5px 8px}
+  .topbar-actions .btn:not(#lockBtn):not(.mob-only-btn){display:none!important}
+  .topbar-actions #lockBtn{display:inline-flex!important}
+  .topbar-actions .mob-only-btn{display:inline-flex!important}
   .metrics{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem}
   .metric{padding:10px 12px}
   .metric-val{font-size:18px}
   .metric-label{font-size:10px}
   .chart-wrap{padding:0.75rem;margin-bottom:1rem}
+
+  /* Tables — hide non-essential columns, allow scroll */
+  .table-wrap{overflow-x:auto}
   th,td{padding:10px 8px;font-size:12px}
   td{min-height:44px}
   .members-dots-col{display:none}
+
+  /* Members table — hide city, first session, dots on mobile */
+  #mTable th:nth-child(2),#mTable td:nth-child(2),
+  #mTable th:nth-child(4),#mTable td:nth-child(4),
+  #mTable th:nth-child(7),#mTable td:nth-child(7){display:none}
+
+  /* Guests table — hide gender column */
+  #gTable th:nth-child(3),#gTable td:nth-child(3){display:none}
+
+  /* Filters */
   .filters{flex-wrap:nowrap;overflow-x:auto;gap:6px;padding-bottom:2px;scrollbar-width:none}
   .filters::-webkit-scrollbar{display:none}
   select,input[type=text],input[type=date],input[type=number]{font-size:14px;padding:8px 10px;min-height:40px}
@@ -175,6 +190,8 @@ tr:hover td{background:#fafaf8}
   .toggle-btn{padding:8px 16px;font-size:13px;flex:1;text-align:center;min-height:40px}
   .reason-sel{font-size:13px;padding:7px 10px;min-height:40px;flex:1}
   .abs-card{padding:10px}
+
+  /* Modals — slide up from bottom */
   .member-modal.open{padding:0;align-items:flex-end}
   .member-modal-box{border-radius:16px 16px 0 0;max-width:100%;max-height:92vh;overflow-y:auto}
   .modal-overlay{padding:0}
@@ -188,6 +205,24 @@ tr:hover td{background:#fafaf8}
   .save-toast{left:12px;right:12px;bottom:74px;text-align:center}
   #ov-last3 .sessions-grid{grid-template-columns:1fr!important}
   .ov-chart-grid{grid-template-columns:1fr!important}
+
+  /* Clusters — hide health table, make week picker full width */
+  #cluster-health-panel{display:none!important}
+  #cluster-week-picker,#sc-week-picker{width:100%;min-width:0!important;box-sizing:border-box}
+
+  /* Cluster cards — stack content vertically */
+  .cluster-controls{flex-wrap:wrap;gap:6px}
+
+  /* Superclusters — summary stats 2 cols on mobile */
+  #superclusterList>div[style*="grid-template-columns:repeat(auto-fit"]{
+    grid-template-columns:1fr 1fr!important
+  }
+
+  /* Follow-up/Care — hide streak column in table */
+  .follow-table th:nth-child(3),.follow-table td:nth-child(3){display:none}
+
+  /* Section titles in topbar — hide non-essential buttons */
+  .panel>.sec-row{flex-wrap:wrap;gap:8px}
 }
 
 /* ── MOBILE BOTTOM NAV ── */
@@ -348,6 +383,8 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
       <button class="btn btn-sm" onclick="sendClusterPerformanceEmail()" title="Email cluster performance report">&#128202; Clusters</button>
       <button class="btn btn-success btn-sm" onclick="openSummary()">&#128202; Reports</button>
       <button class="btn btn-danger btn-sm" onclick="openNewTerm()">&#127379; New Term</button>
+      <!-- Mobile: compact Reports button shown instead -->
+      <button class="btn btn-success btn-sm mob-only-btn" onclick="openSummary()" style="display:none">&#128202;</button>
     </div>
   </div>
 
@@ -422,7 +459,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <button class="btn btn-success" onclick="openMemberModal(null)">+ Add member</button>
   </div>
   <div class="table-wrap">
-    <table>
+    <table id="mTable">
       <colgroup><col style="width:135px"><col style="width:78px"><col style="width:95px"><col style="width:75px"><col style="width:52px"><col style="width:45px"><col style="width:95px"><col style="width:36px"></colgroup>
       <thead><tr><th>Name</th><th>Church</th><th>GC status</th><th>First visit</th><th>Sessions</th><th>Rate</th><th class="members-dots-col">Record</th><th class="members-dots-col"></th></tr></thead>
       <tbody id="mBody"></tbody>
@@ -445,7 +482,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <!-- Guest conversion funnel -->
   <div id="guestFunnel" style="margin-bottom:1rem"></div>
   <div class="table-wrap">
-    <table>
+    <table id="gTable">
       <colgroup><col style="width:155px"><col style="width:85px"><col style="width:65px"><col style="width:100px"><col style="width:55px"><col style="width:36px"></colgroup>
       <thead><tr><th>Name</th><th>Church status</th><th>Gender</th><th>First visit</th><th>Sessions</th><th></th></tr></thead>
       <tbody id="gBody"></tbody>
@@ -1274,12 +1311,13 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <button class="btn" onclick="switchTab('guests',document.querySelector('[data-id=guests]'));closeMobMore()" style="justify-content:center;padding:10px">&#128100; Guests</button>
     <button class="btn" onclick="switchTab('superclusters',document.querySelector('[data-id=superclusters]'));closeMobMore()" style="justify-content:center;padding:10px">&#127968; Super</button>
     <button class="btn" onclick="switchTab('care',document.querySelector('[data-id=care]'));closeMobMore()" style="justify-content:center;padding:10px">&#10084; Care</button>
-    <button class="btn" onclick="switchTab('prayer',document.querySelector('[data-id=prayer]'));closeMobMore()" style="justify-content:center;padding:10px">&#128591; Prayer</button>
+    <button class="btn" data-public onclick="switchTab('prayer',document.querySelector('[data-id=prayer]'));closeMobMore()" style="justify-content:center;padding:10px">&#128591; Prayer</button>
     <button class="btn" onclick="switchTab('birthdays',document.querySelector('[data-id=birthdays]'));closeMobMore()" style="justify-content:center;padding:10px">&#127874; Birthdays</button>
     <button class="btn" onclick="switchTab('archive',document.querySelector('[data-id=archive]'));closeMobMore()" style="justify-content:center;padding:10px">&#128190; Archive</button>
-    <button class="btn" onclick="switchTab('recalc',document.querySelector('[data-id=recalc]'));closeMobMore()" style="justify-content:center;padding:10px">&#9881; Settings</button>
-    <button class="btn btn-success" onclick="openSummary();closeMobMore()" style="justify-content:center;padding:10px">&#128202; Reports</button>
-    <button class="btn btn-warn" onclick="openSessionDebrief();closeMobMore()" style="justify-content:center;padding:10px">&#128203; Debrief</button>
+    <button class="btn" onclick="switchTab('recalc',document.querySelector('[data-id=recalc]'));closeMobMore()" style="justify-content:center;padding:10px" class="edit-only">&#9881; Settings</button>
+    <button class="btn btn-success" data-public onclick="openSummary();closeMobMore()" style="justify-content:center;padding:10px">&#128202; Reports</button>
+    <button class="btn btn-warn edit-only" onclick="openSessionDebrief();closeMobMore()" style="justify-content:center;padding:10px">&#128203; Debrief</button>
+    <button class="btn edit-only" onclick="sendWeeklySummary();closeMobMore()" style="justify-content:center;padding:10px">&#128140; Email summary</button>
   </div>
 </div>
 
@@ -1429,7 +1467,7 @@ async function loadFromSupabase(){
 
 async function saveAll(){
   // Always save to localStorage first
-  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||'',frozen:m.frozen||false})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,wellbeing,careNotes,prayerRequests,memberAbout,pendingClusterSubmissions,superclusters,changeLog,clusterTokens,clusterMessages,scCheckIns,scWellbeing,scCareNotes,scAbout,savedAt:new Date().toISOString()}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||'',frozen:m.frozen||false,wa:m.wa||''})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,wellbeing,careNotes,prayerRequests,memberAbout,pendingClusterSubmissions,superclusters,changeLog,clusterTokens,clusterMessages,scCheckIns,scWellbeing,scCareNotes,scAbout,savedAt:new Date().toISOString()}));}catch(e){}
   if(!isOnline()){
     showOfflineBanner(true);
     setSyncStatus('red','Offline — saved locally');
@@ -1633,15 +1671,15 @@ function isActiveGuest(m){
 }
 
 function applyPhoneNumbers(){
-  // First apply hardcoded PHONES
+  // Apply hardcoded PHONES only if member has no phone already set
   Object.entries(PHONES).forEach(([n,p])=>{
     if(!p.phone)return;
     let m=MEMBERS.find(x=>x.n===n)||MEMBERS.find(x=>x.n.trim()===n.trim());
-    if(m){m.phone=m.phone||p.phone;m.wa=m.wa||p.wa;}
+    if(m&&!m.phone){m.phone=p.phone;}
   });
-  // Then derive m.wa from m.phone for anyone who has a phone but no wa
+  // Always derive m.wa from m.phone — this ensures updated numbers take effect
   MEMBERS.forEach(m=>{
-    if(m.phone&&!m.wa){
+    if(m.phone){
       const p=m.phone.replace(/\D/g,'');
       m.wa=p.startsWith('234')?p:p.startsWith('0')&&p.length===11?'234'+p.slice(1):p;
     }
@@ -3563,7 +3601,11 @@ body.view-only .nav-item[data-id="recalc"]{display:none!important}
 body.view-only .mob-nav-btn[data-tab="members"],
 body.view-only .mob-nav-btn[data-tab="record"],
 body.view-only .mob-nav-btn[data-tab="clusters"]{display:none!important}
-body.view-only .topbar-actions .btn:not(#lockBtn){display:none!important}
+body.view-only .topbar-actions .btn:not(#lockBtn):not(.mob-only-btn){display:none!important}
+body.view-only .mob-only-btn{display:none!important}
+/* Hide protected More menu items in view-only mode */
+body.view-only #mobMore .btn:not([data-public]){display:none!important}
+body.view-only #mobMore .btn[data-public]{display:flex!important}
 
 </style>
 </head>
@@ -5973,7 +6015,7 @@ function closeProfile(){document.getElementById('profileModal').className='membe
 function openMemberModalFromProfile(){closeProfile();setTimeout(()=>openMemberModal(_profileMember),150);}
 
 function waLink(m){
-  const wa=(m&&m.wa)||PHONES[m?.n]?.wa||'';
+  const wa=getWaNumber(m?.n)||'';
   if(!wa)return'';
   return`<a href="https://wa.me/${wa}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:#25D366;color:#fff;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;margin-top:4px">&#128241; WhatsApp</a>`;
 }
@@ -6043,7 +6085,7 @@ function buildProfileHTML(m){
           <span style="padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:${GBKG[m.gc]||'#f5f5f3'};color:${GCOL[m.gc]||'#888'}">${m.gc}</span>
           ${clusterInfo?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f0f0ea;color:#555">${clusterInfo.name}</span>`:isHeadOf?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#e1f5ee;color:#085041;font-weight:600">Cluster Leader · ${isHeadOf.name}</span>`:'<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f5f5f3;color:#aaa">No cluster</span>'}
         </div>
-        ${(m.phone||PHONES[m.n]?.phone)?`<div style="font-size:13px;color:#555;margin-bottom:4px">&#128222; ${m.phone||PHONES[m.n]?.phone}</div>`:''}
+        ${m.phone?`<div style="font-size:13px;color:#555;margin-bottom:4px">&#128222; ${m.phone}</div>`:''}
         ${waLink(m)}
       </div>
     </div>
@@ -7998,7 +8040,7 @@ ${nextSess?`<div class="card card-next">
 }
 initSeedData();
 loadSaved();
-applyPhoneNumbers();
+applyPhoneNumbers(); // Derive m.wa from m.phone for all members on boot
 recalcAll();
 applyMode();
 // Check magic link immediately — before anything else
