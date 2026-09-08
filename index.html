@@ -1425,6 +1425,13 @@ async function sbGet(table){
   try{const r=await fetch(SB_URL+'/rest/v1/'+table+'?select=*',{headers:SBH});return r.ok?await r.json():[];}
   catch(e){return[];}
 }
+async function sbDelete(table,column,value){
+  try{
+    await fetch(`${SB_URL}/rest/v1/${table}?${column}=eq.${encodeURIComponent(value)}`,{
+      method:'DELETE',headers:SBH
+    });
+  }catch(e){console.error('sbDelete',e);}
+}
 async function sbPost(table,rows){
   if(!rows||!rows.length)return;
   try{await fetch(SB_URL+'/rest/v1/'+table,{method:'POST',headers:{...SBH,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows)});}
@@ -2658,21 +2665,34 @@ function saveMember(){
 function showDeleteConfirm(){document.getElementById('mf-delete-confirm').className='delete-confirm show';}
 function hideDeleteConfirm(){document.getElementById('mf-delete-confirm').className='delete-confirm';}
 
-function confirmDeleteMember(){
+async function confirmDeleteMember(){
   if(!_editingMemberName)return;
   const name=_editingMemberName;
   // Remove from MEMBERS array
   const idx=MEMBERS.findIndex(x=>x.n===name);
   if(idx>=0)MEMBERS.splice(idx,1);
-  // Clean up all data
+  // Clean up all local data
   Object.keys(attendance).forEach(sk=>{delete attendance[sk][name];});
   Object.keys(absenceReasons).forEach(sk=>{delete absenceReasons[sk][name];});
   delete firstSession[name];
   delete birthdays[name];
+  delete clusterMembers[name];
+  delete memberAbout[name];
   closeMemberModal();
   recalcAll();
   saveAll();
-  showToast('Member deleted');
+  // Delete from Supabase
+  await sbDelete('members','name',name);
+  await sbDelete('attendance','member_name',name);
+  await sbDelete('absence_reasons','member_name',name);
+  await sbDelete('birthdays','member_name',name);
+  await sbDelete('first_session','member_name',name);
+  await sbDelete('cluster_members','member_name',name);
+  await sbDelete('member_about','member_name',name);
+  await sbDelete('check_ins','member_name',name);
+  await sbDelete('wellbeing','member_name',name);
+  await sbDelete('care_notes','member_name',name);
+  showToast('Member deleted ✓');
 }
 
 // ── MEMBERS ───────────────────────────────────────────────────────────────────
@@ -2899,26 +2919,23 @@ function openSessionByKey(key){
   document.getElementById('recordArea').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-function deleteSession(key,label){
+async function deleteSession(key,label){
   if(!confirm(`Delete session "${label}"? This will permanently remove all attendance data for this date.`))return;
-  // Remove attendance and absence reasons for this session
   delete attendance[key];
   delete absenceReasons[key];
-  // Remove from SESSIONS_DEF if it was a custom session (not in original schedule, or was added dynamically)
-  // We remove it from the recorded pool by simply not having attendance data — but also remove from SESSIONS_DEF if custom
   const defIdx=SESSIONS_DEF.findIndex(s=>s.key===key);
   if(defIdx>=0){
-    // Only remove from SESSIONS_DEF if it was a dynamically added session (not in the original 21)
     const originalKeys=['2026-04-08','2026-04-15','2026-04-22','2026-04-29','2026-05-06','2026-05-13','2026-05-20','2026-05-27','2026-06-03','2026-06-10','2026-06-17','2026-09-09','2026-09-16','2026-09-23','2026-09-30','2026-10-07','2026-10-14','2026-10-28','2026-11-04','2026-11-11','2026-11-18'];
     if(!originalKeys.includes(key))SESSIONS_DEF.splice(defIdx,1);
   }
-  // Clear firstSession references pointing to this key
   Object.keys(firstSession).forEach(name=>{if(firstSession[name]===key)delete firstSession[name];});
-  // Clear recordArea if it was showing this session
   const area=document.getElementById('recordArea');
   if(area.innerHTML.includes(key)||area.innerHTML.includes(label))area.innerHTML='';
-  showToast(`Session "${label}" deleted`);
   recalcAll();saveAll();
+  // Delete from Supabase
+  await sbDelete('attendance','session_key',key);
+  await sbDelete('absence_reasons','session_key',key);
+  showToast(`Session "${label}" deleted`);
   renderSessionList();
 }
 
@@ -3155,7 +3172,7 @@ function _buildSummaryData(){
   const lastAbsent=lastSess?nonGuests.filter(m=>{
     if(firstSession[m.n]&&firstSession[m.n]>lastSess.key)return false;
     return attendance[lastSess.key]?attendance[lastSess.key][m.n]!=='present':true;
-  }).sort(byFirstName):[];
+  }).sort((a,b)=>calcMember(b.n).curStreak-calcMember(a.n).curStreak||byFirstName(a,b)):[];
   const possible=lastSess?nonGuests.filter(m=>!firstSession[m.n]||firstSession[m.n]<=lastSess.key).length:0;
   const lastRate=possible?Math.round(lastPresent.filter(m=>m.gc!=='Guest'&&!m.frozen).length/possible*100):0;
 
@@ -4535,15 +4552,17 @@ function saveCluster(){
   }
   closeClusterModal();saveAll();renderClusters();showToast('Cluster saved');
 }
-function deleteCluster(){
+async function deleteCluster(){
   if(!_editingClusterId)return;
   const c=clusters.find(x=>x.id===_editingClusterId);if(!c)return;
   if(!confirm(`Delete "${c.name}"?\n\nAll members will become unassigned and can be reassigned to other clusters. The cluster head (${c.head}) will also be freed up.`))return;
-  // Unassign all members in this cluster
   Object.keys(clusterMembers).forEach(n=>{if(clusterMembers[n].clusterId===_editingClusterId)delete clusterMembers[n];});
-  // Remove cluster
   clusters=clusters.filter(x=>x.id!==_editingClusterId);
-  closeClusterModal();saveAll();renderClusters();showToast(`"${c.name}" deleted — members unassigned`);
+  closeClusterModal();saveAll();
+  // Delete from Supabase
+  await sbDelete('clusters','id',_editingClusterId);
+  await fetch(`${SB_URL}/rest/v1/cluster_members?cluster_id=eq.${_editingClusterId}`,{method:'DELETE',headers:SBH});
+  renderClusters();showToast(`"${c.name}" deleted — members unassigned`);
 }
 
 // ── POPULATE CLUSTER DROPDOWN IN MEMBER MODAL ─────────────────────────────────
@@ -5285,8 +5304,11 @@ function deleteArchive(){
   if(!_viewingArchiveId)return;
   const t=termArchive.find(x=>x.id===_viewingArchiveId);if(!t)return;
   if(!confirm(`Permanently delete "${t.name}" archive? This cannot be undone.`))return;
-  termArchive.splice(termArchive.findIndex(x=>x.id===_viewingArchiveId),1);
-  closeArchiveModal();saveAll();renderArchive();showToast('Archive deleted');
+  const _taId=_viewingArchiveId;
+  termArchive.splice(termArchive.findIndex(x=>x.id===_taId),1);
+  closeArchiveModal();saveAll();renderArchive();
+  sbDelete('term_archive','id',_taId);
+  showToast('Archive deleted');
 }
 
 // ── NEW TERM ───────────────────────────────────────────────────────────────────
@@ -5671,7 +5693,7 @@ function updatePrayerStatus(id,status){
 function deletePrayerRequest(id){
   if(!confirm('Delete this prayer request permanently?'))return;
   const idx=prayerRequests.findIndex(x=>x.id===id);
-  if(idx>=0){prayerRequests.splice(idx,1);saveAll();renderPrayerRequests();}
+  if(idx>=0){prayerRequests.splice(idx,1);saveAll();renderPrayerRequests();sbDelete('prayer_requests','id',id);}
 }
 
 // ── CLUSTER MESSAGE CUSTOMIZATION ────────────────────────────────────────────
@@ -6404,8 +6426,10 @@ async function approveSubmission(id){
     }
   });
   // Remove from pending
-  pendingClusterSubmissions.splice(pendingClusterSubmissions.findIndex(x=>x.id===id),1);
+  const _subId=id;
+  pendingClusterSubmissions.splice(pendingClusterSubmissions.findIndex(x=>x.id===_subId),1);
   await saveAll();
+  sbDelete('pending_submissions','id',_subId);
   renderClusters();
   openPendingModal();
   showToast('Submission approved ✓',2000);
@@ -6415,7 +6439,7 @@ async function approveSubmission(id){
 function rejectSubmission(id){
   if(!confirm('Discard this submission?'))return;
   pendingClusterSubmissions.splice(pendingClusterSubmissions.findIndex(x=>x.id===id),1);
-  saveAll();openPendingModal();updatePendingBadge();
+  saveAll();sbDelete('pending_submissions','id',id);openPendingModal();updatePendingBadge();
 }
 
 function updatePendingBadge(){
@@ -6860,13 +6884,16 @@ function saveSupercluster(){
   closeSuperclusterModal();saveAll();renderSuperclusters();showToast('Supercluster saved ✓');
 }
 
-function deleteSupercluster(){
+async function deleteSupercluster(){
   if(!_editingScId)return;
   const sc=superclusters.find(x=>x.id===_editingScId);if(!sc)return;
   if(!confirm(`Delete "${sc.name}"?`))return;
-  superclusters.splice(superclusters.findIndex(x=>x.id===_editingScId),1);
+  const _scId=_editingScId;
+  superclusters.splice(superclusters.findIndex(x=>x.id===_scId),1);
   logChange(`Deleted supercluster "${sc.name}"`);
-  closeSuperclusterModal();saveAll();renderSuperclusters();showToast('Supercluster deleted');
+  closeSuperclusterModal();saveAll();
+  await sbDelete('superclusters','id',_scId);
+  renderSuperclusters();showToast('Supercluster deleted');
 }
 
 // ── CARE / EXCEPTION VIEW ─────────────────────────────────────────────────────
@@ -6876,31 +6903,40 @@ function renderCareView(){
   const today=new Date().toISOString().split('T')[0];
   const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
   const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
+  const PASTOR_WA='2349077788869';
 
-  // Wellbeing alerts
-  const urgent=[];
-  const needsSupport=[];
+  const escalate=[];  // 3+ absences AND red wellbeing
+  const actNow=[];    // 3+ absences OR red wellbeing (not both)
+  const checkIn=[];   // 2 absences OR amber wellbeing
+
   nonGuests.forEach(m=>{
     const recentWeeks=allWeeks.slice(-6);
     const wbHistory=recentWeeks.map(w=>(wellbeing[w.key]||{})[m.n]||'');
-    // Red streak
-    let redStreak=0;
-    for(let i=wbHistory.length-1;i>=0;i--){if(wbHistory[i]==='red')redStreak++;else break;}
-    // Amber streak
-    let amberStreak=0;
-    for(let i=wbHistory.length-1;i>=0;i--){if(wbHistory[i]==='amber'||wbHistory[i]==='red')amberStreak++;else break;}
+    let redStreak=0;for(let i=wbHistory.length-1;i>=0;i--){if(wbHistory[i]==='red')redStreak++;else break;}
+    let amberStreak=0;for(let i=wbHistory.length-1;i>=0;i--){if(wbHistory[i]==='amber'||wbHistory[i]==='red')amberStreak++;else break;}
     const streak=calcMember(m.n).curStreak;
     const clusterName=clusterMembers[m.n]?clusters.find(c=>c.id===clusterMembers[m.n].clusterId)?.name||'No cluster':'No cluster';
     const head=clusterMembers[m.n]?clusters.find(c=>c.id===clusterMembers[m.n].clusterId)?.head||'':'';
+    const entry={m,streak,redStreak,amberStreak,clusterName,head};
 
-    if(redStreak>=2||streak>=3){
-      urgent.push({m,streak,redStreak,amberStreak,clusterName,head,reason:redStreak>=2?`🔴 ${redStreak} weeks urgent`:streak>=3?`Absent ${streak} in a row`:''});
-    } else if(amberStreak>=2||streak===2){
-      needsSupport.push({m,streak,redStreak,amberStreak,clusterName,head,reason:amberStreak>=2?`🟡 ${amberStreak} weeks needs support`:streak===2?`Absent ${streak} in a row`:''});
+    if(streak>=3&&redStreak>=1){
+      escalate.push(entry); // BOTH — immediate escalation
+    } else if(streak>=3||redStreak>=2){
+      actNow.push(entry);
+    } else if(streak===2||amberStreak>=2){
+      checkIn.push(entry);
     }
   });
 
-  // Cluster head check-in status this week
+  // Sort each tier: most absences first, then most red weeks, then name
+  const sortTier=arr=>arr.sort((a,b)=>b.streak-a.streak||b.redStreak-a.redStreak||a.m.n.localeCompare(b.m.n));
+  sortTier(escalate);sortTier(actNow);sortTier(checkIn);
+
+  // Badge = escalate + actNow + checkIn
+  const total=escalate.length+actNow.length+checkIn.length;
+  const badge=document.getElementById('careBadge');
+  if(badge){badge.textContent=total;badge.style.display=total?'inline':'none';}
+
   const thisWeek=allWeeks.length?allWeeks[allWeeks.length-1]:null;
   const clusterStatus=clusters.map(c=>{
     const members=getMembersInCluster(c.id).filter(m=>(clusterMembers[m.n]?.joinDate||'')<=(thisWeek?.key||''));
@@ -6908,45 +6944,68 @@ function renderCareView(){
     const submitted=pendingClusterSubmissions.some(s=>s.clusterId===c.id&&s.weekKey===thisWeek?.key);
     return{c,done,total:members.length,submitted,pct:members.length?Math.round(done/members.length*100):0};
   });
-  const behindClusters=clusterStatus.filter(x=>x.total>0&&x.pct<100);
 
-  // Update badge
-  const total=urgent.length+needsSupport.length;
-  const badge=document.getElementById('careBadge');
-  if(badge){badge.textContent=total;badge.style.display=total?'inline':'none';}
-
-  const makeWaBtn=(m,msg)=>{
-    const wa=getWaNumber(m.n);
+  const waBtn=(wa,msg,label='📱 WA',style='')=>{
     if(!wa)return'';
-    return`<a href="https://wa.me/${wa}?text=${encodeURIComponent(msg||`Hey ${m.n.split(' ')[0]}, just checking in 🙏`)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;text-decoration:none;flex-shrink:0">📱 WA</a>`;
+    return`<a href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;border-radius:20px;padding:5px 10px;font-size:11px;font-weight:600;text-decoration:none;flex-shrink:0;${style}">${label}</a>`;
   };
 
-  const personRow=(item,urgentStyle)=>{
-    const {m,streak,clusterName,head,reason}=item;
-    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid ${urgentStyle?'rgba(0,0,0,.07)':'#f0efe8'};gap:8px">
-      <div style="min-width:0;cursor:pointer;flex:1" onclick="openProfile('${m.n.replace(/'/g,"\\'")}')">
-        <div style="font-size:13px;font-weight:600;color:${urgentStyle?'#633806':'#1a1a1a'}">${m.n}</div>
-        <div style="font-size:11px;color:#888;margin-top:1px">${clusterName}${head?' · '+head.split(' ')[0]:''} · ${reason}</div>
+  const getAction=(streak,redStreak,amberStreak)=>{
+    if(streak>=3&&redStreak>=1)return'Escalate to Communities Pastor immediately';
+    if(streak>=3)return'Call or visit this week';
+    if(redStreak>=2)return'Urgent wellbeing check needed';
+    if(streak===2)return'Send a WhatsApp check-in';
+    if(amberStreak>=2)return'Keep a close eye this week';
+    return'Check in';
+  };
+
+  const personRow=(item,bgStyle)=>{
+    const{m,streak,redStreak,amberStreak,clusterName,head}=item;
+    const wa=getWaNumber(m.n);
+    const firstName=m.n.split(' ')[0];
+    const action=getAction(streak,redStreak,amberStreak);
+    const memberMsg=streak>=3?
+      `Hey ${firstName}, we've really been missing you at Gidi GC! Reaching out to check in on you 🙏`:
+      `Hey ${firstName}, missed you recently at GC — just checking in to see how you're doing 🙏`;
+    const pastorMsg=`Hi Pastor Emmanuel, wanted to flag ${m.n} for your attention. They've missed ${streak} session${streak===1?'':'s'} in a row${redStreak>=1?' and have been flagged for urgent wellbeing support':''}.  — ${localStorage.getItem('gidi_user_nick')||'Toki'}`;
+    return`<div style="padding:12px 0;border-bottom:0.5px solid rgba(0,0,0,.07)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div style="cursor:pointer;flex:1;min-width:0" onclick="openProfile('${m.n.replace(/'/g,"\\'")}')">
+          <div style="font-size:14px;font-weight:600">${m.n}</div>
+          <div style="font-size:11px;color:#888;margin-top:2px">${clusterName}${head?' · '+head.split(' ')[0]:''}</div>
+          <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+            ${streak>=2?`<span style="font-size:11px;background:rgba(0,0,0,.08);border-radius:20px;padding:1px 7px;font-weight:500">${streak} missed</span>`:''}
+            ${redStreak>=1?`<span style="font-size:11px;background:rgba(226,75,74,.15);color:#791f1f;border-radius:20px;padding:1px 7px;font-weight:500">🔴 ${redStreak}w red</span>`:''}
+            ${amberStreak>=2&&!redStreak?`<span style="font-size:11px;background:rgba(239,159,39,.15);color:#633806;border-radius:20px;padding:1px 7px;font-weight:500">🟡 ${amberStreak}w amber</span>`:''}
+          </div>
+          <div style="font-size:12px;color:#555;font-weight:500;margin-top:6px">→ ${action}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;flex-wrap:wrap">
+          ${wa?waBtn(wa,memberMsg):''}
+          ${(streak>=3&&redStreak>=1)?waBtn(PASTOR_WA,pastorMsg,'👤 Pastor','background:#1a1a1a;'):''}
+        </div>
       </div>
-      ${makeWaBtn(m)}
     </div>`;
   };
 
   el.innerHTML=`
-    ${urgent.length?`
-    <div style="background:#fcebeb;border:0.5px solid #f09595;border-radius:12px;padding:14px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:700;color:#791f1f;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🔴 Urgent attention (${urgent.length})</div>
-      ${urgent.map(item=>personRow(item,true)).join('')}
+    ${escalate.length?`<div style="background:#fcebeb;border:0.5px solid #f09595;border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#791f1f;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">🚨 Escalate to Communities Pastor (${escalate.length})</div>
+      <div style="font-size:12px;color:#a32d2d;margin-bottom:10px">These people have both extended absence AND urgent wellbeing concerns.</div>
+      ${escalate.map(item=>personRow(item,'#fcebeb')).join('')}
     </div>`:''}
 
-    ${needsSupport.length?`
-    <div style="background:#faeeda;border:0.5px solid #ef9f27;border-radius:12px;padding:14px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🟡 Needs support (${needsSupport.length})</div>
-      ${needsSupport.map(item=>personRow(item,false)).join('')}
+    ${actNow.length?`<div style="background:#fef3f2;border:0.5px solid #f5b7b1;border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#922b21;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🔴 Act now (${actNow.length})</div>
+      ${actNow.map(item=>personRow(item,'#fef3f2')).join('')}
     </div>`:''}
 
-    ${pendingClusterSubmissions.length?`
-    <div style="background:#e6f1fb;border:0.5px solid #b3cfee;border-radius:12px;padding:14px;margin-bottom:12px">
+    ${checkIn.length?`<div style="background:#faeeda;border:0.5px solid #ef9f27;border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🟡 Check in (${checkIn.length})</div>
+      ${checkIn.map(item=>personRow(item,'#faeeda')).join('')}
+    </div>`:''}
+
+    ${pendingClusterSubmissions.length?`<div style="background:#e6f1fb;border:0.5px solid #b3cfee;border-radius:12px;padding:14px;margin-bottom:12px">
       <div style="font-size:11px;font-weight:700;color:#0c447c;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">📨 Pending submissions (${pendingClusterSubmissions.length})</div>
       ${pendingClusterSubmissions.map(s=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(0,0,0,.07);font-size:13px;gap:8px">
         <div><div style="font-weight:500">${s.clusterName}</div><div style="font-size:11px;color:#888">${s.submittedBy} · ${new Date(s.submittedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div></div>
@@ -6955,22 +7014,9 @@ function renderCareView(){
     </div>`:''}
 
     <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;padding:14px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🙏 Active prayer requests (${prayerRequests.filter(p=>p.status==='active'&&!p.anonymous).length})</div>
-      ${prayerRequests.filter(p=>p.status==='active'&&!p.anonymous).length?
-        prayerRequests.filter(p=>p.status==='active'&&!p.anonymous).map(p=>`<div style="padding:8px 0;border-bottom:0.5px solid #f0efe8;font-size:13px">
-          <div style="font-weight:500">${p.memberId||'Anonymous'}</div>
-          <div style="font-size:11px;color:#888">${p.clusterName||''} · ${p.date}</div>
-        </div>`).join(''):
-        '<div style="font-size:13px;color:#888">No active prayer requests</div>'}
-    </div>
-
-    <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;padding:14px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">📊 Cluster check-in status — ${thisWeek?thisWeek.date:'No sessions yet'}</div>
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">📊 Cluster check-ins — ${thisWeek?thisWeek.date:'No sessions yet'}</div>
       ${clusterStatus.map(({c,done,total,pct,submitted})=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8;gap:8px">
-        <div>
-          <div style="font-size:13px;font-weight:500">${c.name}</div>
-          <div style="font-size:11px;color:#888">${c.head.split(' ')[0]} · ${done}/${total} checked in</div>
-        </div>
+        <div><div style="font-size:13px;font-weight:500">${c.name}</div><div style="font-size:11px;color:#888">${c.head.split(' ')[0]} · ${done}/${total} checked in</div></div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
           ${submitted?'<span style="font-size:11px;background:#e1f5ee;color:#085041;border-radius:20px;padding:2px 7px;font-weight:600">Submitted ✓</span>':''}
           <span style="font-size:13px;font-weight:700;color:${pct>=100?'#1D9E75':pct>=50?'#EF9F27':'#E24B4A'}">${total?pct+'%':'—'}</span>
@@ -6978,7 +7024,7 @@ function renderCareView(){
       </div>`).join('')}
     </div>
 
-    ${!urgent.length&&!needsSupport.length?'<div style="text-align:center;padding:2rem;color:#3b6d11;font-size:14px;background:#f2fbf7;border-radius:12px">✓ No one needs urgent attention right now</div>':''}
+    ${!total?'<div style="text-align:center;padding:2rem;color:#3b6d11;font-size:14px;background:#f2fbf7;border-radius:12px">✓ No one needs urgent attention right now</div>':''}
   `;
 }
 
@@ -7751,7 +7797,7 @@ footer{text-align:center;font-size:12px;color:#aaa;padding-top:8px}
     const msg=getClusterMsg(cId,m.n,streak);
     return`<div class="row">
       <div>
-        <div style="font-size:14px;font-weight:500">${m.n}${isUrgent?' <span style="font-size:10px;background:#fcebeb;color:#791f1f;border-radius:20px;padding:2px 6px;font-weight:700">🔴 HIGH PRIORITY</span>':''}</div>
+        <div style="font-size:14px;font-weight:500">${m.n}</div>
         ${streak>=2?`<div style="font-size:11px;color:#888;margin-top:2px">${streak} sessions away</div>`:''}
       </div>
       ${makeWaBtn(m,msg)}
@@ -8011,7 +8057,7 @@ function _buildMemberReportHtml(){
     const streak=calcMember(m.n).curStreak;const isUrgent=streak>=3;
     const cId=clusterMembers[m.n]?.clusterId||'';
     const msg=getClusterMsg(cId,m.n,streak);
-    return`<div class="row"><div><div style="font-size:14px;font-weight:500">${m.n}${isUrgent?' <span style="font-size:10px;background:#fcebeb;color:#791f1f;border-radius:20px;padding:2px 6px;font-weight:700">🔴 HIGH PRIORITY</span>':''}</div>${streak>=2?`<div style="font-size:11px;color:#888;margin-top:2px">${streak} sessions away</div>`:''}</div>${makeWaBtn(m,msg)}</div>`;
+    return`<div class="row"><div><div style="font-size:14px;font-weight:500">${m.n}</div><div style="font-size:11px;color:${streak>=3?'#a32d2d':'#888'};margin-top:2px">${streak>=1?streak+' session'+(streak===1?'':'s')+' away':''}</div></div>${makeWaBtn(m,msg)}</div>`;
   }).join('')}
 </div>
 
