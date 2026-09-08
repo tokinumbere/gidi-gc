@@ -1,0 +1,105 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gidi GC — Prayer Requests</title>
+<link href="https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Kumbh Sans',sans-serif;background:#f0f0eb;color:#1a1a1a;padding:20px 16px 60px;max-width:560px;margin:0 auto}
+.header{background:#1a1a1a;color:#fff;border-radius:14px;padding:20px;margin-bottom:16px;text-align:center}
+.header h1{font-family:'Playfair Display',serif;font-size:22px;margin-bottom:4px}
+.header p{font-size:13px;color:rgba(255,255,255,.5)}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:10px;border:0.5px solid #e0e0d8}
+.card.answered{opacity:.65}
+.req-name{font-size:13px;font-weight:600;margin-bottom:4px}
+.req-text{font-size:14px;line-height:1.6;margin-bottom:8px;color:#1a1a1a}
+.req-meta{font-size:11px;color:#aaa}
+.badge{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-active{background:#e1f5ee;color:#085041}
+.badge-answered{background:#e6f1fb;color:#0c447c}
+.form-section{background:#fff;border-radius:12px;padding:20px;margin-top:20px;border:0.5px solid #e0e0d8}
+.form-section h2{font-size:15px;font-weight:600;margin-bottom:14px}
+label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:4px;margin-top:12px}
+input,textarea,select{width:100%;padding:8px 10px;border:0.5px solid #ccc;border-radius:8px;font-size:14px;font-family:inherit}
+textarea{resize:vertical;min-height:80px}
+.vis-option{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:0.5px solid #e0e0d8;border-radius:8px;margin-bottom:6px;cursor:pointer}
+.vis-option input{width:16px;height:16px;flex-shrink:0;margin-top:2px}
+.vis-option-label{font-size:13px;font-weight:500}
+.vis-option-sub{font-size:11px;color:#888;margin-top:1px}
+.submit-btn{width:100%;padding:12px;background:#1a1a1a;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-top:14px;font-family:inherit}
+.submit-btn:disabled{opacity:.5}
+.success{background:#e1f5ee;color:#085041;border-radius:8px;padding:12px;text-align:center;font-weight:600;display:none}
+.sec{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+</style></head><body>
+<div class="header">
+  <h1>🙏 Prayer Requests</h1>
+  <p>Gidi GC · City Church Lagos</p>
+</div>
+<div id="prayerList"><div style="text-align:center;padding:2rem;color:#888">Loading...</div></div>
+<div class="form-section">
+  <h2>Add a prayer request</h2>
+  <label>Your name <span style="color:#888;font-weight:400">(optional)</span></label>
+  <input type="text" id="pub-name" placeholder="Your name">
+  <label>Prayer request *</label>
+  <textarea id="pub-request" placeholder="What should we be praying for?"></textarea>
+  <label style="margin-top:12px">Who can see this?</label>
+  <label class="vis-option"><input type="radio" name="pub-vis" value="public" checked>
+    <div><div class="vis-option-label">🌐 Share name and request</div><div class="vis-option-sub">Everyone with this link can see your name and request</div></div></label>
+  <label class="vis-option"><input type="radio" name="pub-vis" value="name_only">
+    <div><div class="vis-option-label">👤 Share name only</div><div class="vis-option-sub">Your name shows, but the request is kept private</div></div></label>
+  <label class="vis-option"><input type="radio" name="pub-vis" value="anonymous">
+    <div><div class="vis-option-label">🔒 Fully anonymous</div><div class="vis-option-sub">No name stored anywhere — not even privately</div></div></label>
+  <div id="pub-error" style="display:none;color:#791f1f;font-size:13px;margin-top:8px"></div>
+  <div id="pub-success" class="success">✓ Submitted! We'll be praying for you 🙏</div>
+  <button class="submit-btn" id="pub-submit" onclick="submitPublicPrayer()">Submit prayer request</button>
+</div>
+<script>
+const SB='https://rgmdtjfkffwoayvzqrks.supabase.co',KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWR0amZrZmZ3b2F5dnpxcmtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NDA1NzQsImV4cCI6MjEwNDAxNjU3NH0.ZtsXCmqLCmmIsIgMsLFAqfW04RKwWZO5s0lrry04CbI';
+const H={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'};
+
+async function loadPrayers(){
+  try{
+    const r=await fetch(SB+'/rest/v1/prayer_requests?select=*&order=date.desc',{headers:{'apikey':KEY,'Authorization':'Bearer '+KEY}});
+    const data=await r.json();
+    const list=document.getElementById('prayerList');
+    const active=data.filter(p=>!p.hidden&&p.status!=='archived');
+    if(!active.length){list.innerHTML='<div style="text-align:center;padding:2rem;color:#888;font-size:14px">No active prayer requests right now.</div>';return;}
+    list.innerHTML='<div class="sec">Praying for this week</div>'+active.map(function(p){
+      var vis=p.visibility||(p.anonymous?'anonymous':'public');
+      var name=vis==='anonymous'?'<span style="color:#aaa">Anonymous</span>':p.member_id||'<span style="color:#aaa">Anonymous</span>';
+      var req=vis==='name_only'?'<span style="color:#aaa;font-style:italic">Details kept private</span>':p.request;
+      var answered=p.status==='answered';
+      return '<div class="card '+(answered?'answered':'')+'">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'+
+        '<div class="req-name">'+name+'</div>'+
+        '<span class="badge '+(answered?'badge-answered':'badge-active')+'">'+(answered?'Answered ✓':'Active')+'</span>'+
+        '</div>'+
+        '<div class="req-text">'+req+'</div>'+
+        '<div class="req-meta">'+(p.cluster_name||'')+(p.cluster_name&&p.date?' · ':'')+(p.date||'')+'</div>'+
+        '</div>';
+    }).join('');
+  }catch(e){document.getElementById('prayerList').innerHTML='<div style="color:#888;text-align:center;padding:2rem">Could not load requests.</div>';}
+}
+
+async function submitPublicPrayer(){
+  const name=document.getElementById('pub-name').value.trim();
+  const req=document.getElementById('pub-request').value.trim();
+  const vis=document.querySelector('input[name="pub-vis"]:checked')?.value||'public';
+  const err=document.getElementById('pub-error');
+  err.style.display='none';
+  if(!req){err.textContent='Please enter a prayer request.';err.style.display='block';return;}
+  const btn=document.getElementById('pub-submit');btn.disabled=true;btn.textContent='Submitting...';
+  const row={id:'pr_pub_'+Date.now(),member_id:vis==='anonymous'?'':name,cluster_name:'',request:req,anonymous:vis==='anonymous',visibility:vis,hidden:false,date:new Date().toISOString().split('T')[0],status:'active'};
+  try{
+    const r=await fetch(SB+'/rest/v1/prayer_requests',{method:'POST',headers:H,body:JSON.stringify(row)});
+    if(r.ok||r.status===201||r.status===200){
+      document.getElementById('pub-success').style.display='block';
+      document.getElementById('pub-name').value='';
+      document.getElementById('pub-request').value='';
+      document.querySelector('input[name="pub-vis"]').checked=true;
+      btn.textContent='Submit prayer request';btn.disabled=false;
+      setTimeout(loadPrayers,1000);
+    }else throw new Error('Failed');
+  }catch(e){err.textContent='Could not submit. Please try again.';err.style.display='block';btn.disabled=false;btn.textContent='Submit prayer request';}
+}
+loadPrayers();
+</script></body></html>
