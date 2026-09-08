@@ -862,8 +862,11 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
         <input class="form-input" id="cm-start" type="date" value="2026-09-09">
       </div>
       <div id="cm-error" style="display:none;background:#fcebeb;color:#791f1f;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px"></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-        <button class="btn btn-danger btn-sm" id="cm-delete-btn" onclick="deleteCluster()" style="display:none">Delete cluster</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-danger btn-sm" id="cm-delete-btn" onclick="deleteCluster()" style="display:none">Delete cluster</button>
+          <button class="btn btn-warn btn-sm" id="cm-changehead-btn" onclick="changeClusterHead()" style="display:none">Change head</button>
+        </div>
         <div style="display:flex;gap:8px;margin-left:auto">
           <button class="btn btn-sm" onclick="closeClusterModal()">Cancel</button>
           <button class="btn btn-success" onclick="saveCluster()">Save cluster</button>
@@ -1787,15 +1790,17 @@ function renderOverview(){
   // ── Last session stats ──────────────────────────────────────────────────────
   const lastSess=recs.length?recs[recs.length-1]:null;
   const prevSess=recs.length>=2?recs[recs.length-2]:null;
-  let lastPresent=0,lastAbsent=0,lastRate=0,prevPresent=0,prevRate=0;
+  let lastPresent=0,lastPresentMembers=0,lastPresentGuests=0,lastAbsent=0,lastRate=0,prevPresent=0,prevRate=0;
   if(lastSess){
-    lastPresent=MEMBERS.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length;
+    lastPresentMembers=nonGuests.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length;
+    lastPresentGuests=MEMBERS.filter(m=>m.gc==='Guest'&&!m.frozen&&attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length;
+    lastPresent=lastPresentMembers+lastPresentGuests;
     lastAbsent=nonGuests.filter(m=>{
       if(firstSession[m.n]&&firstSession[m.n]>lastSess.key)return false;
       return attendance[lastSess.key]?attendance[lastSess.key][m.n]!=='present':true;
     }).length;
     const possLast=nonGuests.filter(m=>!firstSession[m.n]||firstSession[m.n]<=lastSess.key).length;
-    lastRate=possLast?Math.round((lastPresent/possLast)*100):0;
+    lastRate=possLast?Math.round((lastPresentMembers/possLast)*100):0;
   }
   if(prevSess){
     prevPresent=MEMBERS.filter(m=>attendance[prevSess.key]&&attendance[prevSess.key][m.n]==='present').length;
@@ -1849,6 +1854,7 @@ function renderOverview(){
             <span style="font-size:14px;color:rgba(255,255,255,.6)">present</span>
             <span style="font-size:14px;color:#E24B4A;font-weight:500">${lastAbsent} absent</span>
           </div>
+          <div style="font-size:12px;color:rgba(255,255,255,.4);margin-top:6px">${lastPresentMembers} members · ${lastPresentGuests} guest${lastPresentGuests===1?'':'s'}</div>
         </div>
         <div style="text-align:right">
           <div style="font-size:28px;font-weight:700;color:${lastRate>=70?'#4ade80':lastRate>=50?'#fbbf24':'#f87171'};line-height:1">${lastRate}%</div>
@@ -3318,6 +3324,7 @@ function _renderMemberReport(){
   const {lastSess,lastPresent,lastAbsent,lastRate,delta,bdaySoon,presentNonGuests,nonGuests}=_sd;
   const presentCount=lastPresent.filter(m=>m.gc!=='Guest'&&!m.frozen).length;
   const guestCount=lastPresent.filter(m=>m.gc==='Guest').length;
+  const totalPresent=presentCount+guestCount;
 
   document.getElementById('summaryContent').innerHTML=`
     <!-- Hero -->
@@ -3441,6 +3448,7 @@ function shareSummary(){
   const {lastSess,lastPresent,lastAbsent,lastRate,delta,bdaySoon,presentNonGuests,nonGuests}=_sd;
   const presentCount=lastPresent.filter(m=>m.gc!=='Guest'&&!m.frozen).length;
   const guestCount=lastPresent.filter(m=>m.gc==='Guest').length;
+  const totalPresent=presentCount+guestCount;
 
   const htmlDoc=`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gidi GC — ${lastSess?lastSess.date:''}</title>
 <link href="https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
@@ -4515,24 +4523,41 @@ function openClusterModal(id){
   _editingClusterId=id;
   const title=document.getElementById('clusterModalTitle');
   const delBtn=document.getElementById('cm-delete-btn');
+  const changeBtn=document.getElementById('cm-changehead-btn');
   const err=document.getElementById('cm-error');
   err.style.display='none';
-  // Populate head dropdown with non-guest members
   const headSel=document.getElementById('cm-head');
   headSel.innerHTML='<option value="">Select head...</option>'+[...MEMBERS].filter(m=>m.gc!=='Guest').sort(byFirstName).map(m=>`<option value="${m.n}">${m.n}</option>`).join('');
   if(id){
     const c=clusters.find(x=>x.id===id);if(!c)return;
-    title.textContent='Edit cluster';delBtn.style.display='inline-flex';
+    title.textContent='Edit cluster';
+    delBtn.style.display='inline-flex';
+    changeBtn.style.display='inline-flex';
     document.getElementById('cm-name').value=c.name;
     document.getElementById('cm-head').value=c.head;
     document.getElementById('cm-start').value=c.startDate;
   } else {
-    title.textContent='Add cluster';delBtn.style.display='none';
+    title.textContent='Add cluster';
+    delBtn.style.display='none';
+    changeBtn.style.display='none';
     document.getElementById('cm-name').value='';
     document.getElementById('cm-head').value='';
     document.getElementById('cm-start').value='2026-09-09';
   }
   document.getElementById('clusterModal').className='member-modal open';
+}
+
+function changeClusterHead(){
+  if(!_editingClusterId)return;
+  const c=clusters.find(x=>x.id===_editingClusterId);if(!c)return;
+  const newHead=document.getElementById('cm-head').value;
+  if(!newHead){showToast('Select a new head first',2000);return;}
+  if(newHead===c.head){showToast('That is already the cluster head',2000);return;}
+  if(!confirm(`Change cluster head from ${c.head.split(' ')[0]} to ${newHead.split(' ')[0]}?\n\nThe previous head stays in the cluster as a regular member.`))return;
+  c.head=newHead;
+  logChange(`Changed head of ${c.name} from ${c.head} to ${newHead}`);
+  saveAll();closeClusterModal();renderClusters();
+  showToast(`Cluster head changed to ${newHead.split(' ')[0]} ✓`,2500);
 }
 function closeClusterModal(){document.getElementById('clusterModal').className='member-modal';}
 function handleClusterModalBg(e){if(e.target===document.getElementById('clusterModal'))closeClusterModal();}
@@ -5349,11 +5374,20 @@ async function confirmNewTerm(){
   };
   termArchive.push(archiveEntry);
 
-  // 2. Clear live data
+  // 2. Clear live session and check-in data
   Object.keys(attendance).forEach(k=>delete attendance[k]);
   Object.keys(absenceReasons).forEach(k=>delete absenceReasons[k]);
   Object.keys(firstSession).forEach(k=>delete firstSession[k]);
   Object.keys(checkIns).forEach(k=>delete checkIns[k]);
+  Object.keys(wellbeing).forEach(k=>delete wellbeing[k]);
+  Object.keys(careNotes).forEach(k=>delete careNotes[k]);
+  Object.keys(scCheckIns).forEach(k=>delete scCheckIns[k]);
+  Object.keys(scWellbeing).forEach(k=>delete scWellbeing[k]);
+  Object.keys(scCareNotes).forEach(k=>delete scCareNotes[k]);
+  // Also clear from Supabase
+  ['attendance','absence_reasons','first_session','check_ins','wellbeing','care_notes','sc_check_ins','sc_wellbeing','sc_care_notes'].forEach(t=>{
+    fetch(`${SB_URL}/rest/v1/${t}?id=neq.null`,{method:'DELETE',headers:SBH}).catch(()=>{});
+  });
 
   // 3. Reset GC statuses to originals
   MEMBERS.forEach(m=>{if(m.gcOrig)m.gc=m.gcOrig;});
@@ -7998,6 +8032,7 @@ function _buildMemberReportHtml(){
   const nextSess=SESSIONS_DEF.find(s=>s.key>new Date().toISOString().split('T')[0]);
   const presentCount=lastPresent.filter(m=>m.gc!=='Guest'&&!m.frozen).length;
   const guestCount=lastPresent.filter(m=>m.gc==='Guest').length;
+  const totalPresent=presentCount+guestCount;
 
   const last5=recs.slice(-5);
   const counts=last5.map(s=>nonGuests.filter(m=>attendance[s.key]&&attendance[s.key][m.n]==='present').length);
@@ -8038,8 +8073,9 @@ function _buildMemberReportHtml(){
   <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px">📋 Gidi GC · ${lastSess?lastSess.date:''}</div>
   <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
     <div>
-      <div style="font-size:34px;font-weight:700;color:${delt>=0?'#4ade80':'#f87171'};line-height:1">${presentCount}</div>
-      <div style="font-size:13px;color:${delt>=0?'#4ade80':'#f87171'};font-weight:600;margin-top:4px">${delt>=0?'↑ +':'↓ '}${delt} from last session${guestCount?' · '+guestCount+' guest'+(guestCount===1?'':'s'):''}</div>
+      <div style="font-size:34px;font-weight:700;color:${delt>=0?'#4ade80':'#f87171'};line-height:1">${totalPresent}</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.5);margin-top:4px">${presentCount} members${guestCount?' · '+guestCount+' guest'+(guestCount===1?'':'s'):''}</div>
+      <div style="font-size:13px;color:${delt>=0?'#4ade80':'#f87171'};font-weight:600;margin-top:4px">${delt>=0?'↑ +':'↓ '}${delt} from last session</div>
       <div style="margin-top:10px;font-size:13px;color:rgba(255,255,255,.4);display:flex;align-items:center;gap:5px;flex-wrap:wrap">${trendSpans}</div>
     </div>
     <svg width="90" height="48" viewBox="0 0 90 48" style="flex-shrink:0">
