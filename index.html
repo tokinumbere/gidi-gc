@@ -6437,7 +6437,7 @@ textarea{resize:vertical;min-height:80px}
   <div id="pub-success" class="success">✓ Submitted! We'll be praying for you 🙏</div>
   <button class="submit-btn" id="pub-submit" onclick="submitPublicPrayer()">Submit prayer request</button>
 </div>
-<script>
+<scr'+'ipt>
 const SB='${SUPA_URL}',KEY='${SUPA_KEY}';
 const H={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'};
 
@@ -7965,7 +7965,6 @@ function buildWellbeingTimeline(memberName){
     </div>
   </div>`;
 }
-}
 
 // ── CLUSTER HEAD REPORT (generated page) ──────────────────────────────────────
 function openClusterHeadDashboard(clusterId){
@@ -8247,7 +8246,7 @@ input[type=text]{width:100%;font-size:13px;padding:8px 10px;border:0.5px solid #
   <button onclick="document.getElementById('doneScreen').style.display='none'" style="padding:14px 32px;background:#1D9E75;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">View my cluster</button>
 </div>
 
-<script>
+<scr'+'ipt>
 const SB='${SUPA_URL}',KEY='${SUPA_KEY}';
 const H={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'};
 const CLUSTER_ID='${clusterId}';
@@ -8580,7 +8579,7 @@ updateProgress();
           </label>
         </div>
       </div>
-      <script>var sd_${mId}={checkedIn:false,wellbeing:'',note:'',prayerRequest:'',prayerAnon:false};<\/script>
+      <scr'+'ipt>var sd_${mId}={checkedIn:false,wellbeing:'',note:'',prayerRequest:'',prayerAnon:false};<\/script>
     </div>`;
   }).join('');
 
@@ -8767,7 +8766,7 @@ textarea,input{font-family:inherit}
     <div style="font-size:14px;color:#888">No active goal set by your GC leader.</div>
   </div>`}
 </div>
-<script>
+<scr'+'ipt>
 // Tab switching
 function showTab(id){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
@@ -9158,7 +9157,7 @@ ${(()=>{
 })()}
 
 <footer>${c.name} · Gidi GC · ${lastSess?lastSess.date:''}</footer>
-<script>
+<scr'+'ipt>
 const _SUPA_URL='https://rgmdtjfkffwoayvzqrks.supabase.co';
 const _SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWR0amZrZmZ3b2F5dnpxcmtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NDA1NzQsImV4cCI6MjEwNDAxNjU3NH0.ZtsXCmqLCmmIsIgMsLFAqfW04RKwWZO5s0lrry04CbI';
 async function saveClusterMsgs(clusterId){
