@@ -25,7 +25,6 @@ html,body{height:100%}
 
 /* ── SIDEBAR ── */
 .sidebar{width:220px;flex-shrink:0;background:#1a1a1a;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;overflow:hidden;z-index:100}
-.sidebar-brand{padding:20px 16px 16px;border-bottom:1px solid rgba(255,255,255,.1)}
 .sidebar-brand h1{color:#fff;font-size:16px}
 .sidebar-brand{padding:20px 16px 16px;border-bottom:1px solid rgba(255,255,255,.1)}
 .sidebar-brand h1{color:#fff;font-size:16px}
@@ -39,7 +38,7 @@ html,body{height:100%}
 .nav-item.active{background:rgba(255,255,255,.12);color:#fff;font-weight:500}
 .nav-item.active::before{content:'';position:absolute;left:0;top:6px;bottom:6px;width:3px;background:#1D9E75;border-radius:0 2px 2px 0}
 .nav-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0}
-.nav-badge{margin-left:auto;background:#E24B4A;color:#fff;border-radius:20px;padding:1px 6px;font-size:10px;font-weight:700}
+.nav-badge{margin-left:auto;background:#E24B4A;color:#fff;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:700;white-space:nowrap}
 .sidebar-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.1);display:flex;gap:6px;flex-wrap:wrap}
 .sidebar-footer .btn{font-size:11px;padding:5px 8px;background:rgba(255,255,255,.1);border-color:transparent;color:rgba(255,255,255,.7)}
 .sidebar-footer .btn:hover{background:rgba(255,255,255,.18);color:#fff}
@@ -58,7 +57,7 @@ html,body{height:100%}
 .app{max-width:100%;margin:0;padding:0}
 .top-bar{display:none}
 .top-actions{display:none}
-.tabs{display:none!important}
+
 .subtitle{font-size:11px;color:rgba(255,255,255,.45);margin-top:2px}
 .btn{background:#fff;border:0.5px solid #ccc;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;color:#1a1a1a;display:inline-flex;align-items:center;gap:6px;transition:background .15s;font-family:inherit}
 .btn:hover{background:#f0efe8}
@@ -390,6 +389,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
       <button class="btn btn-success btn-sm" onclick="openSummary()">&#128202; Reports</button>
       <button class="btn btn-warn btn-sm edit-only" onclick="openSessionDebrief()" title="Post-session debrief">&#128203; Debrief</button>
       <button class="btn btn-danger btn-sm edit-only" onclick="openNewTerm()" title="Start new term">&#127379; New term</button>
+      <button class="btn btn-sm mob-only-btn" id="topbarLockBtn" onclick="toggleLock()" title="Lock/unlock" style="display:none">&#128274;</button>
       <button class="btn btn-success btn-sm mob-only-btn" onclick="openSummary()" style="display:none">&#128202;</button>
     </div>
   </div>
@@ -1493,8 +1493,8 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <button class="mob-nav-btn" data-tab="care" onclick="switchTab('care',document.querySelector('[data-id=care]'));setMobNav(this)">
     <span class="mob-nav-icon">&#10084;</span>Care
   </button>
-  <button class="mob-nav-btn" data-tab="record" onclick="switchTab('record',document.querySelector('[data-id=record]'));setMobNav(this)">
-    <span class="mob-nav-icon">&#9989;</span>Record
+  <button class="mob-nav-btn" data-tab="record" onclick="switchTab('record',document.querySelector('[data-id=record]'));setMobNav(this)" style="position:relative">
+    <span class="mob-nav-icon" style="background:#1a1a1a;color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:2px">&#9989;</span>Record
   </button>
   <button class="mob-nav-btn" data-tab="members" onclick="switchTab('members',document.querySelector('[data-id=members]'));setMobNav(this)">
     <span class="mob-nav-icon">&#128101;</span>People
@@ -2857,21 +2857,34 @@ function applyImport(dateKey,presentNames,source){
   loadRecordSession(dateKey);
   switchTab('record',document.querySelector('[data-id=record]'));
 
-  // Auto-prompt debrief after import
+  // Full-screen debrief interstitial after import
   const absent=MEMBERS.filter(m=>m.gc!=='Guest'&&attendance[dateKey]&&attendance[dateKey][m.n]==='absent').length;
   const present=presentNames.length;
+  const total=present+absent;
+  const rate=total?Math.round(present/total*100):0;
+
   setTimeout(()=>{
-    const toast=document.createElement('div');
-    toast.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;border-radius:12px;padding:14px 18px;z-index:9000;max-width:320px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.3);text-align:center';
-    toast.innerHTML=`<div style="font-size:15px;font-weight:600;margin-bottom:6px">✅ ${present} present · ${absent} absent</div>
-      <div style="font-size:13px;color:rgba(255,255,255,.7);margin-bottom:12px">${absent>0?absent+' people weren\'t there. Want to review them now?':'Everyone was present this week!'}</div>
-      <div style="display:flex;gap:8px;justify-content:center">
-        ${absent>0?`<button onclick="openSessionDebrief();this.closest('div[style*=fixed]').remove()" style="background:#1D9E75;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Start debrief →</button>`:''}
-        <button onclick="this.closest('div[style*=fixed]').remove()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit">Dismiss</button>
+    const overlay=document.createElement('div');
+    overlay.id='debriefOverlay';
+    overlay.style.cssText='position:fixed;inset:0;background:#1a1a1a;z-index:9500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center';
+    overlay.innerHTML=`
+      <div style="max-width:340px;width:100%">
+        <div style="font-size:13px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:20px">Session recorded</div>
+        <div style="font-size:56px;font-weight:700;color:${rate>=70?'#4ade80':rate>=50?'#facc15':'#f87171'};line-height:1;margin-bottom:8px">${rate}%</div>
+        <div style="font-size:16px;color:rgba(255,255,255,.7);margin-bottom:4px">${present} present · ${absent} absent</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.4);margin-bottom:40px">${new Date(dateKey+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})}</div>
+        ${absent>0?`
+        <div style="font-size:14px;color:rgba(255,255,255,.6);margin-bottom:20px">${absent} ${absent===1?'person wasn\'t':'people weren\'t'} there. Start a debrief to review who needs a follow-up.</div>
+        <button onclick="document.getElementById('debriefOverlay').remove();openSessionDebrief()" style="width:100%;padding:16px;background:#1D9E75;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:10px">Start debrief →</button>
+        <button onclick="document.getElementById('debriefOverlay').remove()" style="width:100%;padding:14px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:none;border-radius:12px;font-size:14px;cursor:pointer;font-family:inherit">Skip for now</button>
+        `:`
+        <div style="font-size:20px;margin-bottom:16px">🎉</div>
+        <div style="font-size:14px;color:rgba(255,255,255,.6);margin-bottom:24px">Everyone was present this week!</div>
+        <button onclick="document.getElementById('debriefOverlay').remove()" style="width:100%;padding:16px;background:#1D9E75;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit">Continue</button>
+        `}
       </div>`;
-    document.body.appendChild(toast);
-    setTimeout(()=>{if(toast.parentNode)toast.remove();},10000);
-  },500);
+    document.body.appendChild(overlay);
+  },400);
 }
 
 let _editingMemberName=null;
@@ -3357,25 +3370,28 @@ function renderMembers(){
       const servingDot=st.status==='serving'?'#1D9E75':st.status==='overdue'?'#E24B4A':'#e0e0d8';
       const teams=servingTeams[m.n]||[];
 
-      return`<div style="background:#fff;border:0.5px solid ${action?'#f09595':'#e0e0d8'};border-radius:10px;padding:12px 14px;margin-bottom:8px" onclick="openProfile('${nameEsc}')">
-        <div style="display:flex;align-items:center;gap:12px">
-          <div style="width:40px;height:40px;border-radius:50%;background:#1a1a1a;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:#fff;flex-shrink:0">${ini}</div>
+      return`<div style="background:#fff;border:0.5px solid ${action?'#f09595':'#e0e0d8'};border-radius:10px;padding:12px 14px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <div style="width:40px;height:40px;border-radius:50%;background:${action?'#E24B4A':teams.length?'#1D9E75':'#1a1a1a'};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:#fff;flex-shrink:0">${ini}</div>
           <div style="flex:1;min-width:0">
-            <div style="font-size:14px;font-weight:500;color:#1a1a1a">${m.n}</div>
+            <div style="font-size:14px;font-weight:600;color:#1a1a1a">${m.n}</div>
             <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
               <span style="font-size:11px;font-weight:500;background:${GBKG[m.gc]||'#f5f5f3'};color:${GCOL[m.gc]||'#888'};border-radius:20px;padding:1px 7px">${m.gc}</span>
-              <span style="font-size:11px;color:#888">${c.rate}%</span>
-              ${teams.length?`<span style="font-size:11px;color:#1D9E75">🤝 ${teams[0]}${teams.length>1?' +'+( teams.length-1):''}</span>`:`<div style="width:7px;height:7px;border-radius:50%;background:${servingDot};display:inline-block"></div>`}
+              <span style="font-size:11px;color:${c.rate<50?'#E24B4A':c.rate<70?'#EF9F27':'#888'}">${c.rate}%</span>
+              ${c.curStreak>=2?`<span style="font-size:11px;color:#E24B4A;font-weight:600">${c.curStreak} missed</span>`:''}
             </div>
-            ${lastKey?`<div style="font-size:11px;color:#aaa;margin-top:3px">Last attended ${humanDate(lastKey)}</div>`:''}
-          </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0" onclick="event.stopPropagation()">
-            ${wa?`<a href="https://wa.me/${wa}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;text-decoration:none">WA</a>`:''}
+            ${lastKey?`<div style="font-size:11px;color:#aaa;margin-top:3px">Last seen ${humanDate(lastKey)}</div>`:''}
           </div>
         </div>
-        ${action?`<div style="margin-top:8px;padding:6px 10px;background:${action.bg};border-radius:6px;font-size:12px;font-weight:600;color:${action.color};display:flex;align-items:center;justify-content:space-between">
-          <span>${action.label}</span><span>→</span>
+        ${action?`<div style="background:${action.bg};border-radius:6px;padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;font-weight:600;color:${action.color}">${action.label}</span>
+          <span style="font-size:12px;color:${action.color}">→</span>
         </div>`:''}
+        <div style="display:flex;gap:6px">
+          ${wa?`<a href="https://wa.me/${wa}" onclick="event.stopPropagation()" target="_blank" style="flex:1;background:#25D366;color:#fff;border-radius:8px;padding:8px 4px;font-size:11px;font-weight:600;text-decoration:none;text-align:center">WhatsApp</a>`:''}
+          <button onclick="openProfile('${nameEsc}')" style="flex:1;background:#f5f5f3;border:0.5px solid #e0e0d8;border-radius:8px;padding:8px 4px;font-size:11px;font-weight:500;cursor:pointer;font-family:inherit">View</button>
+          <button onclick="addCareNote('${nameEsc}');event.stopPropagation()" style="flex:1;background:#f5f5f3;border:0.5px solid #e0e0d8;border-radius:8px;padding:8px 4px;font-size:11px;font-weight:500;cursor:pointer;font-family:inherit">Log care</button>
+        </div>
       </div>`;
     }).join('');
     return;
@@ -4491,10 +4507,20 @@ function recalcAll(){
   if(prayerBadge){prayerBadge.textContent=activePrayers;prayerBadge.style.display=activePrayers?'inline':'none';}
   // Update pending badge
   updatePendingBadge();
-  // Update care badge
-  const _careUrgent=MEMBERS.filter(m=>{if(m.gc==='Guest'||m.frozen)return false;const s=calcMember(m.n).curStreak;const today2=todayWAT();const allW=getClusterWeeks().filter(w=>w.key<=today2);const wb=allW.slice(-3).map(w=>(wellbeing[w.key]||{})[m.n]||'');const rF=wb.filter(v=>v==='red').length;const aF=wb.filter(v=>v==='red'||v==='amber').length;return s>=2||rF>=2||aF>=2;}).length;
+  // Update care badge with urgent count
+  const today2=todayWAT();const allW=getClusterWeeks().filter(w=>w.key<=today2);
+  const _careAll=MEMBERS.filter(m=>{if(m.gc==='Guest'||m.frozen)return false;const s=calcMember(m.n).curStreak;const wb=allW.slice(-3).map(w=>(wellbeing[w.key]||{})[m.n]||'');return s>=2||wb.filter(v=>v==='red'||v==='amber').length>=2;}).length;
+  const _careUrgent=MEMBERS.filter(m=>{if(m.gc==='Guest'||m.frozen)return false;const s=calcMember(m.n).curStreak;const wb=allW.slice(-4).map(w=>(wellbeing[w.key]||{})[m.n]||'');return s>=3&&wb.filter(v=>v==='red').length>=1;}).length;
   const _careBadge=document.getElementById('careBadge');
-  if(_careBadge){_careBadge.textContent=_careUrgent;_careBadge.style.display=_careUrgent?'inline':'none';}
+  if(_careBadge){
+    if(_careAll){
+      _careBadge.textContent=_careUrgent?`${_careAll} · ${_careUrgent} urgent`:_careAll;
+      _careBadge.style.display='inline';
+      _careBadge.style.background=_careUrgent?'#E24B4A':'#EF9F27';
+    } else {
+      _careBadge.style.display='none';
+    }
+  }
   // Show wellbeing alerts panel if there are any
   const wbPanel=document.getElementById('wellbeingAlertPanel');
   if(wbPanel){
@@ -5520,9 +5546,10 @@ function applyMode(){
   document.body.classList.toggle('view-only',!edit);
   const banner=document.getElementById('viewOnlyBanner');
   const lockBtn=document.getElementById('lockBtn');
+  const topbarLockBtn=document.getElementById('topbarLockBtn');
   if(banner)banner.style.display=edit?'none':'block';
-  if(lockBtn)lockBtn.textContent=edit?'🔓':'🔒';
-  if(lockBtn)lockBtn.title=edit?'Lock this device':'Unlock editing';
+  if(lockBtn){lockBtn.textContent=edit?'🔓':'🔒';lockBtn.title=edit?'Lock this device':'Unlock editing';}
+  if(topbarLockBtn){topbarLockBtn.textContent=edit?'🔓':'🔒';}
 }
 
 function openPinModal(onSuccess){
@@ -9844,76 +9871,19 @@ function renderCommandCentre(){
   if(servingOverdue.length)cards.push(card('🤝',servingOverdue.length,'not serving yet','Eligible 1+ year','#633806','#faeeda','serving'));
   if(bdaysThisWeek.length)cards.push(card('🎂',bdaysThisWeek.length,bdaysThisWeek.length===1?'birthday':'birthdays','This week','#085041','#e1f5ee','birthdays'));
 
+  const cols=cards.length<=2?`repeat(${cards.length},1fr)`:'repeat(auto-fit,minmax(130px,1fr))';
+
   el.innerHTML=`
-    <div style="margin-bottom:8px;font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em">Needs your attention</div>
-    <div style="display:grid;grid-template-columns:${cards.length>=3?'repeat(3,1fr)':'repeat('+cards.length+',1fr)'};gap:8px">
+    <div style="margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:2px">Needs your attention</div>
+      <div style="font-size:12px;color:#888">Tap any card to act on it</div>
+    </div>
+    <div style="display:grid;grid-template-columns:${cols};gap:10px">
       ${cards.join('')}
+    </div>
+    <div style="margin-top:12px;padding-top:12px;border-top:0.5px solid #f0f0ea;text-align:right">
+      <button onclick="switchTab('care',document.querySelector('[data-id=care]'))" style="font-size:12px;font-weight:600;color:#1D9E75;background:none;border:none;cursor:pointer;font-family:inherit">Go to Care →</button>
     </div>`;
-}
-
-
-  const el=document.getElementById('ov-thisweek');
-  if(!el)return;
-  // Hide for non-authenticated users — internal operational info
-  if(!isEditMode()&&!isClusterUnlocked()){el.innerHTML='';return;}
-  const today=todayWAT();
-  const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
-  const thisWeek=allWeeks.length?allWeeks[allWeeks.length-1]:null;
-  const unsubmittedClusters=thisWeek?clusters.filter(c=>!pendingClusterSubmissions.some(s=>s.clusterId===c.id&&s.weekKey===thisWeek.key)).length:0;
-  const conversations=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen&&getMembershipStatus(m)).length;
-  const escalations=MEMBERS.filter(m=>{
-    if(m.gc==='Guest'||m.frozen)return false;
-    const s=calcMember(m.n).curStreak;
-    const wb=allWeeks.slice(-4).map(w=>(wellbeing[w.key]||{})[m.n]||'');
-    return s>=3&&wb.filter(v=>v==='red').length>=1;
-  }).length;
-  const goalTotal=activeGoal?getGoalTotal():0;
-  const goalTarget=activeGoal?.target||0;
-  // Check if report is stale (not published this week)
-  const lastPublished=localStorage.getItem('gidi_report_last_published')||'';
-  const lastSessKey=getRecordedSessions().slice(-1)[0]?.key||'';
-  const reportStale=lastSessKey&&lastPublished<lastSessKey;
-  const items=[
-    {done:unsubmittedClusters===0,label:unsubmittedClusters===0?'All cluster heads have submitted this week':`${unsubmittedClusters} cluster head${unsubmittedClusters===1?'':'s'} yet to submit`,action:`switchTab('care',document.querySelector('[data-id=care]'))`,actionLabel:'View clusters',urgent:false},
-    {done:escalations===0,label:escalations===0?'No urgent follow-ups needed':`${escalations} member${escalations===1?'':'s'} need${escalations===1?'s':''} urgent follow-up`,action:`switchTab('care',document.querySelector('[data-id=care]'))`,actionLabel:'Go to Follow up',urgent:escalations>0},
-    {done:conversations===0,label:conversations===0?'No membership or serving conversations pending':`${conversations} conversation${conversations===1?'':'s'} to have`,action:`switchTab('care',document.querySelector('[data-id=care]'))`,actionLabel:'See who',urgent:false},
-    ...(activeGoal?[{done:goalTotal>=goalTarget,label:goalTotal>=goalTarget?`🎉 Goal reached! ${goalTotal} total`:`Goal: ${goalTotal} of ${goalTarget} so far this ${activeGoal.monthLabel||'month'}`,action:`switchTab('goals',document.querySelector('[data-id=goals]'))`,actionLabel:'View goal',urgent:false}]:[]),
-    ...(reportStale?[{done:false,label:'Member report not yet published this session',action:`openSummary()`,actionLabel:'Publish report',urgent:false}]:[])
-  ];
-  const allDone=items.every(i=>i.done);
-  const isOpen=localStorage.getItem('gidi_thisweek_open')!=='false';
-  el.innerHTML=`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;overflow:hidden">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;background:${allDone?'#f2fbf7':'#fff'}" onclick="toggleThisWeek()">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:15px">${allDone?'✅':'📋'}</span>
-        <div>
-          <div style="font-size:13px;font-weight:600;color:${allDone?'#085041':'#1a1a1a'}">${allDone?'All done this week — great work!':'This week\'s actions'}</div>
-          ${!isOpen?`<div style="font-size:11px;color:#888">${items.filter(i=>!i.done).length} remaining</div>`:''}
-        </div>
-      </div>
-      <span id="thisweek-arrow" style="font-size:11px;color:#888">${isOpen?'▼':'▶'}</span>
-    </div>
-    <div id="thisweek-body" style="display:${isOpen?'block':'none'};padding:0 14px 12px">
-      ${items.map(item=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8;gap:8px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
-          <span style="font-size:14px;flex-shrink:0">${item.done?'✅':item.urgent?'🚨':'⬜'}</span>
-          <span style="font-size:13px;color:${item.done?'#888':item.urgent?'#791f1f':'#1a1a1a'};${item.done?'text-decoration:line-through;':''}">${item.label}</span>
-        </div>
-        ${item.action&&!item.done?`<button onclick="${item.action}" style="font-size:11px;background:#f5f5f3;border:0.5px solid #e0e0d8;border-radius:20px;padding:3px 10px;cursor:pointer;color:#555;flex-shrink:0;font-family:inherit">${item.actionLabel} →</button>`:''}
-      </div>`).join('')}
-      <div style="font-size:11px;color:#aaa;margin-top:8px;text-align:center">Tap any item to navigate there · Updates as you work through it</div>
-    </div>
-  </div>`;
-}
-
-function toggleThisWeek(){
-  const body=document.getElementById('thisweek-body');
-  const arrow=document.getElementById('thisweek-arrow');
-  if(!body)return;
-  const isOpen=body.style.display!=='none';
-  body.style.display=isOpen?'none':'block';
-  if(arrow)arrow.textContent=isOpen?'▶':'▼';
-  localStorage.setItem('gidi_thisweek_open',String(!isOpen));
 }
 
 function renderThisWeekCard(){
@@ -9922,7 +9892,8 @@ function renderThisWeekCard(){
   if(!isEditMode()&&!isClusterUnlocked()){el.innerHTML='';return;}
   const today=todayWAT();
   const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
-  const unsubmittedClusters=clusters.filter(c=>!pendingClusterSubmissions.some(s=>s.clusterId===c.id)).length;
+  const thisWeek=allWeeks.length?allWeeks[allWeeks.length-1]:null;
+  const unsubmittedClusters=thisWeek?clusters.filter(c=>!pendingClusterSubmissions.some(s=>s.clusterId===c.id&&s.weekKey===thisWeek.key)).length:0;
   const conversations=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen&&getMembershipStatus(m)).length;
   const escalations=MEMBERS.filter(m=>{
     if(m.gc==='Guest'||m.frozen)return false;
@@ -9966,6 +9937,16 @@ function renderThisWeekCard(){
       <div style="font-size:11px;color:#aaa;margin-top:8px;text-align:center">Tap any item to navigate there · Updates as you work through it</div>
     </div>
   </div>`;
+}
+
+function toggleThisWeek(){
+  const body=document.getElementById('thisweek-body');
+  const arrow=document.getElementById('thisweek-arrow');
+  if(!body)return;
+  const isOpen=body.style.display!=='none';
+  body.style.display=isOpen?'none':'block';
+  if(arrow)arrow.textContent=isOpen?'▶':'▼';
+  localStorage.setItem('gidi_thisweek_open',String(!isOpen));
 }
 
 function getGoalTotal(){
@@ -10443,16 +10424,18 @@ ${nextSess?`<div class="card card-next">
 initSeedData();
 loadSaved();
 applyPhoneNumbers();
-recalcAll();
 
-// Show full-screen PIN gate on every fresh session
+// Apply auth BEFORE rendering — command centre only shows when authenticated
 if(!localStorage.getItem(TRUST_TOKEN_KEY)){
+  // Fresh device — show PIN gate, render in locked mode
+  recalcAll();
   openPinModal();
 } else {
-  // Trusted device — unlock immediately
+  // Trusted device — unlock immediately then render
   sessionStorage.setItem(PIN_SESSION_KEY,'1');
   sessionStorage.setItem(CLUSTER_SESSION_KEY,'1');
   applyMode();
+  recalcAll();
 }
 
 checkMagicLink();
@@ -10463,6 +10446,8 @@ setTimeout(async()=>{
     const ok=await loadFromSupabase();
     if(ok){
       recalcAll();
+      renderCommandCentre();
+      renderThisWeekCard();
       setSyncStatus('green',`Synced ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`);
       showToast('Up to date ✓',2000);
       if(new URLSearchParams(window.location.search).get('cluster'))checkMagicLink();
