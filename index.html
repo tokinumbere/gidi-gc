@@ -149,8 +149,9 @@ tr:hover td{background:#fafaf8}
 .delete-confirm.show{display:block}
 .bday-soon{background:#faeeda;color:#633806;border-radius:20px;padding:2px 8px;font-size:11px;font-weight:500;display:inline-block}
 .bday-today{background:#e1f5ee;color:#085041;border-radius:20px;padding:2px 8px;font-size:11px;font-weight:500;display:inline-block}
+@keyframes shimmer{0%{opacity:.5}50%{opacity:1}100%{opacity:.5}}
+.skeleton{animation:shimmer 1.5s infinite;background:#f0f0eb;border-radius:6px}
 @media(max-width:768px){
-  /* Mobile: hide sidebar, show bottom nav */
   .sidebar{display:none}
   .main{margin-left:0;min-height:100vh}
   .content{padding:12px 12px 80px}
@@ -353,10 +354,10 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 
     <div class="nav-section">Groups</div>
     <button class="nav-item" data-id="clusters" onclick="switchTab('clusters',this)"><span class="nav-icon">&#127970;</span>Clusters</button>
-    <button class="nav-item" data-id="superclusters" onclick="switchTab('superclusters',this)"><span class="nav-icon">&#127968;</span>Superclusters</button>
+    <button class="nav-item" data-id="superclusters" onclick="switchTab('superclusters',this)"><span class="nav-icon">&#127968;</span>Leader view</button>
 
     <div class="nav-section">Care</div>
-    <button class="nav-item" data-id="care" onclick="switchTab('care',this)"><span class="nav-icon">&#10084;</span>Exception view <span class="nav-badge" id="careBadge" style="display:none">0</span></button>
+    <button class="nav-item" data-id="care" onclick="switchTab('care',this)"><span class="nav-icon">&#10084;</span>Follow up <span class="nav-badge" id="careBadge" style="display:none">0</span></button>
     <button class="nav-item" data-id="prayer" onclick="switchTab('prayer',this)"><span class="nav-icon">&#128591;</span>Prayer <span class="nav-badge" id="prayerBadge" style="display:none">0</span></button>
 
     <div class="nav-section">Reports</div>
@@ -380,13 +381,50 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <div class="topbar">
     <div class="topbar-title" id="topbarTitle">Overview</div>
     <div class="topbar-actions">
+      <button class="btn btn-sm" onclick="openSearch()" title="Search" style="font-size:16px">&#128269;</button>
       <button class="btn btn-warn btn-sm" onclick="openSessionDebrief()" title="Post-session pastoral debrief">&#128203; Debrief</button>
       <button class="btn btn-sm" onclick="sendWeeklySummary()" title="Email weekly summary">&#128140; Summary</button>
       <button class="btn btn-sm" onclick="sendClusterPerformanceEmail()" title="Email cluster performance report">&#128202; Clusters</button>
       <button class="btn btn-success btn-sm" onclick="openSummary()">&#128202; Reports</button>
       <button class="btn btn-danger btn-sm" onclick="openNewTerm()">&#127379; New Term</button>
-      <!-- Mobile: compact Reports button shown instead -->
       <button class="btn btn-success btn-sm mob-only-btn" onclick="openSummary()" style="display:none">&#128202;</button>
+    </div>
+  </div>
+
+  <!-- GLOBAL SEARCH OVERLAY -->
+  <div id="searchOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:600;align-items:flex-start;justify-content:center;padding-top:60px;transform:translateZ(0)" onclick="if(event.target===this)closeSearch()">
+    <div style="background:#fafaf8;border-radius:14px;width:100%;max-width:540px;margin:0 16px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="padding:14px 16px;border-bottom:0.5px solid #e0e0d8;display:flex;gap:10px;align-items:center">
+        <span style="font-size:18px;color:#888">&#128269;</span>
+        <input id="searchInput" type="text" placeholder="Search members, prayer, care notes, clusters..." style="flex:1;border:none;background:none;font-size:15px;outline:none;font-family:inherit" oninput="runSearch()">
+        <button onclick="closeSearch()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888;line-height:1">✕</button>
+      </div>
+      <div style="padding:8px 16px;border-bottom:0.5px solid #f0efe8;display:flex;gap:6px;flex-wrap:wrap">
+        <select id="sfType" onchange="runSearch()" style="font-size:12px;padding:4px 8px;border:0.5px solid #e0e0d8;border-radius:20px;background:#fff;font-family:inherit">
+          <option value="">All types</option>
+          <option value="member">Members</option>
+          <option value="cluster">Clusters</option>
+          <option value="prayer">Prayer</option>
+          <option value="care">Care notes</option>
+        </select>
+        <select id="sfGC" onchange="runSearch()" style="font-size:12px;padding:4px 8px;border:0.5px solid #e0e0d8;border-radius:20px;background:#fff;font-family:inherit">
+          <option value="">All GC statuses</option>
+          <option>Core</option><option>Frequent</option><option>Rare</option><option>Unresponsive</option>
+        </select>
+        <select id="sfChurch" onchange="runSearch()" style="font-size:12px;padding:4px 8px;border:0.5px solid #e0e0d8;border-radius:20px;background:#fff;font-family:inherit">
+          <option value="">All church statuses</option>
+          <option value="member">City Church Member</option>
+          <option value="attendee">Attendee</option>
+          <option value="non-attendee">Non-attendee</option>
+        </select>
+        <select id="sfServing" onchange="runSearch()" style="font-size:12px;padding:4px 8px;border:0.5px solid #e0e0d8;border-radius:20px;background:#fff;font-family:inherit">
+          <option value="">All serving statuses</option>
+          <option value="serving">Serving</option>
+          <option value="overdue">Overdue</option>
+          <option value="not-yet">Not yet eligible</option>
+        </select>
+      </div>
+      <div id="searchResults" style="overflow-y:auto;flex:1;padding:8px 0"></div>
     </div>
   </div>
 
@@ -403,10 +441,19 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 <div id="tab-overview" class="panel active">
 
   <!-- HEADLINE STAT -->
-  <div id="ov-headline" style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);border-radius:12px;padding:20px;margin-bottom:16px;color:#e8e8e8"></div>
+  <div id="ov-headline" style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);border-radius:12px;padding:20px;margin-bottom:16px;color:#e8e8e8">
+    <div id="ov-skeleton" style="animation:shimmer 1.5s infinite">
+      <div style="background:rgba(255,255,255,.1);border-radius:6px;height:16px;width:140px;margin-bottom:12px"></div>
+      <div style="background:rgba(255,255,255,.15);border-radius:6px;height:36px;width:80px;margin-bottom:8px"></div>
+      <div style="background:rgba(255,255,255,.08);border-radius:6px;height:12px;width:200px"></div>
+    </div>
+  </div>
 
   <!-- ACTIVE GOAL CARD -->
   <div id="ov-goal" style="margin-bottom:16px"></div>
+
+  <!-- THIS WEEK ACTION CARD -->
+  <div id="ov-thisweek" style="margin-bottom:16px"></div>
 
   <!-- UPCOMING BIRTHDAYS -->
   <div id="ov-upcoming-bdays" style="margin-bottom:16px"></div>
@@ -465,8 +512,8 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   </div>
   <div class="table-wrap">
     <table id="mTable">
-      <colgroup><col style="width:135px"><col style="width:78px"><col style="width:95px"><col style="width:75px"><col style="width:52px"><col style="width:45px"><col style="width:95px"><col style="width:36px"></colgroup>
-      <thead><tr><th>Name</th><th>Church</th><th>GC status</th><th>First visit</th><th>Sessions</th><th>Rate</th><th class="members-dots-col">Record</th><th class="members-dots-col"></th></tr></thead>
+      <colgroup><col style="width:135px"><col style="width:78px"><col style="width:85px"><col style="width:65px"><col style="width:52px"><col style="width:45px"><col style="width:40px"><col style="width:85px"><col style="width:36px"></colgroup>
+      <thead><tr><th>Name</th><th>Church</th><th>GC status</th><th>First visit</th><th>Sessions</th><th>Rate</th><th>⚽</th><th class="members-dots-col">Record</th><th class="members-dots-col"></th></tr></thead>
       <tbody id="mBody"></tbody>
     </table>
   </div>
@@ -501,6 +548,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
     <div>
       <p class="sec-title" style="margin-bottom:2px">Serving teams</p>
+      <div style="font-size:12px;color:#888;margin-bottom:12px">Who is serving at City Church, who is eligible but not yet serving, and your December goal progress.</div>
       <div style="font-size:12px;color:#888">December goal: every eligible member serving on at least one team.</div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -516,6 +564,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
     <div>
       <p class="sec-title" style="margin-bottom:2px">Goals</p>
+      <div style="font-size:12px;color:#888;margin-bottom:12px">Track monthly GC participation goals and see how each cluster is contributing.</div>
       <div style="font-size:12px;color:#888">Track monthly GC participation goals and the cluster leaderboard.</div>
     </div>
     <button class="btn btn-success btn-sm edit-only" onclick="openGoalModal(null)">+ New goal</button>
@@ -545,6 +594,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <!-- Session picker -->
   <div style="background:#fff;border-radius:10px;padding:1rem;border:0.5px solid #e0e0d8;margin-bottom:1rem">
     <p class="sec-title" style="margin-bottom:10px">Absences by session</p>
+      <div style="font-size:12px;color:#888;margin-bottom:12px">Everyone who was absent last session, with their streak and a WhatsApp link.</div>
     <div class="filters" style="margin-bottom:0;flex-wrap:wrap;align-items:center">
       <label style="font-size:13px;color:#888">Session:</label>
       <select id="absSessionPicker" onchange="renderSessionAbsences()" style="flex:1;min-width:140px">
@@ -589,6 +639,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 
 <!-- TRENDS -->
 <div id="tab-trends" class="panel">
+  <div style="font-size:12px;color:#888;margin-bottom:10px">Attendance trend for any individual member across all recorded sessions.</div>
   <div class="filters">
     <label style="font-size:13px;color:#888">Member:</label>
     <select id="trendMember" onchange="renderTrend()"><option value="">Select member...</option></select>
@@ -682,6 +733,17 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
     <div id="ghTokenStatus" style="font-size:12px;color:#888"></div>
   </div>
 
+  <!-- Custom serving teams -->
+  <div style="margin-top:1rem;background:#f5f5f3;border-radius:10px;padding:12px">
+    <p class="sec-title" style="margin-bottom:6px">Custom serving teams</p>
+    <div style="font-size:12px;color:#888;margin-bottom:10px">Add teams not in the default list. They'll appear in member profiles and serving imports.</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input class="form-input" id="customTeamInput" type="text" placeholder="e.g. Drama Team" style="flex:1;margin-bottom:0">
+      <button class="btn btn-success btn-sm" onclick="addCustomTeam()">Add</button>
+    </div>
+    <div id="customTeamList" style="font-size:13px"></div>
+  </div>
+
   <!-- Guest access tokens -->
   <div style="margin-top:1rem;background:#f5f5f3;border-radius:10px;padding:12px">
     <p class="sec-title" style="margin-bottom:6px">Guest access</p>
@@ -772,7 +834,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-row">
           <label class="form-label">City Church status *</label>
-          <select class="form-input" id="mf-churchstatus">
+          <select class="form-input" id="mf-churchstatus" onchange="onChurchStatusChange()">
             <option value="member">City Church Member</option>
             <option value="attendee">Attendee</option>
             <option value="non-attendee">Non-attendee (GC only)</option>
@@ -786,7 +848,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
           </select>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
         <div class="form-row">
           <label class="form-label">Church join date <span style="font-weight:400">(MM-YYYY)</span></label>
           <input class="form-input" id="mf-churchjoin" type="text" placeholder="e.g. 09-2022" pattern="\d{2}-\d{4}">
@@ -799,8 +861,15 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
           </select>
         </div>
       </div>
+      <div style="margin-top:10px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500">
+          <input type="checkbox" id="mf-gcleader" style="width:15px;height:15px">
+          GC Leader role (overrides cluster display on profile)
+        </label>
+      </div>
 
-      <div class="form-section edit-only">Serving teams</div>
+      <div class="form-section edit-only" id="mf-serving-label">Serving teams</div>
+      <div id="mf-serving-notice" style="display:none;font-size:12px;color:#888;margin-bottom:8px">Non-attendees are not eligible to serve.</div>
       <div id="mf-serving-teams" class="edit-only" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px"></div>
 
       <div class="form-section">Cluster assignment</div>
@@ -839,6 +908,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 </div>
 <!-- CLUSTERS -->
 <div id="tab-clusters" class="panel">
+  <div style="font-size:12px;color:#888;margin-bottom:12px">All clusters with member lists, attendance dots and pastoral care. Tap a cluster header to collapse it.</div>
 
   <!-- Guest-ready-for-cluster notification -->
   <div id="cluster-guest-alert" style="display:none;background:#faeeda;border:0.5px solid #ef9f27;border-radius:10px;padding:12px 14px;margin-bottom:1rem">
@@ -1113,6 +1183,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
     <div>
       <p class="sec-title" style="margin-bottom:2px">Superclusters</p>
+      <div style="font-size:12px;color:#888;margin-bottom:12px">Attendance trends and check-in status for each cluster. Your weekly health check.</div>
       <div style="font-size:12px;color:#888">Track your cluster heads and special attention members.</div>
     </div>
     <button class="btn btn-success btn-sm" onclick="openSuperclusterModal(null)">+ Add supercluster</button>
@@ -1173,6 +1244,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
 <div id="tab-care" class="panel">
   <div style="margin-bottom:1rem">
     <p class="sec-title" style="margin-bottom:2px">Exception view</p>
+      <div style="font-size:12px;color:#888;margin-bottom:12px">People who need pastoral attention this week — sorted by urgency. Start here every session.</div>
     <div style="font-size:12px;color:#888">Everyone in the GC who needs attention right now.</div>
   </div>
   <div id="careContent"></div>
@@ -1183,6 +1255,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
     <div>
       <p class="sec-title" style="margin-bottom:2px">Prayer requests</p>
+      <div style="font-size:12px;color:#888;margin-bottom:12px">Active prayer requests from the GC. Publish to the shareable prayer page.</div>
       <div style="font-size:12px;color:#888">Public page: <a href="https://gidiatcity.com/prayer.html" target="_blank" style="color:#3c3489">gidiatcity.com/prayer.html</a></div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -1263,6 +1336,7 @@ body.view-only button[onclick*="exportData"] { display:inline-flex!important; }
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">
     <div>
       <p class="sec-title" style="margin-bottom:2px">Past terms</p>
+      <div style="font-size:12px;color:#888;margin-bottom:12px">Saved copies of previous terms' data for reference.</div>
       <div style="font-size:12px;color:#888">Click any term to view it in full detail. All data is read-only.</div>
     </div>
   </div>
@@ -1444,15 +1518,21 @@ let superclusters=[];
 let clusterTokens={};
 let clusterMessages={}; // {clusterId: {defaultMsg, weekMsg}}
 
+// ── TIMEZONE: West Africa Time (UTC+1) ────────────────────────────────────────
+function watNow(){return new Date(Date.now()+3600000);}
+function todayWAT(){return watNow().toISOString().split('T')[0];}
+
 // ── GOALS ─────────────────────────────────────────────────────────────────────
 let activeGoal=null; // {id,title,description,monthLabel,reportCardText,startDate,endDate,metricType,target,active}
 let goalProgress={}; // {goalId: {memberName: count}}
 let pastGoals=[]; // archived goals
-const SERVING_TEAMS=[
+const SERVING_TEAMS_DEFAULT=[
   'Children & Teens','Sound','Lectern','Music','Connect Team','Ushering',
   'Welcome','Operations & Facilities','Patrol','Protocol','Prayer Room',
-  'Bible Reading','Next Steps','Media Team'
+  'Bible Reading','Next Steps','Media Team','Congregational Prayer','Service Coordination'
 ];
+let customServingTeams=[]; // user-added teams
+function getAllServingTeams(){return[...SERVING_TEAMS_DEFAULT,...customServingTeams];}
 let servingTeams={}; // {memberName: ['Music','Welcome',...]}
 let churchJoinDate={}; // {memberName: 'MM-YYYY'}
 let membershipConversations={}; // {memberName: {had:bool,date:'',notes:''}}
@@ -1538,7 +1618,7 @@ async function loadFromSupabase(){
       sbGet('goals'),sbGet('goal_progress')
     ]);
     if(!mems.length&&!att.length)return false;
-    mems.forEach(row=>{let m=MEMBERS.find(x=>x.n===row.name);if(!m){m={n:row.name,gc:row.gc,gcOrig:row.gc_orig||row.gc,city:row.city||'Attendee',g:row.gender||'Female',phone:row.phone||'',email:row.email||'',churchStatus:row.church_status||'member'};MEMBERS.push(m);}else{m.gc=row.gc;m.gcOrig=row.gc_orig||row.gc;if(row.city)m.city=row.city;if(row.gender)m.g=row.gender;if(row.phone)m.phone=row.phone;if(row.email)m.email=row.email;if(row.church_status)m.churchStatus=row.church_status;}});
+    mems.forEach(row=>{let m=MEMBERS.find(x=>x.n===row.name);if(!m){m={n:row.name,gc:row.gc,gcOrig:row.gc_orig||row.gc,city:row.city||'Attendee',g:row.gender||'Female',phone:row.phone||'',email:row.email||'',churchStatus:row.church_status||'member',role:row.role||''};MEMBERS.push(m);}else{m.gc=row.gc;m.gcOrig=row.gc_orig||row.gc;if(row.city)m.city=row.city;if(row.gender)m.g=row.gender;if(row.phone)m.phone=row.phone;if(row.email)m.email=row.email;if(row.church_status)m.churchStatus=row.church_status;if(row.role)m.role=row.role;}});
     att.forEach(row=>{if(!attendance[row.session_key])attendance[row.session_key]={};attendance[row.session_key][row.member_name]=row.status;});
     ar.forEach(row=>{if(!absenceReasons[row.session_key])absenceReasons[row.session_key]={};absenceReasons[row.session_key][row.member_name]=row.reason;});
     bd.forEach(row=>{birthdays[row.member_name]=row.birthday;});
@@ -1569,13 +1649,15 @@ async function loadFromSupabase(){
     if(gp&&gp.length){gp.forEach(r=>{if(!goalProgress[r.goal_id])goalProgress[r.goal_id]={};goalProgress[r.goal_id][r.member_name]=r.count;});}
     mems.forEach(row=>{const m=MEMBERS.find(x=>x.n===row.name);if(m&&row.church_status)m.churchStatus=row.church_status;});
     applyPhoneNumbers();
+    renderOverviewGoal();
+    renderThisWeekCard();
     return true;
   }catch(e){console.error('loadFromSupabase',e);return false;}
 }
 
 async function saveAll(){
   // Always save to localStorage first
-  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||'',frozen:m.frozen||false,wa:m.wa||'',churchStatus:m.churchStatus||'member'})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,wellbeing,careNotes,prayerRequests,memberAbout,pendingClusterSubmissions,superclusters,changeLog,clusterTokens,clusterMessages,scCheckIns,scWellbeing,scCareNotes,scAbout,servingTeams,churchJoinDate,membershipConversations,activeGoal,goalProgress,pastGoals,savedAt:new Date().toISOString()}));}catch(e){}
+  try{localStorage.setItem(LS_KEY,JSON.stringify({members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||'',frozen:m.frozen||false,wa:m.wa||'',churchStatus:m.churchStatus||'member',role:m.role||''})),attendance,absenceReasons,birthdays,firstSession,customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),clusters,clusterMembers,checkIns,termArchive,wellbeing,careNotes,prayerRequests,memberAbout,pendingClusterSubmissions,superclusters,changeLog,clusterTokens,clusterMessages,scCheckIns,scWellbeing,scCareNotes,scAbout,servingTeams,churchJoinDate,membershipConversations,activeGoal,goalProgress,pastGoals,customServingTeams,savedAt:new Date().toISOString()}));}catch(e){}
   if(!isOnline()){
     showOfflineBanner(true);
     setSyncStatus('red','Offline — saved locally');
@@ -1591,7 +1673,7 @@ async function saveAll(){
   // Then sync to Supabase
   try{
     showToast('Saving...');
-    await sbPost('members',MEMBERS.map(m=>({name:m.n,gc:m.gc,gc_orig:m.gcOrig||m.gc,city:m.city||'',gender:m.g||'',phone:m.phone||'',email:m.email||'',church_status:m.churchStatus||'member',updated_at:new Date().toISOString()})));
+    await sbPost('members',MEMBERS.map(m=>({name:m.n,gc:m.gc,gc_orig:m.gcOrig||m.gc,city:m.city||'',gender:m.g||'',phone:m.phone||'',email:m.email||'',church_status:m.churchStatus||'member',role:m.role||'',updated_at:new Date().toISOString()})));
     const attR=[];Object.entries(attendance).forEach(([sk,r])=>Object.entries(r).forEach(([mn,st])=>attR.push({session_key:sk,member_name:mn,status:st})));
     await sbPost('attendance',attR);
     const arR=[];Object.entries(absenceReasons).forEach(([sk,r])=>Object.entries(r).forEach(([mn,v])=>{if(v)arR.push({session_key:sk,member_name:mn,reason:v});}));
@@ -1664,6 +1746,8 @@ function loadSaved(){
     if(d.activeGoal)activeGoal=d.activeGoal;
     if(d.goalProgress)Object.assign(goalProgress,d.goalProgress);
     if(d.pastGoals)pastGoals.splice(0,pastGoals.length,...d.pastGoals);
+    if(d.customServingTeams)customServingTeams.splice(0,customServingTeams.length,...d.customServingTeams);
+    if(d.members)d.members.forEach(row=>{const m=MEMBERS.find(x=>x.n===row.n);if(m&&row.role)m.role=row.role;});
     return true;
   }catch(e){return false;}
 }
@@ -1677,21 +1761,24 @@ function showToast(msg,dur=2000){
 function exportData(){
   const data={
     exportedAt:new Date().toISOString(),
-    version:3,
-    members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||''})),
+    version:4,
+    members:MEMBERS.map(m=>({n:m.n,gc:m.gc,gcOrig:m.gcOrig,city:m.city,g:m.g,phone:m.phone||'',email:m.email||'',churchStatus:m.churchStatus||'member',role:m.role||''})),
     attendance,absenceReasons,birthdays,firstSession,
     clusters,clusterMembers,checkIns,
     customReasons:REASONS.filter(r=>!['Travel','Sick','Exam','Work','Other'].includes(r)),
-    termArchive,wellbeing,careNotes,prayerRequests,superclusters,changeLog,clusterTokens,clusterMessages:_cm,scCheckIns,scWellbeing,scCareNotes,scAbout
+    termArchive,wellbeing,careNotes,prayerRequests,superclusters,changeLog,
+    clusterTokens,clusterMessages,scCheckIns,scWellbeing,scCareNotes,scAbout,
+    servingTeams,churchJoinDate,membershipConversations,
+    activeGoal,goalProgress,pastGoals
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url;
-  a.download='gidi-gc-data-'+new Date().toISOString().split('T')[0]+'.json';
+  a.download='gidi-gc-data-'+todayWAT()+'.json';
   a.click();
   setTimeout(()=>URL.revokeObjectURL(url),5000);
-  showToast('Data exported successfully',2500);
+  showToast('Data exported ✓',2500);
 }
 
 function importData(input){
@@ -1866,7 +1953,7 @@ function dc(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 function parseBday(str){if(!str)return null;const p=str.split('/');if(p.length<2)return null;const d=parseInt(p[0]),mo=parseInt(p[1])-1;if(isNaN(d)||isNaN(mo)||mo<0||mo>11)return null;return{d,mo};}
 function daysUntil(str){
   const b=parseBday(str);if(!b)return null;
-  const now=new Date();const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const now=watNow();const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   let next=new Date(now.getFullYear(),b.mo,b.d);
   if(next<today)next=new Date(now.getFullYear()+1,b.mo,b.d);
   return Math.round((next-today)/(864e5));
@@ -1903,8 +1990,8 @@ function clearAllBirthdays(){if(!confirm('Clear all birthday data?'))return;birt
 function renderOverview(){
   const recs=getRecordedSessions();
   const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
-  const today=new Date();
-  const todayStr=today.toISOString().split('T')[0];
+  const today=watNow();
+  const todayStr=todayWAT();
 
   // ── Last session stats ──────────────────────────────────────────────────────
   const lastSess=recs.length?recs[recs.length-1]:null;
@@ -1984,7 +2071,10 @@ function renderOverview(){
       </div>`;
   }
   document.getElementById('ov-headline').innerHTML=headlineHTML;
+  const sk=document.getElementById('ov-skeleton');
+  if(sk)sk.remove();
   renderOverviewGoal();
+  renderThisWeekCard();
   const BDAY_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const bdaysUpcoming=[];
   MEMBERS.forEach(m=>{
@@ -2676,15 +2766,32 @@ function populateFirstSessionDropdown(selectedKey){
   sel.innerHTML='<option value="">Not set</option>'+recs.map(s=>`<option value="${s.key}"${s.key===selectedKey?' selected':''}>${s.date}</option>`).join('');
 }
 
+function onChurchStatusChange(){
+  const status=document.getElementById('mf-churchstatus')?.value;
+  const notice=document.getElementById('mf-serving-notice');
+  const teams=document.getElementById('mf-serving-teams');
+  if(!status)return;
+  const isNonAttendee=status==='non-attendee';
+  if(notice)notice.style.display=isNonAttendee?'block':'none';
+  if(teams){teams.style.opacity=isNonAttendee?'0.4':'1';teams.style.pointerEvents=isNonAttendee?'none':'auto';}
+}
+
 function populateServingTeamsCheckboxes(memberName){
   const el=document.getElementById('mf-serving-teams');
   if(!el)return;
   const current=servingTeams[memberName]||[];
-  el.innerHTML=SERVING_TEAMS.map(t=>`
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:4px 0">
-      <input type="checkbox" data-team="${t}" ${current.includes(t)?'checked':''} onchange="setServingTeam('${memberName.replace(/'/g,"\\'")}','${t}',this.checked)" style="width:14px;height:14px">
+  const status=document.getElementById('mf-churchstatus')?.value||'member';
+  const isNonAttendee=status==='non-attendee';
+  el.innerHTML=getAllServingTeams().map(t=>`
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:${isNonAttendee?'not-allowed':'pointer'};padding:4px 0">
+      <input type="checkbox" data-team="${t}" ${current.includes(t)?'checked':''} ${isNonAttendee?'disabled':''} onchange="setServingTeam('${memberName.replace(/'/g,"\\'")}','${t}',this.checked)" style="width:14px;height:14px">
       ${t}
     </label>`).join('');
+  if(isNonAttendee){
+    const notice=document.getElementById('mf-serving-notice');
+    if(notice)notice.style.display='block';
+    el.style.opacity='0.4';el.style.pointerEvents='none';
+  }
 }
 
 function openMemberModal(name,defaultGc){
@@ -2708,8 +2815,10 @@ function openMemberModal(name,defaultGc){
     document.getElementById('mf-bday').value=birthdays[m.n]||'';
     document.getElementById('mf-churchstatus').value=m.churchStatus||'member';
     document.getElementById('mf-churchjoin').value=churchJoinDate[m.n]||'';
+    document.getElementById('mf-gcleader').checked=m.role==='gc-leader';
     populateFirstSessionDropdown(firstSession[m.n]||'');
     populateServingTeamsCheckboxes(m.n);
+    onChurchStatusChange();
   } else {
     title.textContent='Add member';
     delBtn.style.display='none';
@@ -2721,8 +2830,10 @@ function openMemberModal(name,defaultGc){
     document.getElementById('mf-bday').value='';
     document.getElementById('mf-churchstatus').value='member';
     document.getElementById('mf-churchjoin').value='';
+    document.getElementById('mf-gcleader').checked=false;
     populateFirstSessionDropdown('');
     populateServingTeamsCheckboxes('');
+    onChurchStatusChange();
   }
   modal.className='member-modal open';
   document.getElementById('mf-name').focus();
@@ -2780,6 +2891,7 @@ function saveMember(){
 
     m.n=name;m.g=gender;m.city=m.city||'Attendee';m.gc=gc;m.gcOrig=m.gcOrig||gc;m.phone=phone;m.email=email;
     m.churchStatus=churchStatus;
+    m.role=document.getElementById('mf-gcleader').checked?'gc-leader':'';
     if(churchJoin)churchJoinDate[name]=churchJoin;else delete churchJoinDate[name];
     // Update WA number from phone
     if(phone){const p=phone.replace(/\D/g,'');m.wa=p.startsWith('234')?p:p.startsWith('0')&&p.length===11?'234'+p.slice(1):p;}
@@ -2791,7 +2903,8 @@ function saveMember(){
     // New member
     if(MEMBERS.find(x=>x.n===name)){err.textContent='A member with this name already exists.';err.style.display='block';return;}
     const wa=(()=>{if(!phone)return'';const p=phone.replace(/\D/g,'');return p.startsWith('234')?p:p.startsWith('0')&&p.length===11?'234'+p.slice(1):p;})();
-    MEMBERS.push({n:name,g:gender,city:'Attendee',gc,gcOrig:gc,phone,email,wa,churchStatus});
+    const role=document.getElementById('mf-gcleader').checked?'gc-leader':'';
+    MEMBERS.push({n:name,g:gender,city:'Attendee',gc,gcOrig:gc,phone,email,wa,churchStatus,role});
     if(churchJoin)churchJoinDate[name]=churchJoin;
     if(bday)birthdays[name]=bday;
     if(fsKey)firstSession[name]=fsKey;
@@ -3001,7 +3114,9 @@ function renderMembers(){
     const gcCell=changed?`${gcBadge(m.gcOrig)}<span class="arrow">&rarr;</span>${gcBadge(m.gc,true)}`:gcBadge(m.gc);
     const fs=firstSession[m.n]?`<span style="font-size:10px;background:#eeedfe;color:#3c3489;border-radius:4px;padding:1px 5px;white-space:nowrap">${getRecordedSessions().find(s=>s.key===firstSession[m.n])?.date.replace(' 2026','')||''}</span>`:'<span style="font-size:11px;color:#ccc">not set</span>';
     const nameEsc=m.n.replace(/'/g,"\\'");
-    return`<tr><td style="font-weight:500;font-size:12px;cursor:pointer" onclick="openProfile('${nameEsc}')">${m.n}</td><td>${cityBadge(m.city)}</td><td style="white-space:nowrap">${gcCell}</td><td style="font-size:11px">${fs}</td><td><span class="${rc}">${c.present}/${c.possible}</span></td><td><span class="${rc}">${c.rate}%</span></td><td><div class="dot-wrap">${dots}</div></td><td style="display:flex;gap:4px"><button onclick="openProfile('${nameEsc}')" title="View profile" style="background:none;border:none;cursor:pointer;font-size:14px;color:#888;padding:2px 4px" aria-label="Profile ${m.n}">&#128100;</button><button onclick="openMemberModal('${nameEsc}')" title="Edit member" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px" aria-label="Edit ${m.n}">&#9998;</button></td></tr>`;
+    const st=getServingStatus(m);
+    const servingIcon=st.status==='serving'?'<span title="Serving" style="color:#1D9E75;font-size:13px">✓</span>':st.status==='overdue'?'<span title="Overdue — not serving" style="color:#E24B4A;font-size:13px">!</span>':st.status==='not-yet'?'<span title="Not yet eligible" style="color:#888;font-size:11px">🕐</span>':st.status==='na'?'<span title="N/A" style="color:#ccc;font-size:11px">–</span>':'<span title="No join date" style="color:#EF9F27;font-size:11px">?</span>';
+    return`<tr><td style="font-weight:500;font-size:12px;cursor:pointer" onclick="openProfile('${nameEsc}')">${m.n}</td><td>${cityBadge(m.city)}</td><td style="white-space:nowrap">${gcCell}</td><td style="font-size:11px">${fs}</td><td><span class="${rc}">${c.present}/${c.possible}</span></td><td><span class="${rc}">${c.rate}%</span></td><td style="text-align:center">${servingIcon}</td><td><div class="dot-wrap">${dots}</div></td><td style="display:flex;gap:4px"><button onclick="openProfile('${nameEsc}')" title="View profile" style="background:none;border:none;cursor:pointer;font-size:14px;color:#888;padding:2px 4px" aria-label="Profile ${m.n}">&#128100;</button><button onclick="openMemberModal('${nameEsc}')" title="Edit member" style="background:none;border:none;cursor:pointer;font-size:15px;color:#888;padding:2px 4px" aria-label="Edit ${m.n}">&#9998;</button></td></tr>`;
   }).join('');
 }
 
@@ -3884,7 +3999,7 @@ body.view-only #mobMore .btn[data-public]{display:flex!important}
   if(!win){
     const a=document.createElement('a');
     a.href=url;
-    a.download='gidi-gc-summary-'+new Date().toISOString().split('T')[0]+'.html';
+    a.download='gidi-gc-summary-'+todayWAT()+'.html';
     a.click();
     showToast('Saved — open the file in your browser to view & share',3500);
   } else {
@@ -3903,7 +4018,7 @@ function recalcAll(){
   // Update pending badge
   updatePendingBadge();
   // Update care badge
-  const _careUrgent=MEMBERS.filter(m=>{if(m.gc==='Guest'||m.frozen)return false;const s=calcMember(m.n).curStreak;const today2=new Date().toISOString().split('T')[0];const allW=getClusterWeeks().filter(w=>w.key<=today2);const wb=allW.slice(-3).map(w=>(wellbeing[w.key]||{})[m.n]||'');const rF=wb.filter(v=>v==='red').length;const aF=wb.filter(v=>v==='red'||v==='amber').length;return s>=2||rF>=2||aF>=2;}).length;
+  const _careUrgent=MEMBERS.filter(m=>{if(m.gc==='Guest'||m.frozen)return false;const s=calcMember(m.n).curStreak;const today2=todayWAT();const allW=getClusterWeeks().filter(w=>w.key<=today2);const wb=allW.slice(-3).map(w=>(wellbeing[w.key]||{})[m.n]||'');const rF=wb.filter(v=>v==='red').length;const aF=wb.filter(v=>v==='red'||v==='amber').length;return s>=2||rF>=2||aF>=2;}).length;
   const _careBadge=document.getElementById('careBadge');
   if(_careBadge){_careBadge.textContent=_careUrgent;_careBadge.style.display=_careUrgent?'inline':'none';}
   // Show wellbeing alerts panel if there are any
@@ -3966,7 +4081,7 @@ function switchTab(id,el){
   if(tb)tb.textContent=titles[id]||id;
   document.querySelectorAll('.mob-nav-btn').forEach(b=>{b.classList.remove('active');if(b.dataset.tab===id)b.classList.add('active');});
   if(id==='trends')populateTrendSelect();
-  if(id==='recalc'){previewRecalc();renderChangeLog();loadGuestTokens();}
+  if(id==='recalc'){previewRecalc();renderChangeLog();loadGuestTokens();renderCustomTeams();}
   if(id==='birthdays')renderBirthdays();
   if(id==='guests')renderGuests();
   if(id==='record')renderSessionList();
@@ -4126,7 +4241,7 @@ function populateClusterWeekPicker(){
   const sel=document.getElementById('cluster-week-picker');
   if(!sel)return;
   const weeks=getClusterWeeks();
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayWAT();
   const cur=sel.value||weeks.filter(w=>w.key<=today).slice(-1)[0]?.key||'';
   // Only repopulate if no week options loaded yet
   if(sel.options.length<=1){
@@ -4312,22 +4427,28 @@ function renderClusters(){
     const headEsc=c.head.replace(/'/g,"\\'");
 
     return`<div data-cluster-id="${c.id}" style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden;margin-bottom:1rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:0.5px solid #e0e0d8;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:0.5px solid #e0e0d8;flex-wrap:wrap;gap:8px;cursor:pointer" onclick="toggleClusterCard('${c.id}',event)">
         <div>
-          <div style="font-size:14px;font-weight:500">${c.name}</div>
+          <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px">
+            <span id="cc-arrow-${c.id}" style="font-size:11px;color:#888;transition:transform .2s">▼</span>
+            ${c.name}
+          </div>
           <div style="font-size:12px;color:#888;margin-top:2px">Head: <strong>${c.head}</strong> &middot; ${members.length} members &middot; ${clusterRecs.length?clusterRate+'% attendance':'Sept not started'}</div>
         </div>
-        <div style="display:flex;gap:6px;flex-shrink:0">
+        <div style="display:flex;gap:6px;flex-shrink:0" onclick="event.stopPropagation()">
           ${followUpCount?`<span style="font-size:11px;background:#fcebeb;color:#791f1f;border-radius:20px;padding:3px 9px;font-weight:500">⚠ ${followUpCount} follow-up</span>`:''}
           <button class="btn btn-sm" onclick="openClusterSummary('${c.id}')">&#128203; Summary</button>
-          <button class="btn btn-primary btn-sm" onclick="openClusterHeadReport('${c.id}')">&#128100; Leader report</button>
+          <button class="btn btn-primary btn-sm" onclick="openClusterHeadReport('${c.id}')">&#128100; Leader</button>
+          <button class="btn btn-sm" onclick="openClusterHeadDashboard('${c.id}')">&#128065; Portal</button>
           <button class="btn btn-sm" onclick="openClusterModal('${c.id}')">&#9998; Edit</button>
         </div>
       </div>
-      ${ciSummary}
-      ${memberRows||`<div style="padding:12px 14px;font-size:13px;color:#888">No members assigned yet. Edit members to assign them to this cluster.</div>`}
-      <div style="padding:8px 12px;border-top:0.5px solid #f0efe8">
-        <button class="btn btn-sm" style="font-size:11px" onclick="openMassAssign('${c.id}','${cEsc}')">+ Assign members</button>
+      <div id="cc-body-${c.id}">
+        ${ciSummary}
+        ${memberRows||`<div style="padding:12px 14px;font-size:13px;color:#888">No members assigned yet.</div>`}
+        <div style="padding:8px 12px;border-top:0.5px solid #f0efe8">
+          <button class="btn btn-sm" style="font-size:11px" onclick="openMassAssign('${c.id}','${cEsc}')">+ Assign members</button>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -4353,7 +4474,7 @@ function renderClusters(){
 
 // ── WELLBEING TREND ALERTS ────────────────────────────────────────────────────
 function getWellbeingAlerts(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayWAT();
   const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
   const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   const alerts=[];
@@ -4420,7 +4541,7 @@ function renderClusterAnalytics(){
   const panel=document.getElementById('clusterAnalyticsPanel');
   if(!panel)return;
   const clusterRecs=getClusterSessions();
-  const allWeeks=getClusterWeeks().filter(w=>w.key<=new Date().toISOString().split('T')[0]);
+  const allWeeks=getClusterWeeks().filter(w=>w.key<=todayWAT());
 
   const data=clusters.map(c=>{
     const members=getMembersInCluster(c.id);
@@ -4535,7 +4656,7 @@ function renderClusterHealth(weekKey){
   if(!clusters.length){el.style.display='none';return;}
 
   const clusterRecs=getClusterSessions();
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayWAT();
   const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
   const thisWeek=weekKey?allWeeks.find(w=>w.key===weekKey):allWeeks[allWeeks.length-1];
 
@@ -4602,7 +4723,7 @@ function setCheckIn(weekKey,memberName,val){
 // ── MASS ASSIGN MEMBERS TO CLUSTER ───────────────────────────────────────────
 function openMassAssign(clusterId,clusterName){
   const assignable=getAssignable().sort(byFirstName);
-  const joinDate=new Date().toISOString().split('T')[0];
+  const joinDate=todayWAT();
   const html=`<div style="font-size:14px;font-weight:500;margin-bottom:6px">Assign members to ${clusterName}</div>
     <div style="font-size:12px;color:#888;margin-bottom:10px">Tick to assign to this cluster. Currently assigned members are pre-ticked. Unticking removes them from this cluster.</div>
     <div style="max-height:300px;overflow-y:auto;border:0.5px solid #e0e0d8;border-radius:8px;margin-bottom:10px">
@@ -4632,7 +4753,7 @@ function openMassAssign(clusterId,clusterName){
 }
 function applyMassAssign(clusterId){
   const mo=document.getElementById('massAssignModal');
-  const joinDate=document.getElementById('mass-join-date').value||new Date().toISOString().split('T')[0];
+  const joinDate=document.getElementById('mass-join-date').value||todayWAT();
   const allBoxes=mo.querySelectorAll('input[type=checkbox]');
   let added=0,removed=0,moved=0;
   allBoxes.forEach(cb=>{
@@ -4783,7 +4904,7 @@ function buildClusterSummaryHTML(clusterId){
   const lastPresent=lastSess?members.filter(m=>attendance[lastSess.key]&&attendance[lastSess.key][m.n]==='present').length:0;
 
   // Check-in history (last 4 weeks)
-  const recentWeeks=getClusterWeeks().filter(w=>w.key<=new Date().toISOString().split('T')[0]).slice(-4).reverse();
+  const recentWeeks=getClusterWeeks().filter(w=>w.key<=todayWAT()).slice(-4).reverse();
 
   return`
     <div style="background:linear-gradient(135deg,#1a1a1a,#2d2d2d);color:#e8e8e8;border-radius:10px;padding:16px;text-align:center;margin-bottom:12px">
@@ -4887,7 +5008,7 @@ saveMember=function(){
   // After save, persist cluster assignment
   if(memberName){
     if(selectedCluster){
-      clusterMembers[memberName]={clusterId:selectedCluster,joinDate:clusterDate||new Date().toISOString().split('T')[0]};
+      clusterMembers[memberName]={clusterId:selectedCluster,joinDate:clusterDate||todayWAT()};
     } else {
       delete clusterMembers[memberName];
     }
@@ -5012,7 +5133,7 @@ function openClusterHeadReport(clusterId){
   const now = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
 
   // This week — most recent Wednesday on or before today
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayWAT();
   const weeks = getClusterWeeks().filter(w => w.key <= today);
   const thisWeek = weeks.length ? weeks[weeks.length - 1] : null;
 
@@ -5632,7 +5753,7 @@ function savePrayerRequest(){
     anonymous:anon,
     visibility:vis,
     hidden:false,
-    date:new Date().toISOString().split('T')[0],
+    date:todayWAT(),
     status:'active'
   });
   closePrayerForm();
@@ -5715,7 +5836,7 @@ function exportPrayerExcel(){
   const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=`GidiGC_PrayerRequests_${new Date().toISOString().split('T')[0]}.csv`;
+  a.download=`GidiGC_PrayerRequests_${todayWAT()}.csv`;
   a.click();
 }
 
@@ -5729,7 +5850,7 @@ function exportPrayerPDF(){
   <body><h2>Gidi GC Prayer Requests</h2><table><thead><tr><th>Prayer Request</th><th>Name</th><th>Status</th><th>Date</th><th>Cluster</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
   const blob=new Blob([html],{type:'text/html'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=`GidiGC_PrayerRequests_${new Date().toISOString().split('T')[0]}.html`;
+  a.download=`GidiGC_PrayerRequests_${todayWAT()}.html`;
   a.click();
   showToast('Open downloaded file → Print → Save as PDF',4000);
 }
@@ -5843,7 +5964,7 @@ async function submitPublicPrayer(){
   err.style.display='none';
   if(!req){err.textContent='Please enter a prayer request.';err.style.display='block';return;}
   const btn=document.getElementById('pub-submit');btn.disabled=true;btn.textContent='Submitting...';
-  const row={id:'pr_pub_'+Date.now(),member_id:vis==='anonymous'?'':name,cluster_name:'',request:req,anonymous:vis==='anonymous',visibility:vis,hidden:false,date:new Date().toISOString().split('T')[0],status:'active'};
+  const row={id:'pr_pub_'+Date.now(),member_id:vis==='anonymous'?'':name,cluster_name:'',request:req,anonymous:vis==='anonymous',visibility:vis,hidden:false,date:todayWAT(),status:'active'};
   try{
     const r=await fetch(SB+'/rest/v1/prayer_requests',{method:'POST',headers:H,body:JSON.stringify(row)});
     if(r.ok||r.status===201||r.status===200){
@@ -6081,7 +6202,7 @@ async function sendClusterPerformanceEmail(){
   if(typeof emailjs==='undefined'){showToast('Email service not loaded',3000);return;}
   const recs=getClusterSessions();
   if(!recs.length){showToast('No cluster sessions recorded yet',2500);return;}
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayWAT();
   const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
 
   const lines=clusters.map(c=>{
@@ -6144,7 +6265,7 @@ async function sendWeeklySummary(){
     .sort((a,b)=>b.curStreak-a.curStreak);
 
   // Check-in summary per cluster
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayWAT();
   const weeks=getClusterWeeks().filter(w=>w.key<=today);
   const thisWeek=weeks.length?weeks[weeks.length-1]:null;
   const ciSummary=clusters.map(c=>{
@@ -6244,6 +6365,8 @@ function buildProfileHTML(m){
   const churchStatusColors={'member':'#e1f5ee','attendee':'#e6f1fb','non-attendee':'#faeeda'};
   const churchStatusTextColors={'member':'#085041','attendee':'#0c447c','non-attendee':'#633806'};
   const cStatus=m.churchStatus||'member';
+  const isGCLeader=m.role==='gc-leader';
+  const nameEsc=m.n.replace(/'/g,"\\'");
 
   // Attendance dots
   const dots=recs.map(s=>{
@@ -6277,7 +6400,6 @@ function buildProfileHTML(m){
 
   // About field
   const about=memberAbout[m.n]||'';
-  const nameEsc=m.n.replace(/'/g,"\\'");
 
   return`
     <!-- Membership/serving flag -->
@@ -6294,7 +6416,13 @@ function buildProfileHTML(m){
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
           <span style="padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:${GBKG[m.gc]||'#f5f5f3'};color:${GCOL[m.gc]||'#888'}">${m.gc}</span>
           <span style="padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:${churchStatusColors[cStatus]};color:${churchStatusTextColors[cStatus]}">${churchStatusLabels[cStatus]}</span>
-          ${clusterInfo?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f0f0ea;color:#555">${clusterInfo.name}</span>`:isHeadOf?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#e1f5ee;color:#085041;font-weight:600">Cluster Leader · ${isHeadOf.name}</span>`:'<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f5f5f3;color:#aaa">No cluster</span>'}
+          ${isGCLeader
+            ?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:#1a1a1a;color:#fff">GC Leader</span>`
+            :clusterInfo
+              ?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f0f0ea;color:#555">${clusterInfo.name}</span>`
+              :isHeadOf
+                ?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#e1f5ee;color:#085041;font-weight:600">Cluster Head · ${isHeadOf.name}</span>`
+                :`<span style="padding:2px 9px;border-radius:20px;font-size:12px;background:#f5f5f3;color:#aaa">No cluster</span>`}
           ${st.status==='serving'?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:#e1f5ee;color:#085041">Serving</span>`:st.status==='overdue'?`<span style="padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;background:#fcebeb;color:#791f1f">Not serving</span>`:''}
         </div>
         ${m.phone?`<div style="font-size:13px;color:#555;margin-bottom:4px">&#128222; ${m.phone}</div>`:''}
@@ -6303,17 +6431,19 @@ function buildProfileHTML(m){
     </div>
 
     <!-- Church & serving info -->
-    ${(churchJoinDate[m.n]||teams.length||cStatus!=='member')?`<div style="background:#f9f9f7;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+    ${(isGCLeader||churchJoinDate[m.n]||teams.length||cStatus!=='member')?`<div style="background:#f9f9f7;border-radius:10px;padding:12px 14px;margin-bottom:14px">
       <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Church & serving</div>
-      ${churchJoinDate[m.n]?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:0.5px solid #f0efe8">
+      ${isGCLeader?`<div style="font-size:13px;color:#888;padding:4px 0;border-bottom:0.5px solid #f0efe8">Oversees all clusters as GC Leader</div>`:''}
+      ${!isGCLeader&&churchJoinDate[m.n]?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:0.5px solid #f0efe8">
         <span style="color:#888">Joined City Church</span><span style="font-weight:500">${churchJoinDate[m.n]}</span>
       </div>`:''}
-      ${churchJoinDate[m.n]?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:0.5px solid #f0efe8">
+      ${!isGCLeader&&cStatus!=='non-attendee'?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:0.5px solid #f0efe8">
         <span style="color:#888">Serving eligibility</span><span style="font-weight:500;color:${st.color}">${st.label}</span>
       </div>`:''}
+      ${!isGCLeader&&cStatus==='non-attendee'?`<div style="font-size:13px;color:#888;padding:4px 0;border-bottom:0.5px solid #f0efe8">Not eligible to serve (non-attendee)</div>`:''}
       ${teams.length?`<div style="padding:6px 0;font-size:13px">
         <span style="color:#888">Teams: </span><span style="font-weight:500;color:#1D9E75">${teams.join(' · ')}</span>
-      </div>`:''}
+      </div>`:(!isGCLeader&&cStatus!=='non-attendee')?`<div style="font-size:13px;color:#aaa;padding:6px 0">No teams assigned yet</div>`:''}
     </div>`:''}
 
     <!-- Stats -->
@@ -6375,7 +6505,7 @@ function confirmGuestConvert(){
   const m=MEMBERS.find(x=>x.n===_convertingGuest);if(!m)return;
   const newGc=document.getElementById('convertGcStatus').value;
   const clusterId=document.getElementById('convertCluster').value;
-  const joinDate=new Date().toISOString().split('T')[0];
+  const joinDate=todayWAT();
   m.gc=newGc;
   if(clusterId)clusterMembers[m.n]={clusterId,joinDate};
   closeGuestConvert();
@@ -6449,7 +6579,7 @@ function renderGuestFunnel(){
 function openClusterHeadSubmission(clusterId){
   const c=clusters.find(x=>x.id===clusterId);if(!c)return;
   const members=getMembersInCluster(clusterId).sort(byFirstName);
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayWAT();
   const weeks=getClusterWeeks().filter(w=>w.key<=today);
   const thisWeek=weeks.length?weeks[weeks.length-1]:null;
 
@@ -6764,7 +6894,7 @@ function renderSuperclusters(){
   const tabBar=document.getElementById('sc-tab-bar');
   if(!el)return;
 
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayWAT();
   const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
   const weekPickerEl=document.getElementById('sc-week-picker');
   let weekKey='';
@@ -7104,7 +7234,7 @@ async function deleteSupercluster(){
 function renderCareView(){
   const el=document.getElementById('careContent');
   if(!el)return;
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayWAT();
   const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
   const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   const PASTOR_WA='2349077788869';
@@ -7193,9 +7323,46 @@ function renderCareView(){
   };
 
   el.innerHTML=`
+    <!-- Pipeline flags FIRST -->
+    ${(()=>{
+      const membershipPipeline=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen&&getMembershipStatus(m));
+      const servingPipeline=MEMBERS.filter(m=>{
+        if(m.gc==='Guest'||m.frozen||m.churchStatus==='non-attendee')return false;
+        if(membershipConversations[m.n]?.had)return false;
+        const jd=parseJoinDate(churchJoinDate[m.n]);
+        const months=monthsAgo(jd);
+        return months>=6&&(servingTeams[m.n]||[]).length===0;
+      });
+      if(!membershipPipeline.length&&!servingPipeline.length)return'';
+      const makeRow=(m,label)=>{
+        const wa=getWaNumber(m.n);
+        const nameEsc=m.n.replace(/'/g,"\\'");
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid #f0efe8;gap:8px;flex-wrap:wrap">
+          <div style="cursor:pointer;flex:1;min-width:0" onclick="openProfile('${nameEsc}')">
+            <div style="font-size:13px;font-weight:600">${m.n}</div>
+            <div style="font-size:11px;color:#EF9F27;margin-top:2px;font-weight:500">${label}</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+            ${wa?`<a href="https://wa.me/${wa}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;text-decoration:none">WA</a>`:''}
+            <button onclick="markConversationHad('${nameEsc}')" style="background:#faeeda;color:#633806;border:0.5px solid #ef9f27;border-radius:20px;padding:4px 8px;font-size:10px;font-weight:600;cursor:pointer">✓ Had chat</button>
+          </div>
+        </div>`;
+      };
+      return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;overflow:hidden;margin-bottom:12px">
+        <div style="padding:10px 14px;border-bottom:0.5px solid #e0e0d8;font-size:11px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.05em">💬 Conversations needed (${membershipPipeline.length+servingPipeline.length})</div>
+        <div style="padding:0 14px">
+          ${membershipPipeline.map(m=>makeRow(m,getMembershipStatus(m).label)).join('')}
+          ${servingPipeline.map(m=>{
+            const months=monthsAgo(parseJoinDate(churchJoinDate[m.n]));
+            return makeRow(m,`${months} months attending — invite to serve`);
+          }).join('')}
+        </div>
+      </div>`;
+    })()}
+
     ${escalate.length?`<div style="background:#fcebeb;border:0.5px solid #f09595;border-radius:12px;padding:14px;margin-bottom:12px">
       <div style="font-size:11px;font-weight:700;color:#791f1f;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">🚨 Escalate to Communities Pastor (${escalate.length})</div>
-      <div style="font-size:12px;color:#a32d2d;margin-bottom:10px">These people have both extended absence AND urgent wellbeing concerns.</div>
+      <div style="font-size:12px;color:#a32d2d;margin-bottom:10px">Both extended absence AND urgent wellbeing concerns.</div>
       ${escalate.map(item=>personRow(item,'#fcebeb')).join('')}
     </div>`:''}
 
@@ -7229,36 +7396,12 @@ function renderCareView(){
     </div>
 
     ${!total?'<div style="text-align:center;padding:2rem;color:#3b6d11;font-size:14px;background:#f2fbf7;border-radius:12px">✓ No one needs urgent attention right now</div>':''}
-
-    <!-- Membership pipeline -->
-    ${(()=>{
-      const pipeline=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen&&getMembershipStatus(m));
-      if(!pipeline.length)return'';
-      return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;overflow:hidden;margin-top:12px">
-        <div style="padding:10px 14px;border-bottom:0.5px solid #e0e0d8;font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em">💬 Membership conversations (${pipeline.length})</div>
-        <div style="padding:0 14px">${pipeline.map(m=>{
-          const ms=getMembershipStatus(m);
-          const wa=getWaNumber(m.n);
-          const nameEsc=m.n.replace(/'/g,"\\'");
-          return`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid #f0efe8;gap:8px">
-            <div style="cursor:pointer;flex:1" onclick="openProfile('${nameEsc}')">
-              <div style="font-size:13px;font-weight:600">${m.n}</div>
-              <div style="font-size:11px;color:#EF9F27;margin-top:2px;font-weight:500">${ms.label}</div>
-            </div>
-            <div style="display:flex;gap:6px;align-items:center">
-              ${wa?`<a href="https://wa.me/${wa}" target="_blank" style="background:#25D366;color:#fff;border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;text-decoration:none">WA</a>`:''}
-              <button onclick="markConversationHad('${nameEsc}')" style="background:#faeeda;color:#633806;border:0.5px solid #ef9f27;border-radius:20px;padding:4px 8px;font-size:10px;font-weight:600;cursor:pointer">✓ Had chat</button>
-            </div>
-          </div>`;
-        }).join('')}</div>
-      </div>`;
-    })()}
   `;
 }
 
 // ── WELLBEING DOT TIMELINE IN PROFILE ─────────────────────────────────────────
 function buildWellbeingTimeline(memberName){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayWAT();
   const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
   const joinDate=firstSession[memberName]||'2026-01-01';
   const relevantWeeks=allWeeks.filter(w=>w.key>=joinDate.slice(0,10));
@@ -7297,7 +7440,7 @@ function openClusterHeadDashboard(clusterId){
   const c=clusters.find(x=>x.id===clusterId);if(!c)return;
   const members=getMembersInCluster(clusterId).sort(byFirstName);
   const recs=getClusterSessions();
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayWAT();
   const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
   const thisWeek=allWeeks.length?allWeeks[allWeeks.length-1]:null;
   const lastSess=recs.length?recs[recs.length-1]:null;
@@ -7378,6 +7521,14 @@ function openClusterHeadDashboard(clusterId){
           </div>
         </div>
         <textarea placeholder="Notes for your GC leader..." id="note_${mId}" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid #e0e0d8;border-radius:8px;resize:none;font-family:inherit;min-height:36px" onchange="sd_${mId}.note=this.value"></textarea>
+        ${activeGoal?`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:0.5px solid #f0efe8;margin-top:4px">
+          <span style="font-size:12px;color:#633806;font-weight:500">🎯 ${activeGoal.title.split(' ').slice(0,4).join(' ')}...</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button onclick="goal_dec('${mId}')" style="width:24px;height:24px;border-radius:50%;border:0.5px solid #e0e0d8;background:#fff;cursor:pointer;font-size:14px">−</button>
+            <span id="gc_${mId}" style="font-size:14px;font-weight:600;color:#633806;min-width:20px;text-align:center">${(goalProgress[activeGoal?.id]||{})[m.n]||0}</span>
+            <button onclick="goal_inc('${mId}')" style="width:24px;height:24px;border-radius:50%;border:0.5px solid #e0e0d8;background:#fff;cursor:pointer;font-size:14px">+</button>
+          </div>
+        </div>`:''}
         <div>
           <input type="text" placeholder="Prayer request (optional)" id="pr_${mId}" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid #e0e0d8;border-radius:8px;font-family:inherit;margin-bottom:4px" onchange="sd_${mId}.prayerRequest=this.value">
           <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#888;cursor:pointer">
@@ -7406,8 +7557,9 @@ body{font-family:'Kumbh Sans',sans-serif;background:#f0f0eb;color:#1a1a1a;paddin
 .header{background:#1a1a1a;color:#fff;padding:20px 16px;margin-bottom:0}
 .header h1{font-family:'Playfair Display',serif;font-size:20px;margin-bottom:2px}
 .header p{font-size:13px;color:rgba(255,255,255,.5)}
-.tabs{display:flex;background:#fff;border-bottom:0.5px solid #e0e0d8;position:sticky;top:0;z-index:50}
-.tab{flex:1;padding:12px 8px;text-align:center;font-size:13px;font-weight:500;color:#888;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit}
+.tabs{display:flex;background:#fff;border-bottom:0.5px solid #e0e0d8;position:sticky;top:0;z-index:50;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;min-width:80px;padding:12px 14px;text-align:center;font-size:13px;font-weight:500;color:#888;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit;white-space:nowrap}
 .tab.active{color:#1a1a1a;border-bottom-color:#1a1a1a;font-weight:600}
 .section{display:none;padding:16px}
 .section.active{display:block}
@@ -7431,6 +7583,20 @@ textarea,input{font-family:inherit}
     <div class="stat"><div class="stat-val" style="color:${clusterRate>=70?'#4ade80':clusterRate>=50?'#facc15':'#f87171'}">${clusterRate}%</div><div class="stat-lbl" style="color:rgba(255,255,255,.4)">overall</div></div>
     <div class="stat"><div class="stat-val">${members.length}</div><div class="stat-lbl" style="color:rgba(255,255,255,.4)">members</div></div>
   </div>
+  ${activeGoal?`<div style="margin-top:14px;padding-top:14px;border-top:0.5px solid rgba(255,255,255,.1)">
+    <div style="font-size:10px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">🎯 Goal leaderboard — ${activeGoal.monthLabel||'current'}</div>
+    ${clusters.map((cl,i)=>{
+      const clTotal=Object.entries(goalProgress[activeGoal.id]||{}).filter(([mn])=>getMembersInCluster(cl.id).some(m=>m.n===mn)).reduce((s,[,v])=>s+v,0);
+      return{cl,clTotal};
+    }).sort((a,b)=>b.clTotal-a.clTotal).map(({cl,clTotal},i)=>{
+      const medals=['🥇','🥈','🥉'];
+      const isThis=cl.id===clusterId;
+      return`<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:13px">
+        <span style="color:${isThis?'#fff':'rgba(255,255,255,.5)'};font-weight:${isThis?'600':'400'}">${i<3?medals[i]+' ':''}${cl.name}${isThis?' ← you':''}</span>
+        <span style="font-weight:600;color:${isThis?'#4ade80':'rgba(255,255,255,.4)'}">${clTotal}</span>
+      </div>`;
+    }).join('')}
+  </div>`:''}
 </div>
 
 <div class="tabs">
@@ -7627,7 +7793,7 @@ async function doSubmit(){
         anonymous:d.prayerAnon||false,
         visibility:'public',
         hidden:false,
-        date:'${thisWeek?.key||new Date().toISOString().split('T')[0]}',
+        date:'${thisWeek?.key||todayWAT()}',
         status:'active'
       })});
     }
@@ -7689,8 +7855,14 @@ function sendGcSummary(){
 
   const blob=new Blob([htmlDoc],{type:'text/html'});
   const url=URL.createObjectURL(blob);
-  window.open(url,'_blank');
-  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  // If opened via magic link, replace current page; otherwise open new tab
+  if(_magicClusterId&&_magicClusterId===clusterId){
+    document.open();document.write(htmlDoc);document.close();
+    URL.revokeObjectURL(url);
+  } else {
+    window.open(url,'_blank');
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
 }
 
 
@@ -7973,7 +8145,7 @@ function generateMemberReport(){
   const recs=getRecordedSessions();
   const nonGuests=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen);
   const lastSess=recs.length?recs[recs.length-1]:null;
-  const nextSess=SESSIONS_DEF.find(s=>s.key>new Date().toISOString().split('T')[0]);
+  const nextSess=SESSIONS_DEF.find(s=>s.key>todayWAT());
   if(!lastSess){showToast('No sessions recorded yet',2500);return;}
 
   // Last 5 sessions trend
@@ -8013,7 +8185,7 @@ function generateMemberReport(){
 
   // Birthdays next 14 days
   const bdaySoon=[];
-  const today=new Date();
+  const today=watNow();
   const BMOS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   MEMBERS.forEach(m=>{
     const b=birthdays[m.n];if(!b)return;
@@ -8132,7 +8304,7 @@ function parseJoinDate(mmyyyy){
 
 function monthsAgo(date){
   if(!date)return -1;
-  const now=new Date();
+  const now=watNow();
   return(now.getFullYear()-date.getFullYear())*12+(now.getMonth()-date.getMonth());
 }
 
@@ -8173,7 +8345,7 @@ function getMembershipStatus(m){
 function markConversationHad(memberName,notes=''){
   if(!membershipConversations[memberName])membershipConversations[memberName]={};
   membershipConversations[memberName].had=true;
-  membershipConversations[memberName].date=new Date().toISOString().split('T')[0];
+  membershipConversations[memberName].date=todayWAT();
   membershipConversations[memberName].notes=notes;
   saveAll();renderCareView();showToast('Conversation marked ✓',2000);
 }
@@ -8249,6 +8421,23 @@ function renderServing(){
       </div>
     </div>
 
+    <!-- Team distribution summary -->
+    ${(()=>{
+      const allElig=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen&&m.churchStatus!=='non-attendee');
+      const dist={0:0,1:0,2:0,3:0,4:0};
+      allElig.forEach(m=>{const n=(servingTeams[m.n]||[]).length;dist[Math.min(n,4)]++;});
+      return`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px 14px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Team distribution</div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;text-align:center">
+          <div style="background:#fcebeb;border-radius:8px;padding:8px 4px"><div style="font-size:18px;font-weight:700;color:#791f1f">${dist[0]}</div><div style="font-size:10px;color:#888">None</div></div>
+          <div style="background:#f0f0ea;border-radius:8px;padding:8px 4px"><div style="font-size:18px;font-weight:700">${dist[1]}</div><div style="font-size:10px;color:#888">1 team</div></div>
+          <div style="background:#e6f1fb;border-radius:8px;padding:8px 4px"><div style="font-size:18px;font-weight:700;color:#0c447c">${dist[2]}</div><div style="font-size:10px;color:#888">2 teams</div></div>
+          <div style="background:#e1f5ee;border-radius:8px;padding:8px 4px"><div style="font-size:18px;font-weight:700;color:#085041">${dist[3]}</div><div style="font-size:10px;color:#888">3 teams</div></div>
+          <div style="background:#faeeda;border-radius:8px;padding:8px 4px"><div style="font-size:18px;font-weight:700;color:#633806">${dist[4]}</div><div style="font-size:10px;color:#888">4+ teams</div></div>
+        </div>
+      </div>`;
+    })()}
+
     ${noDate.length?`<div style="background:#faeeda;border:0.5px solid #ef9f27;border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer" onclick="document.getElementById('nodate-list').style.display=document.getElementById('nodate-list').style.display==='none'?'block':'none'">
       <div style="font-size:13px;font-weight:600;color:#633806">⚠ ${noDate.length} members with no church join date</div>
       <div style="font-size:11px;color:#8a5010;margin-top:2px">Excluded from goal tracking. Tap to see list.</div>
@@ -8272,7 +8461,7 @@ function renderServing(){
 
     <div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;overflow:hidden;margin-bottom:12px">
       <div style="padding:10px 14px;border-bottom:0.5px solid #e0e0d8;font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em">👥 By team</div>
-      <div style="padding:8px 14px">${SERVING_TEAMS.map(t=>{
+      <div style="padding:8px 14px">${getAllServingTeams().map(t=>{
         const members=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen&&(servingTeams[m.n]||[]).includes(t));
         return`<div style="padding:8px 0;border-bottom:0.5px solid #f0efe8">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${members.length?'4px':'0'}">
@@ -8330,7 +8519,7 @@ function processServingImport(){
   const resultEl=document.getElementById('serving-import-result');
   if(!text){resultEl.innerHTML='<span style="color:#791f1f">Paste data first.</span>';return;}
   const lines=text.split('\n').filter(l=>l.trim());
-  let matched=0,skipped=0,unknown=[];
+  let matched=0,skipped=0,unknown=[],nonAttendeeFlags=[];
   lines.forEach(line=>{
     const cols=line.split(',').map(c=>c.trim()).filter(Boolean);
     if(cols.length<2)return;
@@ -8339,19 +8528,209 @@ function processServingImport(){
     const member=MEMBERS.find(m=>m.n.toLowerCase()===rawName.toLowerCase())||
                  MEMBERS.find(m=>m.n.toLowerCase().includes(rawName.toLowerCase().split(' ')[0].toLowerCase()));
     if(!member){unknown.push(rawName);skipped++;return;}
+    if(member.churchStatus==='non-attendee'){nonAttendeeFlags.push(member.n);return;}
     if(!servingTeams[member.n])servingTeams[member.n]=[];
     let added=0;
     teams.forEach(t=>{
-      const found=SERVING_TEAMS.find(st=>st.toLowerCase()===t.toLowerCase()||st.toLowerCase().includes(t.toLowerCase().substring(0,5)));
+      const found=getAllServingTeams().find(st=>st.toLowerCase()===t.toLowerCase()||st.toLowerCase().includes(t.toLowerCase().substring(0,5)));
       if(found&&!servingTeams[member.n].includes(found)){servingTeams[member.n].push(found);added++;}
     });
     if(added)matched++;
   });
   saveAll();renderServing();
-  resultEl.innerHTML=`<span style="color:#1D9E75">✓ ${matched} members updated</span>${skipped?` · <span style="color:#E24B4A">${skipped} not found: ${[...new Set(unknown)].slice(0,5).join(', ')}</span>`:''}`;
+  resultEl.innerHTML=`<span style="color:#1D9E75">✓ ${matched} members updated</span>${skipped?` · <span style="color:#E24B4A">${skipped} not found: ${[...new Set(unknown)].slice(0,5).join(', ')}</span>`:''}${nonAttendeeFlags.length?` · <span style="color:#EF9F27">⚠ ${nonAttendeeFlags.length} non-attendees skipped (not eligible to serve): ${nonAttendeeFlags.slice(0,3).join(', ')}${nonAttendeeFlags.length>3?'...':''}</span>`:''}`;
 }
 
-// ── GOALS SYSTEM ──────────────────────────────────────────────────────────────
+const _collapsedClusters=new Set();
+function toggleClusterCard(id,event){
+  if(event&&event.target.closest('button'))return; // Don't toggle when clicking buttons
+  const body=document.getElementById('cc-body-'+id);
+  const arrow=document.getElementById('cc-arrow-'+id);
+  if(!body)return;
+  const isCollapsed=_collapsedClusters.has(id);
+  if(isCollapsed){
+    _collapsedClusters.delete(id);
+    body.style.display='block';
+    if(arrow)arrow.style.transform='rotate(0deg)';
+  } else {
+    _collapsedClusters.add(id);
+    body.style.display='none';
+    if(arrow)arrow.style.transform='rotate(-90deg)';
+  }
+}
+
+
+function openSearch(){
+  if(!isEditMode()&&!isClusterUnlocked()){
+    openClusterPinModal(()=>openSearch());
+    return;
+  }
+  const overlay=document.getElementById('searchOverlay');
+  overlay.style.display='flex';
+  setTimeout(()=>document.getElementById('searchInput').focus(),100);
+  runSearch();
+}
+
+function closeSearch(){
+  document.getElementById('searchOverlay').style.display='none';
+}
+
+function runSearch(){
+  const q=document.getElementById('searchInput').value.trim().toLowerCase();
+  const typeF=document.getElementById('sfType').value;
+  const gcF=document.getElementById('sfGC').value;
+  const churchF=document.getElementById('sfChurch').value;
+  const servingF=document.getElementById('sfServing').value;
+  const el=document.getElementById('searchResults');
+
+  if(!q&&!typeF&&!gcF&&!churchF&&!servingF){
+    el.innerHTML='<div style="padding:24px;text-align:center;color:#888;font-size:13px">Type to search across members, clusters, prayer requests and care notes</div>';
+    return;
+  }
+
+  const results=[];
+
+  // Members
+  if(!typeF||typeF==='member'){
+    MEMBERS.filter(m=>m.gc!=='Guest'||!typeF).forEach(m=>{
+      if(gcF&&m.gc!==gcF)return;
+      if(churchF&&(m.churchStatus||'member')!==churchF)return;
+      if(servingF){const st=getServingStatus(m);if(st.status!==servingF)return;}
+      const nameMatch=m.n.toLowerCase().includes(q);
+      const phoneMatch=m.phone&&m.phone.includes(q);
+      const emailMatch=m.email&&m.email.toLowerCase().includes(q);
+      if(!q||nameMatch||phoneMatch||emailMatch){
+        const clName=clusterMembers[m.n]?clusters.find(c=>c.id===clusterMembers[m.n].clusterId)?.name||'':'No cluster';
+        const st=getServingStatus(m);
+        results.push({type:'member',label:m.n,sub:`${m.gc} · ${clName}${st.status==='serving'?' · Serving':''}`,action:`openProfile('${m.n.replace(/'/g,"\\'")}');closeSearch()`});
+      }
+    });
+  }
+
+  // Clusters
+  if(!typeF||typeF==='cluster'){
+    clusters.filter(c=>!gcF&&!churchF&&!servingF).forEach(c=>{
+      if(!q||c.name.toLowerCase().includes(q)||c.head.toLowerCase().includes(q)){
+        const mCount=getMembersInCluster(c.id).length;
+        results.push({type:'cluster',label:c.name,sub:`Head: ${c.head} · ${mCount} members`,action:`switchTab('clusters',document.querySelector('[data-id=clusters]'));closeSearch()`});
+      }
+    });
+  }
+
+  // Prayer requests
+  if(!typeF||typeF==='prayer'){
+    if(!gcF&&!churchF&&!servingF){
+      prayerRequests.filter(p=>p.status==='active').forEach(p=>{
+        const text=(p.request||'').toLowerCase();
+        const name=(p.memberId||'').toLowerCase();
+        if(!q||text.includes(q)||name.includes(q)){
+          results.push({type:'prayer',label:p.anonymous?'Anonymous':(p.memberId||'Unknown'),sub:(p.request||'').slice(0,60)+(p.request?.length>60?'...':''),action:`switchTab('prayer',document.querySelector('[data-id=prayer]'));closeSearch()`});
+        }
+      });
+    }
+  }
+
+  // Care notes
+  if(!typeF||typeF==='care'){
+    if(!gcF&&!churchF&&!servingF){
+      const today=todayWAT();
+      const allWeeks=getClusterWeeks().filter(w=>w.key<=today).slice(-8);
+      const seen=new Set();
+      allWeeks.forEach(w=>{
+        Object.entries(careNotes[w.key]||{}).forEach(([mn,note])=>{
+          if(!note||seen.has(mn))return;
+          if(!q||note.toLowerCase().includes(q)||mn.toLowerCase().includes(q)){
+            seen.add(mn);
+            results.push({type:'care',label:mn,sub:note.slice(0,60)+(note.length>60?'...':''),action:`openProfile('${mn.replace(/'/g,"\\'")}');closeSearch()`});
+          }
+        });
+      });
+    }
+  }
+
+  const typeColors={member:'#085041',cluster:'#0c447c',prayer:'#3c3489',care:'#633806'};
+  const typeBg={member:'#e1f5ee',cluster:'#e6f1fb',prayer:'#f0f0ff',care:'#faeeda'};
+  const typeLabels={member:'Member',cluster:'Cluster',prayer:'Prayer',care:'Care note'};
+
+  if(!results.length){
+    el.innerHTML='<div style="padding:24px;text-align:center;color:#888;font-size:13px">No results found</div>';
+    return;
+  }
+
+  el.innerHTML=results.slice(0,30).map(r=>`
+    <div onclick="${r.action}" style="padding:10px 16px;cursor:pointer;border-bottom:0.5px solid #f0efe8;display:flex;align-items:center;gap:10px" onmouseover="this.style.background='#f5f5f3'" onmouseout="this.style.background=''">
+      <span style="font-size:10px;font-weight:700;background:${typeBg[r.type]};color:${typeColors[r.type]};border-radius:20px;padding:2px 7px;flex-shrink:0">${typeLabels[r.type]}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;color:#1a1a1a">${r.label}</div>
+        ${r.sub?`<div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.sub}</div>`:''}
+      </div>
+      <span style="color:#ccc;font-size:14px">›</span>
+    </div>`).join('')+(results.length>30?`<div style="padding:10px 16px;text-align:center;font-size:12px;color:#888">Showing first 30 of ${results.length} results — narrow your search</div>`:'');
+}
+
+// Close search on Escape key
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSearch();});
+
+
+// ── THIS WEEK ACTION CARD ─────────────────────────────────────────────────────
+function renderThisWeekCard(){
+  const el=document.getElementById('ov-thisweek');
+  if(!el)return;
+  const today=todayWAT();
+  const allWeeks=getClusterWeeks().filter(w=>w.key<=today);
+  const thisWeek=allWeeks.length?allWeeks[allWeeks.length-1]:null;
+  const unsubmittedClusters=thisWeek?clusters.filter(c=>!pendingClusterSubmissions.some(s=>s.clusterId===c.id&&s.weekKey===thisWeek.key)).length:0;
+  const conversations=MEMBERS.filter(m=>m.gc!=='Guest'&&!m.frozen&&getMembershipStatus(m)).length;
+  const escalations=MEMBERS.filter(m=>{
+    if(m.gc==='Guest'||m.frozen)return false;
+    const s=calcMember(m.n).curStreak;
+    const wb=allWeeks.slice(-4).map(w=>(wellbeing[w.key]||{})[m.n]||'');
+    return s>=3&&wb.filter(v=>v==='red').length>=1;
+  }).length;
+  const goalTotal=activeGoal?getGoalTotal():0;
+  const goalTarget=activeGoal?.target||0;
+  const items=[
+    {done:unsubmittedClusters===0,label:unsubmittedClusters===0?'All cluster heads have submitted this week':`${unsubmittedClusters} cluster head${unsubmittedClusters===1?'':'s'} yet to submit`,action:`switchTab('care',document.querySelector('[data-id=care]'))`,actionLabel:'View clusters',urgent:false},
+    {done:escalations===0,label:escalations===0?'No one needs urgent pastoral attention':`${escalations} member${escalations===1?'':'s'} need${escalations===1?'s':''} urgent follow-up`,action:`switchTab('care',document.querySelector('[data-id=care]'))`,actionLabel:'Go to Follow up',urgent:escalations>0},
+    {done:conversations===0,label:conversations===0?'No membership or serving conversations pending':`${conversations} conversation${conversations===1?'':'s'} to have`,action:`switchTab('care',document.querySelector('[data-id=care]'))`,actionLabel:'See who',urgent:false},
+    ...(activeGoal?[{done:goalTotal>=goalTarget,label:goalTotal>=goalTarget?`🎉 Goal reached! ${goalTotal} total`:`Goal: ${goalTotal} of ${goalTarget} so far this ${activeGoal.monthLabel||'month'}`,action:`switchTab('goals',document.querySelector('[data-id=goals]'))`,actionLabel:'View goal',urgent:false}]:[])
+  ];
+  const allDone=items.every(i=>i.done);
+  const isOpen=localStorage.getItem('gidi_thisweek_open')!=='false';
+  el.innerHTML=`<div style="background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;overflow:hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;background:${allDone?'#f2fbf7':'#fff'}" onclick="toggleThisWeek()">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:15px">${allDone?'✅':'📋'}</span>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:${allDone?'#085041':'#1a1a1a'}">${allDone?'All done this week — great work!':'This week\'s actions'}</div>
+          ${!isOpen?`<div style="font-size:11px;color:#888">${items.filter(i=>!i.done).length} remaining</div>`:''}
+        </div>
+      </div>
+      <span id="thisweek-arrow" style="font-size:11px;color:#888">${isOpen?'▼':'▶'}</span>
+    </div>
+    <div id="thisweek-body" style="display:${isOpen?'block':'none'};padding:0 14px 12px">
+      ${items.map(item=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid #f0efe8;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+          <span style="font-size:14px;flex-shrink:0">${item.done?'✅':item.urgent?'🚨':'⬜'}</span>
+          <span style="font-size:13px;color:${item.done?'#888':item.urgent?'#791f1f':'#1a1a1a'};${item.done?'text-decoration:line-through;':''}">${item.label}</span>
+        </div>
+        ${item.action&&!item.done?`<button onclick="${item.action}" style="font-size:11px;background:#f5f5f3;border:0.5px solid #e0e0d8;border-radius:20px;padding:3px 10px;cursor:pointer;color:#555;flex-shrink:0;font-family:inherit">${item.actionLabel} →</button>`:''}
+      </div>`).join('')}
+      <div style="font-size:11px;color:#aaa;margin-top:8px;text-align:center">Tap any item to navigate there · Updates as you work through it</div>
+    </div>
+  </div>`;
+}
+
+function toggleThisWeek(){
+  const body=document.getElementById('thisweek-body');
+  const arrow=document.getElementById('thisweek-arrow');
+  if(!body)return;
+  const isOpen=body.style.display!=='none';
+  body.style.display=isOpen?'none':'block';
+  if(arrow)arrow.textContent=isOpen?'▶':'▼';
+  localStorage.setItem('gidi_thisweek_open',String(!isOpen));
+}
+
 function getGoalTotal(){
   if(!activeGoal)return 0;
   const prog=goalProgress[activeGoal.id]||{};
@@ -8608,6 +8987,32 @@ const GH_REPO='tokinumbere/gidi-gc';
 const GH_BRANCH='main';
 const GH_REPORT_PATH='report.html';
 
+function addCustomTeam(){
+  const input=document.getElementById('customTeamInput');
+  const name=input?.value.trim();
+  if(!name)return;
+  if(getAllServingTeams().some(t=>t.toLowerCase()===name.toLowerCase())){showToast('Team already exists',2000);return;}
+  customServingTeams.push(name);
+  input.value='';
+  saveAll();renderCustomTeams();showToast('Team added ✓',2000);
+}
+
+function renderCustomTeams(){
+  const el=document.getElementById('customTeamList');
+  if(!el)return;
+  if(!customServingTeams.length){el.innerHTML='<div style="color:#aaa;font-size:12px">No custom teams yet.</div>';return;}
+  el.innerHTML=customServingTeams.map((t,i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid #e0e0d8">
+      <span style="font-size:13px">${t}</span>
+      <button onclick="removeCustomTeam(${i})" style="background:none;border:0.5px solid #e0e0d8;border-radius:6px;padding:2px 8px;font-size:11px;color:#888;cursor:pointer">Remove</button>
+    </div>`).join('');
+}
+
+function removeCustomTeam(idx){
+  customServingTeams.splice(idx,1);
+  saveAll();renderCustomTeams();
+}
+
 function saveGhToken(){
   const val=document.getElementById('ghTokenInput')?.value.trim();
   if(!val){showToast('Enter a token first',2000);return;}
@@ -8686,7 +9091,7 @@ function _buildMemberReportHtml(){
   const {lastSess,lastPresent,lastAbsent,lastRate,delta,bdaySoon,nonGuests}=_sd;
   if(!lastSess||!nonGuests)return'<html><body>No session data available.</body></html>';
   const recs=getRecordedSessions();
-  const nextSess=SESSIONS_DEF.find(s=>s.key>new Date().toISOString().split('T')[0]);
+  const nextSess=SESSIONS_DEF.find(s=>s.key>todayWAT());
   const presentCount=lastPresent.filter(m=>m.gc!=='Guest'&&!m.frozen).length;
   const guestCount=lastPresent.filter(m=>m.gc==='Guest').length;
   const totalPresent=presentCount+guestCount;
